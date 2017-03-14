@@ -32,39 +32,50 @@
 
 namespace jog_arm {
 
-JogArmServer::JogArmServer(std::string move_group_name) :
+JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_name) :
   nh_("~"),
   arm_(move_group_name)
 {
   /** Topic Setup **/
-  joint_sub_ = nh_.subscribe("joint_state", 1, &JogArmServer::jointStateCB, this);
+  joint_sub_ = nh_.subscribe("joint_states", 1, &JogArmServer::jointStateCB, this);
 
-  cmd_sub_ = nh_.subscribe("cmd", 1, &JogArmServer::commandCB, this);
+  cmd_sub_ = nh_.subscribe(cmd_topic_name, 1, &JogArmServer::commandCB, this);
 
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
-  
-  kinematic_state_ = boost::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
 
+  kinematic_state_ = boost::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();
+
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
+
+  arm_.setPlannerId( "RRTConnectkConfigDefault" );
 }
 
-void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
+void JogArmServer::commandCB(geometry_msgs::TwistConstPtr msg)
 {
+
+  // Don't know what the joints are yet. Wait for them to be published.
+  if (current_joints_.position.size() == 0)
+    return;
+
+  ROS_INFO_STREAM("current_joints_: " << current_joints_.position.at(0) << "  "<< current_joints_.position.at(1) );
+
   // Transform command to EEF frame, if necessary
   
   // Apply scaling
   Vector6d scaling_factor;
   scaling_factor << 0.01, 0.01, 0.01, 0.01, 0.01, 0.01;
-  const Vector6d delta_x = scaleCommand(msg->twist, scaling_factor);
-  
-  // MoveIt stuff needed to calculate the Jacobian
-  kinematic_state_->setVariableValues(current_joints_);
+  const Vector6d delta_x = scaleCommand(*msg, scaling_factor);
 
+/*
+  kinematic_state_->setVariableValues(current_joints_);
+  
   // Calculate the Jacobian
   const Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
+
+  ROS_INFO_STREAM(jacobian);
   
   // Verify that the Jacobian is well-conditioned
   if (!checkConditionNumber(jacobian, 10)) {
@@ -88,6 +99,7 @@ void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
   }
   
   arm_.move();
+*/
 }
 
 void JogArmServer::jointStateCB(sensor_msgs::JointStateConstPtr msg)
@@ -95,7 +107,7 @@ void JogArmServer::jointStateCB(sensor_msgs::JointStateConstPtr msg)
   current_joints_ = *msg;
 }
 
-JogArmServer::Vector6d JogArmServer::scaleCommand(const geometry_msgs::Twist command, const Vector6d& scalar) const
+JogArmServer::Vector6d JogArmServer::scaleCommand(const geometry_msgs::Twist &command, const Vector6d& scalar) const
 {
   Vector6d result;
   
@@ -150,11 +162,11 @@ bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix, double th
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "jog_arm_Server");
-  
+  ros::init(argc, argv, "jog_arm_server");
+
   // Handle command line args. Note: ROS remapping arguments are removed by ros::init above.
-  if( argc != 2 ) {
-    ROS_FATAL("%s: Usage: rosrun jog_arm jog_arm_server [mov_group_name])", 
+  if( argc != 4 ) {
+    ROS_FATAL("%s: Usage: rosrun jog_arm jog_arm_server [move_group_name] [cmd_topic_name] [loop_rate])", 
 	       ros::this_node::getName().c_str() );
     
     std::cout << "Args received:\n";
@@ -165,8 +177,15 @@ int main(int argc, char **argv)
   }
   
   std::string move_group_name(argv[1]);
-  jog_arm::JogArmServer node(move_group_name);
-  ros::spin();
+  std::string cmd_topic_name(argv[2]);
+  jog_arm::JogArmServer node(move_group_name, cmd_topic_name);
+
+  ros::Rate loop_rate( std::atoi( argv[3] ) );
+  while ( ros::ok() )
+  {
+    ros::spinOnce();
+    loop_rate.sleep();
+  }
   
   return 0;
 }

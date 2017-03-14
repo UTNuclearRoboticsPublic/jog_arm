@@ -36,10 +36,9 @@ Server node for the arm jogging with MoveIt.
 #define JOG_ARM_SERVER_H
 
 #include <Eigen/Eigenvalues>
-#include <geometry_msgs/TwistStamped.h>
+#include <geometry_msgs/Twist.h>
 #include <math.h>
 #include <moveit/move_group_interface/move_group.h>
-#include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
 #include <ros/ros.h>
@@ -57,17 +56,17 @@ public:
   /**
    * @breif: Default constructor for JogArmServer Class.
    */
-  JogArmServer(std::string move_group_name);
+  JogArmServer(std::string move_group_name, std::string cmd_topic_name);
   
 protected:
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
-  void commandCB(geometry_msgs::TwistStampedConstPtr msg);
-  
+  void commandCB(geometry_msgs::TwistConstPtr msg);
+
   void jointStateCB(sensor_msgs::JointStateConstPtr msg);
 
-  Vector6d scaleCommand(const geometry_msgs::Twist command, const Vector6d& scalar) const;
+  Vector6d scaleCommand(const geometry_msgs::Twist& command, const Vector6d& scalar) const;
   
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
   
