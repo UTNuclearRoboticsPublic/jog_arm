@@ -37,7 +37,7 @@ JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_na
   arm_(move_group_name)
 {
   /** Topic Setup **/
-  joint_sub_ = nh_.subscribe("joint_states", 1, &JogArmServer::jointStateCB, this);
+  joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
 
   cmd_sub_ = nh_.subscribe(cmd_topic_name, 1, &JogArmServer::commandCB, this);
 
@@ -51,43 +51,43 @@ JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_na
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
 
   arm_.setPlannerId( "RRTConnectkConfigDefault" );
+  arm_.setMaxVelocityScalingFactor( 0.1 );
+
+  const std::vector<std::string> &joint_names = joint_model_group_->getJointModelNames();
+  std::vector<double> dummy_joint_values; // Confused about what this variable does? It's not used anywhere except copyJointGroupPositions(). Prob just needed as an argument
+  kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
+
+  // Wait for an update on the initial joints
+  ros::topic::waitForMessage<sensor_msgs::JointState>("/joint_states");
 }
 
 void JogArmServer::commandCB(geometry_msgs::TwistConstPtr msg)
 {
-
-  // Don't know what the joints are yet. Wait for them to be published.
-  if (current_joints_.position.size() == 0)
-    return;
-
-  ROS_INFO_STREAM("current_joints_: " << current_joints_.position.at(0) << "  "<< current_joints_.position.at(1) );
+  //ROS_INFO_STREAM("current_joints_: " << current_joints_.position.at(0) << "  "<< current_joints_.position.at(1) );
 
   // Transform command to EEF frame, if necessary
   
   // Apply scaling
   Vector6d scaling_factor;
-  scaling_factor << 0.01, 0.01, 0.01, 0.01, 0.01, 0.01;
+  scaling_factor << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
   const Vector6d delta_x = scaleCommand(*msg, scaling_factor);
 
-/*
   kinematic_state_->setVariableValues(current_joints_);
   
   // Calculate the Jacobian
   const Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-
-  ROS_INFO_STREAM(jacobian);
   
   // Verify that the Jacobian is well-conditioned
-  if (!checkConditionNumber(jacobian, 10)) {
+  if (!checkConditionNumber(jacobian, 50)) {
     ROS_ERROR("JogArmServer::commandCB - Jacobian is ill-conditioned.");
     return;
   }
-  
+ 
   // Convert from cartesian commands to joint commands
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
-  
+
   // Add joint increments to current joints
-  sensor_msgs::JointState new_theta;
+  sensor_msgs::JointState new_theta = current_joints_;
   if (!addJointIncrements(new_theta, delta_theta)) {
     return;
   }
@@ -97,9 +97,8 @@ void JogArmServer::commandCB(geometry_msgs::TwistConstPtr msg)
     ROS_ERROR("JogArmServer::commandCB - Failed to set joint target.");
     return;
   }
-  
+ 
   arm_.move();
-*/
 }
 
 void JogArmServer::jointStateCB(sensor_msgs::JointStateConstPtr msg)
