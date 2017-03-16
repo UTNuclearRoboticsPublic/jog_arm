@@ -83,10 +83,12 @@ void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
   // Transform the linear component of the cmd message
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = msg->twist.linear;
+  lin_vector.header.frame_id = msg->header.frame_id;
   listener_.transformVector(planning_frame, lin_vector, lin_vector);
   
   geometry_msgs::Vector3Stamped rot_vector;
   rot_vector.vector = msg->twist.angular;
+  rot_vector.header.frame_id = msg->header.frame_id;
   listener_.transformVector(planning_frame, rot_vector, rot_vector);
   
   // Put these components back into a TwistStamped
@@ -98,14 +100,12 @@ void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
   Vector6d scaling_factor;
   scaling_factor << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;  
   const Vector6d delta_x = scaleCommand(twist_cmd, scaling_factor);
-  std::cout << "delta_x: " << delta_x << std::endl;
 
   kinematic_state_->setVariableValues(current_joints_);
   
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
-  std::cout << "delta_theta: " << delta_theta << std::endl;
 
   // Add joint increments to current joints
   sensor_msgs::JointState new_theta = current_joints_;
@@ -121,7 +121,7 @@ void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
   kinematic_state_->setVariableValues(current_joints_);
 
   // Verify that the future Jacobian is well-conditioned
-  if (!checkConditionNumber(jacobian, 50)) {
+  if (!checkConditionNumber(jacobian, 20)) {
     ROS_ERROR("JogArmServer::commandCB - Jacobian is ill-conditioned.");
     return;
   }
@@ -175,7 +175,6 @@ Eigen::MatrixXd JogArmServer::pseudoInverse(const Eigen::MatrixXd &J) const
 
 bool JogArmServer::addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const
 {
-  std::cout << "adding increments: " << output << std::endl << increments << std::endl;
   for (std::size_t i = 0, size = increments.size(); i < size; ++i) {
     try {
       output.position.at(i) += increments(i);
