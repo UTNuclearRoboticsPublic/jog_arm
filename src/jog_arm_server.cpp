@@ -34,7 +34,8 @@ namespace jog_arm {
 
 JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_name) :
   nh_("~"),
-  arm_(move_group_name)
+  arm_(move_group_name),
+  spinner_(1)
 {
   /** Topic Setup **/
   joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
@@ -54,41 +55,74 @@ JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_na
   arm_.setMaxVelocityScalingFactor( 0.1 );
 
   const std::vector<std::string> &joint_names = joint_model_group_->getJointModelNames();
-  std::vector<double> dummy_joint_values; // Confused about what this variable does? It's not used anywhere except copyJointGroupPositions(). Prob just needed as an argument
+  std::vector<double> dummy_joint_values; // Not used anywhere except copyJointGroupPositions(). Prob just needed as an argument
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
   // Wait for an update on the initial joints
   ros::topic::waitForMessage<sensor_msgs::JointState>("/joint_states");
+  
+  joint_names_ = arm_.getJointNames();
+  
+  spinner_.start();
 }
 
-void JogArmServer::commandCB(geometry_msgs::TwistConstPtr msg)
+void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
 {
-  //ROS_INFO_STREAM("current_joints_: " << current_joints_.position.at(0) << "  "<< current_joints_.position.at(1) );
+ 
+  // Convert the cmd to the MoveGroup planning frame.
+  
+  const std::string planning_frame = arm_.getPlanningFrame();
 
-  // Transform command to EEF frame, if necessary
+  try {
+    listener_.waitForTransform( msg->header.frame_id, planning_frame, ros::Time::now(), ros::Duration(0.2) );
+  } catch (tf::TransformException ex) {
+    ROS_ERROR("JogArmServer::commandCB - Failed to transform command to planning frame.");
+    return;
+  }
+  // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
+  // Transform the linear component of the cmd message
+  geometry_msgs::Vector3Stamped lin_vector;
+  lin_vector.vector = msg->twist.linear;
+  listener_.transformVector(planning_frame, lin_vector, lin_vector);
+  
+  geometry_msgs::Vector3Stamped rot_vector;
+  rot_vector.vector = msg->twist.angular;
+  listener_.transformVector(planning_frame, rot_vector, rot_vector);
+  
+  // Put these components back into a TwistStamped
+  geometry_msgs::TwistStamped twist_cmd;
+  twist_cmd.twist.linear = lin_vector.vector;
+  twist_cmd.twist.angular = rot_vector.vector;
   
   // Apply scaling
   Vector6d scaling_factor;
-  scaling_factor << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
-  const Vector6d delta_x = scaleCommand(*msg, scaling_factor);
+  scaling_factor << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;  
+  const Vector6d delta_x = scaleCommand(twist_cmd, scaling_factor);
+  std::cout << "delta_x: " << delta_x << std::endl;
 
   kinematic_state_->setVariableValues(current_joints_);
   
-  // Calculate the Jacobian
-  const Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  
-  // Verify that the Jacobian is well-conditioned
-  if (!checkConditionNumber(jacobian, 50)) {
-    ROS_ERROR("JogArmServer::commandCB - Jacobian is ill-conditioned.");
-    return;
-  }
- 
   // Convert from cartesian commands to joint commands
+  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
+  std::cout << "delta_theta: " << delta_theta << std::endl;
 
   // Add joint increments to current joints
   sensor_msgs::JointState new_theta = current_joints_;
   if (!addJointIncrements(new_theta, delta_theta)) {
+    return;
+  }
+
+  // Check the Jacobian with these new joints. Halt before approaching a singularity.
+  kinematic_state_->setVariableValues(new_theta);
+  jacobian = kinematic_state_->getJacobian(joint_model_group_);
+  
+  // Set back to current joint values
+  kinematic_state_->setVariableValues(current_joints_);
+
+  // Verify that the future Jacobian is well-conditioned
+  if (!checkConditionNumber(jacobian, 50)) {
+    ROS_ERROR("JogArmServer::commandCB - Jacobian is ill-conditioned.");
     return;
   }
   
@@ -97,25 +131,38 @@ void JogArmServer::commandCB(geometry_msgs::TwistConstPtr msg)
     ROS_ERROR("JogArmServer::commandCB - Failed to set joint target.");
     return;
   }
- 
-  arm_.move();
+
+  if (!arm_.move()) {
+   ROS_ERROR("JogArmServer::commandCB - Jogging movement failed.");
+   return;
+  }
 }
 
 void JogArmServer::jointStateCB(sensor_msgs::JointStateConstPtr msg)
 {
-  current_joints_ = *msg;
+  // Check that the msg contains joints
+  if (msg->name.empty()) {
+    return;
+  }
+  
+  // Check if this message contains the joints for our move_group
+  std::string joint = msg->name.front();
+  
+  if (std::find(joint_names_.begin(), joint_names_.end(), joint) != joint_names_.end()) {
+    current_joints_ = *msg;
+  }
 }
 
-JogArmServer::Vector6d JogArmServer::scaleCommand(const geometry_msgs::Twist &command, const Vector6d& scalar) const
+JogArmServer::Vector6d JogArmServer::scaleCommand(const geometry_msgs::TwistStamped &command, const Vector6d& scalar) const
 {
   Vector6d result;
   
-  result(0) = scalar(0)*command.linear.x;
-  result(1) = scalar(1)*command.linear.y;
-  result(2) = scalar(2)*command.linear.z;
-  result(3) = scalar(3)*command.angular.x;
-  result(4) = scalar(4)*command.angular.y;
-  result(5) = scalar(5)*command.angular.z;
+  result(0) = scalar(0)*command.twist.linear.x;
+  result(1) = scalar(1)*command.twist.linear.y;
+  result(2) = scalar(2)*command.twist.linear.z;
+  result(3) = scalar(3)*command.twist.angular.x;
+  result(4) = scalar(4)*command.twist.angular.y;
+  result(5) = scalar(5)*command.twist.angular.z;
   
   return result;
 }
@@ -128,12 +175,12 @@ Eigen::MatrixXd JogArmServer::pseudoInverse(const Eigen::MatrixXd &J) const
 
 bool JogArmServer::addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const
 {
-  
+  std::cout << "adding increments: " << output << std::endl << increments << std::endl;
   for (std::size_t i = 0, size = increments.size(); i < size; ++i) {
     try {
       output.position.at(i) += increments(i);
     } catch (std::out_of_range e) {
-      ROS_ERROR("JogArmServer::addJointIncrements - Lengths of JointState and increments do not match.");
+      ROS_ERROR("JogArmServer::addJointIncrements - Lengths of output and increments do not match.");
       return false;
     }
   }

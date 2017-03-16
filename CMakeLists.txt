@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_move_group
   moveit_ros_planning_interface
   cmake_modules
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -104,7 +105,7 @@ find_package(Eigen REQUIRED)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES jog_arm
-  CATKIN_DEPENDS roscpp moveit_ros_manipulation moveit_ros_move_group moveit_ros_planning_interface
+  CATKIN_DEPENDS roscpp moveit_ros_manipulation moveit_ros_move_group moveit_ros_planning_interface tf
   DEPENDS Eigen
 )
 

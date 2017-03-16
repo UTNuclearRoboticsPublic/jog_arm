@@ -44,6 +44,7 @@ Server node for the arm jogging with MoveIt.
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <string>
+#include <tf/transform_listener.h>
 
 namespace jog_arm {
  
@@ -62,11 +63,11 @@ protected:
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
-  void commandCB(geometry_msgs::TwistConstPtr msg);
+  void commandCB(geometry_msgs::TwistStampedConstPtr msg);
 
   void jointStateCB(sensor_msgs::JointStateConstPtr msg);
 
-  Vector6d scaleCommand(const geometry_msgs::Twist& command, const Vector6d& scalar) const;
+  Vector6d scaleCommand(const geometry_msgs::TwistStamped& command, const Vector6d& scalar) const;
   
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
   
@@ -83,6 +84,12 @@ protected:
   robot_state::RobotStatePtr kinematic_state_;
   
   sensor_msgs::JointState current_joints_;
+  
+  std::vector<std::string> joint_names_;
+  
+  ros::AsyncSpinner spinner_; // Motion planner requires an asynchronous spinner
+  
+  tf::TransformListener listener_;
 };
 
 } // namespace jog_arm

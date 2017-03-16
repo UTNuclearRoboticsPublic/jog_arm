@@ -4,7 +4,7 @@
   <version>0.0.0</version>
   <description>Provides manipulator cartesian jogging.</description>
 
-  <maintainer email="blakeanderson@utexas.edu">Blake</maintainer>
+  <maintainer email="blakeanderson@utexas.edu">Blake Anderson</maintainer>
 
   <license>specified in-file</license>
 
@@ -16,9 +16,10 @@
   <author email="andyz@utexas.edu">Andy Zelenak</author>
 
   <buildtool_depend>catkin</buildtool_depend>
-  <depend>roscpp</depend>
+  <depend>cmake_modules</depend>
   <depend>moveit_ros_manipulation</depend>
   <depend>moveit_ros_move_group</depend>
   <depend>moveit_ros_planning_interface</depend>
-  <depend>cmake_modules</depend>
+  <depend>roscpp</depend>
+  <depend>tf</depend>
 </package>
