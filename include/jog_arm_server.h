@@ -38,7 +38,7 @@ Server node for the arm jogging with MoveIt.
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
 #include <math.h>
-#include <moveit/move_group_interface/move_group.h>
+#include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
 #include <ros/ros.h>
@@ -79,7 +79,7 @@ protected:
   
   ros::Subscriber joint_sub_, cmd_sub_;
   
-  moveit::planning_interface::MoveGroup arm_;
+  moveit::planning_interface::MoveGroupInterface arm_;
   const robot_state::JointModelGroup* joint_model_group_;
   robot_state::RobotStatePtr kinematic_state_;
   
