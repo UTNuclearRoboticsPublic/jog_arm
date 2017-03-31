@@ -35,7 +35,7 @@ namespace jog_arm {
 JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_name) :
   nh_("~"),
   arm_(move_group_name),
-  spinner_(1)
+  spinner_(1) // There's no noticeable improvement from >1 thread. Tested by AJZ, 3/16/2017
 {
   /** Topic Setup **/
   joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
