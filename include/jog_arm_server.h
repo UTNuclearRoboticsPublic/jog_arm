@@ -67,6 +67,7 @@ protected:
 
   void jointStateCB(sensor_msgs::JointStateConstPtr msg);
 
+  float overallScaling;
   Vector6d scaleCommand(const geometry_msgs::TwistStamped& command, const Vector6d& scalar) const;
   
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;

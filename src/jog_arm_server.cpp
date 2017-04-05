@@ -37,6 +37,7 @@ JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_na
   arm_(move_group_name),
   spinner_(1)
 {
+  nh_.param("teleop_motion_scale", overallScaling, 0.1f);
   /** Topic Setup **/
   joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
 
@@ -98,7 +99,7 @@ void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
   
   // Apply scaling
   Vector6d scaling_factor;
-  scaling_factor << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;  
+  scaling_factor << overallScaling, overallScaling, overallScaling, overallScaling, overallScaling, overallScaling;  
   const Vector6d delta_x = scaleCommand(twist_cmd, scaling_factor);
 
   kinematic_state_->setVariableValues(current_joints_);
