@@ -30,12 +30,51 @@
 
 #include <jog_arm_server.h>
 
+/////////////////////////////////////////
+// Main subscribes to jogging deltas.
+// A worker thread does the calculations.
+/////////////////////////////////////////
+
+// MAIN: create the worker thread and subscribe to jogging cmds
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "jog_arm_server");
+
+  // Crunch the numbers in this thread
+  // Most of the action happens here
+  pthread_t joggingThread;
+  int rc = pthread_create(&joggingThread, NULL, jog_arm::joggingPipeline, 0);
+
+  // Subscribe to Cartesian delta cmds. Share them with the worker thread
+  ros::NodeHandle n;
+  // TODO: parameterize
+  ros::Subscriber sub = n.subscribe("delta_cmd_topic", 1, jog_arm::delta_cmd_cb);
+
+  ros::spin();
+  
+  return 0;
+}
+
 namespace jog_arm {
+
+// A separate thread for the heavy calculations
+// Perform them as fast as possible
+void *joggingPipeline(void *threadid)
+{
+  // TODO: parameterize
+  jog_arm::JogArmServer ja("right_ur5", "jog_deltas_cmd");
+
+  while ( ros::ok() )
+  {
+    ROS_ERROR_STREAM("The thread has been created!");
+    ros::Duration(1).sleep();
+  }
+}
 
 JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_name) :
   nh_("~"),
   arm_(move_group_name),
-  spinner_(1) // There's no noticeable improvement from >1 thread. Tested by AJZ, 3/16/2017
+  spinner_(1)
 {
   /** Topic Setup **/
   joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
@@ -52,6 +91,7 @@ JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_na
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
 
   arm_.setPlannerId( "RRTConnectkConfigDefault" );
+  arm_.setPlanningTime(0.03);
   arm_.setMaxVelocityScalingFactor( 0.1 );
 
   const std::vector<std::string> &joint_names = joint_model_group_->getJointModelNames();
@@ -202,35 +242,10 @@ bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix, double th
   return (condition_number <= threshold);
 }
 
+// Listen to cartesian delta commands
+void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
+{
+  ROS_INFO_STREAM("I heard: " << msg->twist.linear.x);
+}
 
 } // namespace jog_arm
-
-int main(int argc, char **argv)
-{
-  ros::init(argc, argv, "jog_arm_server");
-
-  // Handle command line args. Note: ROS remapping arguments are removed by ros::init above.
-  if( argc != 4 ) {
-    ROS_FATAL("%s: Usage: rosrun jog_arm jog_arm_server [move_group_name] [cmd_topic_name] [loop_rate])", 
-	       ros::this_node::getName().c_str() );
-    
-    std::cout << "Args received:\n";
-    for ( int i = 0; i < argc; i++ ) {
-      std::cout << "argv[" << i << "]: " << argv[i] << std::endl;
-    }
-    return 1; // failure
-  }
-  
-  std::string move_group_name(argv[1]);
-  std::string cmd_topic_name(argv[2]);
-  jog_arm::JogArmServer node(move_group_name, cmd_topic_name);
-
-  ros::Rate loop_rate( std::atoi( argv[3] ) );
-  while ( ros::ok() )
-  {
-    ros::spinOnce();
-    loop_rate.sleep();
-  }
-  
-  return 0;
-}

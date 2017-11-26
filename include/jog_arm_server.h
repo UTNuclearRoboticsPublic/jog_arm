@@ -41,12 +41,19 @@ Server node for the arm jogging with MoveIt.
 #include <moveit/move_group_interface/move_group.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
+#include <pthread.h>
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <string>
 #include <tf/transform_listener.h>
 
 namespace jog_arm {
+
+// For a worker thread
+void *joggingPipeline(void *threadid);
+
+// Listen to cartesian delta commands
+void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
  
 /**
  * Class JogArmServer - Provides the jog_arm action.
@@ -60,6 +67,8 @@ public:
   JogArmServer(std::string move_group_name, std::string cmd_topic_name);
   
 protected:
+
+  moveit::planning_interface::MoveGroup arm_;
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
@@ -79,8 +88,8 @@ protected:
   
   ros::Subscriber joint_sub_, cmd_sub_;
   
-  moveit::planning_interface::MoveGroup arm_;
   const robot_state::JointModelGroup* joint_model_group_;
+
   robot_state::RobotStatePtr kinematic_state_;
   
   sensor_msgs::JointState current_joints_;
