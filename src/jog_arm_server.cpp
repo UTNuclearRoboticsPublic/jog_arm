@@ -48,7 +48,7 @@ int main(int argc, char **argv)
   // Subscribe to Cartesian delta cmds. Share them with the worker thread
   ros::NodeHandle n;
   // TODO: parameterize
-  ros::Subscriber sub = n.subscribe("delta_cmd_topic", 1, jog_arm::delta_cmd_cb);
+  ros::Subscriber sub = n.subscribe("jog_arm_server/delta_jog_cmds", 1, jog_arm::delta_cmd_cb);
 
   ros::spin();
   
