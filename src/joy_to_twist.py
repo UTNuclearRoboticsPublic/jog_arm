@@ -15,7 +15,7 @@ import rospy
 from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import Joy
 
-class joy_to_ts:
+class joy_to_twist:
 
     def __init__(self):
         self.pub = rospy.Publisher('jog_arm_server/delta_jog_cmds', TwistStamped, queue_size=1)
@@ -28,8 +28,8 @@ class joy_to_ts:
         ts = TwistStamped()
 
         ts.header.stamp = rospy.Time.now()
-        # TODO: parameterize
-        ts.header.frame_id = "right_ur5_temoto_ee"
+
+        ts.header.frame_id = rospy.get_param("joy_to_twist/cmd_frame")
 
         # These buttons are binary
         ts.twist.linear.x = -joy.buttons[4] + joy.buttons[5]
@@ -53,6 +53,6 @@ class joy_to_ts:
         rospy.spin()
 
 if __name__ == '__main__':
-    rospy.init_node('joy_to_ts', anonymous=True)
-    republisher = joy_to_ts()
+    rospy.init_node('joy_to_twist', anonymous=True)
+    republisher = joy_to_twist()
     republisher.republish()

@@ -177,7 +177,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 
   // Verify that the future Jacobian is well-conditioned before moving
   if (!checkConditionNumber(jacobian)) {
-    ROS_ERROR("JogArmServer::jogCalcs - The arm is close to singularity.");
+    ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
     return;
   }
   
