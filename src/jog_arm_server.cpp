@@ -62,24 +62,14 @@ namespace jog_arm {
 void *joggingPipeline(void *threadid)
 {
   // TODO: parameterize
-  jog_arm::JogArmServer ja("right_ur5", "jog_deltas_cmd");
-
-  while ( ros::ok() )
-  {
-    ROS_ERROR_STREAM("The thread has been created!");
-    ros::Duration(1).sleep();
-  }
+  jog_arm::JogArmServer ja("right_ur5");
 }
 
-JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_name) :
+JogArmServer::JogArmServer(std::string move_group_name) :
   nh_("~"),
   arm_(move_group_name),
   spinner_(1)
 {
-  /** Topic Setup **/
-  joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
-
-  cmd_sub_ = nh_.subscribe(cmd_topic_name, 1, &JogArmServer::commandCB, this);
 
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
@@ -98,37 +88,63 @@ JogArmServer::JogArmServer(std::string move_group_name, std::string cmd_topic_na
   std::vector<double> dummy_joint_values; // Not used anywhere except copyJointGroupPositions(). Prob just needed as an argument
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
-  // Wait for an update on the initial joints
+  /** Topic Setup **/
+  joint_sub_ = nh_.subscribe("/joint_states", 1, &JogArmServer::jointStateCB, this);
+
+  // Wait for initial messages
+  // TODO: parameterize
   ros::topic::waitForMessage<sensor_msgs::JointState>("/joint_states");
   
-  joint_names_ = arm_.getJointNames();
+  current_joints_.name = arm_.getJointNames();
+  current_joints_.position.resize(current_joints_.name.size());
+  current_joints_.velocity.resize(current_joints_.name.size());
+  current_joints_.effort.resize(current_joints_.name.size());
   
-  spinner_.start();
+  // Wait for the first jogging cmd.
+  // Store it in a class member for further calcs.
+  // Then free up the shared variable again.
+  while ( cmd_deltas.header.stamp == ros::Time(0.)  )
+  {
+    ros::Duration(0.005).sleep();
+    pthread_mutex_lock(&cmd_deltas_mutex);
+    cmd_deltas_ = jog_arm::cmd_deltas;
+    pthread_mutex_unlock(&cmd_deltas_mutex);
+  }
+  // Now do jogging calcs as quickly as possible
+  while ( ros::ok() )
+  {
+    pthread_mutex_lock(&cmd_deltas_mutex);
+    cmd_deltas_ = jog_arm::cmd_deltas;
+    pthread_mutex_unlock(&cmd_deltas_mutex);
+
+    jogCalcs(cmd_deltas_);
+  }
 }
 
-void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
+void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
- 
+  ROS_INFO_STREAM("Incoming cmd: " << cmd.twist.linear.z);
+
   // Convert the cmd to the MoveGroup planning frame.
   
   const std::string planning_frame = arm_.getPlanningFrame();
 
   try {
-    listener_.waitForTransform( msg->header.frame_id, planning_frame, ros::Time::now(), ros::Duration(0.2) );
+    listener_.waitForTransform( cmd.header.frame_id, planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
-    ROS_ERROR("JogArmServer::commandCB - Failed to transform command to planning frame.");
+    ROS_ERROR("JogArmServer::jogCalcs - Failed to transform command to planning frame.");
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
   // Transform the linear component of the cmd message
   geometry_msgs::Vector3Stamped lin_vector;
-  lin_vector.vector = msg->twist.linear;
-  lin_vector.header.frame_id = msg->header.frame_id;
+  lin_vector.vector = cmd.twist.linear;
+  lin_vector.header.frame_id = cmd.header.frame_id;
   listener_.transformVector(planning_frame, lin_vector, lin_vector);
   
   geometry_msgs::Vector3Stamped rot_vector;
-  rot_vector.vector = msg->twist.angular;
-  rot_vector.header.frame_id = msg->header.frame_id;
+  rot_vector.vector = cmd.twist.angular;
+  rot_vector.header.frame_id = cmd.header.frame_id;
   listener_.transformVector(planning_frame, rot_vector, rot_vector);
   
   // Put these components back into a TwistStamped
@@ -162,34 +178,42 @@ void JogArmServer::commandCB(geometry_msgs::TwistStampedConstPtr msg)
 
   // Verify that the future Jacobian is well-conditioned
   if (!checkConditionNumber(jacobian, 20)) {
-    ROS_ERROR("JogArmServer::commandCB - Jacobian is ill-conditioned.");
+    ROS_ERROR("JogArmServer::jogCalcs - Jacobian is ill-conditioned.");
     return;
   }
   
   // Set planning goal
   if (!arm_.setJointValueTarget(new_theta)) {
-    ROS_ERROR("JogArmServer::commandCB - Failed to set joint target.");
+    ROS_ERROR("JogArmServer::jogCalcs - Failed to set joint target.");
     return;
   }
 
   if (!arm_.move()) {
-   ROS_ERROR("JogArmServer::commandCB - Jogging movement failed.");
+   ROS_ERROR("JogArmServer::jogCalcs - Jogging movement failed.");
    return;
   }
 }
 
 void JogArmServer::jointStateCB(sensor_msgs::JointStateConstPtr msg)
 {
-  // Check that the msg contains joints
-  if (msg->name.empty()) {
+  // Check that the msg contains enough joints
+  if (msg->name.size() < current_joints_.name.size()) {
+    ROS_WARN("[JogArmServer::jointStateCB] The joint msg does not contain enough joints.");
     return;
   }
-  
-  // Check if this message contains the joints for our move_group
-  std::string joint = msg->name.front();
-  
-  if (std::find(joint_names_.begin(), joint_names_.end(), joint) != joint_names_.end()) {
-    current_joints_ = *msg;
+
+  for (int m=0; m<msg->name.size(); m++)
+  {
+    for (int c=0; c<current_joints_.name.size(); c++)
+    {
+      if ( msg->name.at(m) == current_joints_.name.at(c) )
+      {
+        current_joints_.position.at(c) = msg->position.at(m);
+        goto NEXT_JOINT;
+      }
+    }
+NEXT_JOINT:
+    ;
   }
 }
 
@@ -238,14 +262,21 @@ bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix, double th
   double max = eig_vector.maxCoeff();
   
   double condition_number = max/min;
+
+  ROS_INFO_STREAM("CN: " << condition_number);
   
   return (condition_number <= threshold);
 }
 
-// Listen to cartesian delta commands
+// Listen to cartesian delta commands.
+// Store them in a shared variable.
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   ROS_INFO_STREAM("I heard: " << msg->twist.linear.x);
+
+  pthread_mutex_lock(&cmd_deltas_mutex);
+  jog_arm::cmd_deltas = *msg;
+  pthread_mutex_unlock(&cmd_deltas_mutex);
 }
 
 } // namespace jog_arm

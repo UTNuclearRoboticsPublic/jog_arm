@@ -53,6 +53,10 @@ namespace jog_arm {
 // For a worker thread
 void *joggingPipeline(void *threadid);
 
+pthread_mutex_t cmd_deltas_mutex;
+
+geometry_msgs::TwistStamped cmd_deltas;
+
 // Listen to cartesian delta commands
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
  
@@ -63,17 +67,19 @@ class JogArmServer
 {
 public:
   /**
-   * @breif: Default constructor for JogArmServer Class.
+   * @brief: Default constructor for JogArmServer Class.
    */
-  JogArmServer(std::string move_group_name, std::string cmd_topic_name);
+  JogArmServer(std::string move_group_name);
   
 protected:
 
   moveit::planning_interface::MoveGroup arm_;
+
+  geometry_msgs::TwistStamped cmd_deltas_;
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
-  void commandCB(geometry_msgs::TwistStampedConstPtr msg);
+  void jogCalcs(const geometry_msgs::TwistStamped& cmd);
 
   void jointStateCB(sensor_msgs::JointStateConstPtr msg);
 
@@ -87,15 +93,13 @@ protected:
 
   ros::NodeHandle nh_;
   
-  ros::Subscriber joint_sub_, cmd_sub_;
+  ros::Subscriber joint_sub_;
   
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;
   
   sensor_msgs::JointState current_joints_;
-  
-  std::vector<std::string> joint_names_;
   
   ros::AsyncSpinner spinner_; // Motion planner requires an asynchronous spinner
   

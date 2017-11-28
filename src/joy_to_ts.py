@@ -27,6 +27,10 @@ class joy_to_ts:
 
         ts = TwistStamped()
 
+        ts.header.stamp = rospy.Time.now()
+        # TODO: parameterize
+        ts.header.frame_id = "right_ur5_temoto_ee"
+
         # These buttons are binary
         ts.twist.linear.x = -joy.buttons[4] + joy.buttons[5]
         # Double buttons
