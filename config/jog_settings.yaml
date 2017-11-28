@@ -3,6 +3,8 @@ jog_arm_server:
   joint_topic:  joint_states
   move_group_name:  right_ur5
   singularity_threshold:  4.0
+  # As of Nov. 2017, can't trust MoveIt's reported planning frame. Define it here.
+  moveit_planning_frame:  right_ur5_base_link
   scale:
     linear:  0.004
     rotational:  0.006

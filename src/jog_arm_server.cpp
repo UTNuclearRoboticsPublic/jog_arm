@@ -48,6 +48,7 @@ int main(int argc, char **argv)
   jog_arm::joint_topic = jog_arm::getStringParam("jog_arm_server/joint_topic", n);
   jog_arm::cmd_topic = jog_arm::getStringParam("jog_arm_server/cmd_topic", n);
   jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
+  jog_arm::moveit_planning_frame = jog_arm::getStringParam("jog_arm_server/moveit_planning_frame", n);
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
@@ -63,21 +64,6 @@ int main(int argc, char **argv)
 }
 
 namespace jog_arm {
-
-std::string getStringParam(std::string s, ros::NodeHandle& n)
-{
-  if( !n.getParam(s, s) )
-    ROS_ERROR_STREAM("[JogArmServer::getStringParam] YAML config file does not contain parameter " << s);
-  return s;
-}
-
-double getDoubleParam(std::string name, ros::NodeHandle& n)
-{
-  double value;
-  if( !n.getParam(name, value) )
-    ROS_ERROR_STREAM("[JogArmServer::getStringParam] YAML config file does not contain parameter " << name);
-  return value;
-}
 
 // A separate thread for the heavy calculations.
 void *joggingPipeline(void *threadid)
@@ -145,11 +131,9 @@ JogArmServer::JogArmServer(std::string move_group_name) :
 void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
   // Convert the cmd to the MoveGroup planning frame.
-  
-  const std::string planning_frame = arm_.getPlanningFrame();
 
   try {
-    listener_.waitForTransform( cmd.header.frame_id, planning_frame, ros::Time::now(), ros::Duration(0.2) );
+    listener_.waitForTransform( cmd.header.frame_id, jog_arm::moveit_planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
     ROS_ERROR("JogArmServer::jogCalcs - Failed to transform command to planning frame.");
     return;
@@ -159,15 +143,16 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = cmd.twist.linear;
   lin_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(planning_frame, lin_vector, lin_vector);
+  listener_.transformVector(jog_arm::moveit_planning_frame, lin_vector, lin_vector);
   
   geometry_msgs::Vector3Stamped rot_vector;
   rot_vector.vector = cmd.twist.angular;
   rot_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(planning_frame, rot_vector, rot_vector);
+  listener_.transformVector(jog_arm::moveit_planning_frame, rot_vector, rot_vector);
   
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
+  twist_cmd.header.frame_id = jog_arm::moveit_planning_frame;
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
   
@@ -189,9 +174,6 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Check the Jacobian with these new joints. Halt before approaching a singularity.
   kinematic_state_->setVariableValues(new_theta);
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  
-  // Set back to current joint values
-  kinematic_state_->setVariableValues(current_joints_);
 
   // Verify that the future Jacobian is well-conditioned before moving
   if (!checkConditionNumber(jacobian)) {
@@ -300,6 +282,21 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg)
   pthread_mutex_lock(&joints_mutex);
   jog_arm::joints = *msg;
   pthread_mutex_unlock(&joints_mutex);
+}
+
+std::string getStringParam(std::string s, ros::NodeHandle& n)
+{
+  if( !n.getParam(s, s) )
+    ROS_ERROR_STREAM("[JogArmServer::getStringParam] YAML config file does not contain parameter " << s);
+  return s;
+}
+
+double getDoubleParam(std::string name, ros::NodeHandle& n)
+{
+  double value;
+  if( !n.getParam(name, value) )
+    ROS_ERROR_STREAM("[JogArmServer::getDoubleParam] YAML config file does not contain parameter " << name);
+  return value;
 }
 
 } // namespace jog_arm

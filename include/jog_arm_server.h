@@ -64,7 +64,7 @@ void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
 void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 
 // ROS params to be read
-std::string move_group_name, joint_topic, cmd_topic;
+std::string move_group_name, joint_topic, cmd_topic, moveit_planning_frame;
 double linear_scale, rot_scale, singularity_threshold;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
