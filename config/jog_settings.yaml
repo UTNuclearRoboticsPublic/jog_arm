@@ -1,0 +1,8 @@
+jog_arm_server:
+  cmd_topic:  jog_arm_server/delta_jog_cmds
+  joint_topic:  joint_states
+  move_group_name:  right_ur5
+  singularity_threshold:  4.0
+  scale:
+    linear:  0.004
+    rotational:  0.006

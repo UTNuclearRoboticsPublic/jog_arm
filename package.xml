@@ -5,6 +5,7 @@
   <description>Provides manipulator cartesian jogging.</description>
 
   <maintainer email="blakeanderson@utexas.edu">Blake Anderson</maintainer>
+  <maintainer email="andyz@utexas.edu">Andy Zelenak</maintainer>
 
   <license>specified in-file</license>
 
@@ -12,8 +13,8 @@
   <url type="website">http://wiki.ros.org/jog_arm</url>
 
   <author>Brian O'Neil</author>
-  <author email="blakeanderson@utexas.edu">Blake Anderson</author>
   <author email="andyz@utexas.edu">Andy Zelenak</author>
+  <author email="blakeanderson@utexas.edu">Blake Anderson</author>
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>cmake_modules</depend>

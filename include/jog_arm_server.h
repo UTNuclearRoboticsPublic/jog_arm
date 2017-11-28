@@ -53,12 +53,22 @@ namespace jog_arm {
 // For a worker thread
 void *joggingPipeline(void *threadid);
 
-pthread_mutex_t cmd_deltas_mutex;
-
+// Shared variables
 geometry_msgs::TwistStamped cmd_deltas;
+pthread_mutex_t cmd_deltas_mutex;
+sensor_msgs::JointState joints;
+pthread_mutex_t joints_mutex;
 
-// Listen to cartesian delta commands
+// ROS subscriber callbacks
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
+void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
+
+// ROS params to be read
+std::string move_group_name, joint_topic, cmd_topic;
+double linear_scale, rot_scale, singularity_threshold;
+
+std::string getStringParam(std::string s, ros::NodeHandle& n);
+double getDoubleParam(std::string name, ros::NodeHandle& n);
  
 /**
  * Class JogArmServer - Provides the jog_arm action.
@@ -72,36 +82,31 @@ public:
   JogArmServer(std::string move_group_name);
   
 protected:
-
   moveit::planning_interface::MoveGroup arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
+
+  sensor_msgs::JointState joints_;
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
   void jogCalcs(const geometry_msgs::TwistStamped& cmd);
 
-  void jointStateCB(sensor_msgs::JointStateConstPtr msg);
+  void updateJoints();
 
-  Vector6d scaleCommand(const geometry_msgs::TwistStamped& command, const Vector6d& scalar) const;
+  Vector6d scaleCommand(const geometry_msgs::TwistStamped& command) const;
   
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
   
   bool addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const;
   
-  bool checkConditionNumber(const Eigen::MatrixXd &matrix, double threshold) const;
-
-  ros::NodeHandle nh_;
-  
-  ros::Subscriber joint_sub_;
+  bool checkConditionNumber(const Eigen::MatrixXd &matrix) const;
   
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;
   
   sensor_msgs::JointState current_joints_;
-  
-  ros::AsyncSpinner spinner_; // Motion planner requires an asynchronous spinner
   
   tf::TransformListener listener_;
 };
