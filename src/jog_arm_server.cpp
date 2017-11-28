@@ -123,8 +123,6 @@ JogArmServer::JogArmServer(std::string move_group_name) :
 
 void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
-  ROS_INFO_STREAM("Incoming cmd: " << cmd.twist.linear.z);
-
   // Convert the cmd to the MoveGroup planning frame.
   
   const std::string planning_frame = arm_.getPlanningFrame();
@@ -154,7 +152,8 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   
   // Apply scaling
   Vector6d scaling_factor;
-  scaling_factor << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;  
+  // TODO: parameterize
+  scaling_factor << 0.003, 0.003, 0.003, 0.006, 0.006, 0.006;  
   const Vector6d delta_x = scaleCommand(twist_cmd, scaling_factor);
 
   kinematic_state_->setVariableValues(current_joints_);
@@ -176,7 +175,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Set back to current joint values
   kinematic_state_->setVariableValues(current_joints_);
 
-  // Verify that the future Jacobian is well-conditioned
+  // Verify that the future Jacobian is well-conditioned before moving
   if (!checkConditionNumber(jacobian, 20)) {
     ROS_ERROR("JogArmServer::jogCalcs - Jacobian is ill-conditioned.");
     return;
@@ -202,13 +201,14 @@ void JogArmServer::jointStateCB(sensor_msgs::JointStateConstPtr msg)
     return;
   }
 
+  // Store joints in a member variable
   for (int m=0; m<msg->name.size(); m++)
   {
     for (int c=0; c<current_joints_.name.size(); c++)
     {
-      if ( msg->name.at(m) == current_joints_.name.at(c) )
+      if ( msg->name[m] == current_joints_.name[c])
       {
-        current_joints_.position.at(c) = msg->position.at(m);
+        current_joints_.position[c] = msg->position[m];
         goto NEXT_JOINT;
       }
     }
@@ -241,7 +241,7 @@ bool JogArmServer::addJointIncrements(sensor_msgs::JointState &output, const Eig
 {
   for (std::size_t i = 0, size = increments.size(); i < size; ++i) {
     try {
-      output.position.at(i) += increments(i);
+      output.position[i] += increments(i);
     } catch (std::out_of_range e) {
       ROS_ERROR("JogArmServer::addJointIncrements - Lengths of output and increments do not match.");
       return false;
@@ -262,8 +262,6 @@ bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix, double th
   double max = eig_vector.maxCoeff();
   
   double condition_number = max/min;
-
-  ROS_INFO_STREAM("CN: " << condition_number);
   
   return (condition_number <= threshold);
 }
@@ -272,8 +270,6 @@ bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix, double th
 // Store them in a shared variable.
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
 {
-  ROS_INFO_STREAM("I heard: " << msg->twist.linear.x);
-
   pthread_mutex_lock(&cmd_deltas_mutex);
   jog_arm::cmd_deltas = *msg;
   pthread_mutex_unlock(&cmd_deltas_mutex);
