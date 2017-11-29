@@ -42,13 +42,7 @@ int main(int argc, char **argv)
   ros::NodeHandle n;
 
   // Read ROS parameters, typically from YAML file
-  jog_arm::move_group_name = jog_arm::getStringParam("jog_arm_server/move_group_name", n);
-  jog_arm::linear_scale = jog_arm::getDoubleParam("jog_arm_server/scale/linear", n);
-  jog_arm::rot_scale = jog_arm::getDoubleParam("jog_arm_server/scale/rotational", n);
-  jog_arm::joint_topic = jog_arm::getStringParam("jog_arm_server/joint_topic", n);
-  jog_arm::cmd_topic = jog_arm::getStringParam("jog_arm_server/cmd_topic", n);
-  jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
-  jog_arm::moveit_planning_frame = jog_arm::getStringParam("jog_arm_server/moveit_planning_frame", n);
+  jog_arm::readParams(n);
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
@@ -282,6 +276,18 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg)
   pthread_mutex_lock(&joints_mutex);
   jog_arm::joints = *msg;
   pthread_mutex_unlock(&joints_mutex);
+}
+
+// Read ROS parameters, typically from YAML file
+void readParams(ros::NodeHandle& n)
+{
+  jog_arm::move_group_name = jog_arm::getStringParam("jog_arm_server/move_group_name", n);
+  jog_arm::linear_scale = jog_arm::getDoubleParam("jog_arm_server/scale/linear", n);
+  jog_arm::rot_scale = jog_arm::getDoubleParam("jog_arm_server/scale/rotational", n);
+  jog_arm::joint_topic = jog_arm::getStringParam("jog_arm_server/joint_topic", n);
+  jog_arm::cmd_topic = jog_arm::getStringParam("jog_arm_server/cmd_topic", n);
+  jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
+  jog_arm::moveit_planning_frame = jog_arm::getStringParam("jog_arm_server/moveit_planning_frame", n);
 }
 
 std::string getStringParam(std::string s, ros::NodeHandle& n)
