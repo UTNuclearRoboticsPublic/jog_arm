@@ -1,0 +1,14 @@
+jog_arm_server:
+  cmd_topic:  jog_arm_server/delta_jog_cmds
+  joint_topic:  joint_states
+  move_group_name:  right_ur5
+  singularity_threshold:  4.0
+  # As of Nov. 2017, can't trust MoveIt's reported planning frame. Define it here.
+  moveit_planning_frame:  right_ur5_base_link
+  scale:
+    linear:  0.006
+    rotational:  0.008
+
+# This node republishes joystick messages for the arm jogger.
+joy_to_twist:
+  cmd_frame:  temoto_end_effector

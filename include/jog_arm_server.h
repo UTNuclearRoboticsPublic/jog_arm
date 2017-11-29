@@ -41,12 +41,35 @@ Server node for the arm jogging with MoveIt.
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
+#include <pthread.h>
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
+#include <sensor_msgs/Joy.h>
 #include <string>
 #include <tf/transform_listener.h>
 
 namespace jog_arm {
+
+// For a worker thread
+void *joggingPipeline(void *threadid);
+
+// Shared variables
+geometry_msgs::TwistStamped cmd_deltas;
+pthread_mutex_t cmd_deltas_mutex;
+sensor_msgs::JointState joints;
+pthread_mutex_t joints_mutex;
+
+// ROS subscriber callbacks
+void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
+void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
+
+// ROS params to be read
+void readParams(ros::NodeHandle& n);
+std::string move_group_name, joint_topic, cmd_topic, moveit_planning_frame;
+double linear_scale, rot_scale, singularity_threshold;
+
+std::string getStringParam(std::string s, ros::NodeHandle& n);
+double getDoubleParam(std::string name, ros::NodeHandle& n);
  
 /**
  * Class JogArmServer - Provides the jog_arm action.
@@ -55,40 +78,36 @@ class JogArmServer
 {
 public:
   /**
-   * @breif: Default constructor for JogArmServer Class.
+   * @brief: Default constructor for JogArmServer Class.
    */
-  JogArmServer(std::string move_group_name, std::string cmd_topic_name);
+  JogArmServer(std::string move_group_name);
   
 protected:
+  moveit::planning_interface::MoveGroupInterface arm_;
+
+  geometry_msgs::TwistStamped cmd_deltas_;
+
+  sensor_msgs::JointState joints_;
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
-  void commandCB(geometry_msgs::TwistStampedConstPtr msg);
+  void jogCalcs(const geometry_msgs::TwistStamped& cmd);
 
-  void jointStateCB(sensor_msgs::JointStateConstPtr msg);
+  void updateJoints();
 
-  float overallScaling;
-  Vector6d scaleCommand(const geometry_msgs::TwistStamped& command, const Vector6d& scalar) const;
+  Vector6d scaleCommand(const geometry_msgs::TwistStamped& command) const;
   
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
   
   bool addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const;
   
-  bool checkConditionNumber(const Eigen::MatrixXd &matrix, double threshold) const;
-
-  ros::NodeHandle nh_;
+  bool checkConditionNumber(const Eigen::MatrixXd &matrix) const;
   
-  ros::Subscriber joint_sub_, cmd_sub_;
-  
-  moveit::planning_interface::MoveGroupInterface arm_;
   const robot_state::JointModelGroup* joint_model_group_;
+
   robot_state::RobotStatePtr kinematic_state_;
   
   sensor_msgs::JointState current_joints_;
-  
-  std::vector<std::string> joint_names_;
-  
-  ros::AsyncSpinner spinner_; // Motion planner requires an asynchronous spinner
   
   tf::TransformListener listener_;
 };
