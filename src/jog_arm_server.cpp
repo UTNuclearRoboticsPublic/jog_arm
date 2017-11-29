@@ -68,6 +68,8 @@ void *joggingPipeline(void *threadid)
 JogArmServer::JogArmServer(std::string move_group_name) :
   arm_(move_group_name)
 {
+  // Publish freshly-calculated joints to the robot
+  joint_trajectory_pub_ = nh_.advertise<trajectory_msgs::JointTrajectory>("ur_driver/joint_speed", 1);
 
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
@@ -87,10 +89,10 @@ JogArmServer::JogArmServer(std::string move_group_name) :
   // Wait for initial messages
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
-  current_joints_.name = arm_.getJointNames();
-  current_joints_.position.resize(current_joints_.name.size());
-  current_joints_.velocity.resize(current_joints_.name.size());
-  current_joints_.effort.resize(current_joints_.name.size());
+  jt_state_.name = arm_.getJointNames();
+  jt_state_.position.resize(jt_state_.name.size());
+  jt_state_.velocity.resize(jt_state_.name.size());
+  jt_state_.effort.resize(jt_state_.name.size());
   
   // Wait for the first jogging cmd.
   // Store it in a class member for further calcs.
@@ -111,9 +113,11 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     pthread_mutex_unlock(&cmd_deltas_mutex);
 
     pthread_mutex_lock(&joints_mutex);
-    joints_ = jog_arm::joints;
+    incoming_jts_ = jog_arm::joints;
     pthread_mutex_unlock(&joints_mutex);  
 
+
+    prev_time_ = ros::Time::now();
 
     updateJoints();
     jogCalcs(cmd_deltas_);
@@ -153,20 +157,18 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Apply scaling
   const Vector6d delta_x = scaleCommand(twist_cmd);
 
-  kinematic_state_->setVariableValues(current_joints_);
+  kinematic_state_->setVariableValues(jt_state_);
   
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
 
-  // Add joint increments to current joints
-  sensor_msgs::JointState new_theta = current_joints_;
-  if (!addJointIncrements(new_theta, delta_theta)) {
+  if (!addJointIncrements(jt_state_, delta_theta)) {
     return;
   }
 
   // Check the Jacobian with these new joints. Halt before approaching a singularity.
-  kinematic_state_->setVariableValues(new_theta);
+  kinematic_state_->setVariableValues(jt_state_);
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   // Verify that the future Jacobian is well-conditioned before moving
@@ -174,35 +176,61 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
     return;
   }
-  
-  // Set planning goal
-  if (!arm_.setJointValueTarget(new_theta)) {
-    ROS_ERROR("JogArmServer::jogCalcs - Failed to set joint target.");
-    return;
-  }
 
-  if (!arm_.move()) {
-   ROS_ERROR("JogArmServer::jogCalcs - Jogging movement failed.");
-   return;
-  }
+  // Include a velocity estimate to avoid stuttery motion
+  delta_t_ = (ros::Time::now() - prev_time_).toSec();
+  prev_time_ = ros::Time::now();
+  const Eigen::VectorXd joint_vel(delta_theta/delta_t_);
+  ROS_WARN_STREAM(joint_vel);
+  updateJointVels(jt_state_, joint_vel);
+
+  // Compose the outgoing msg
+  trajectory_msgs::JointTrajectory new_jt_traj;
+  new_jt_traj.header.frame_id = jog_arm::moveit_planning_frame;
+  new_jt_traj.header.stamp = ros::Time::now();
+  new_jt_traj.joint_names = jt_state_.name;
+  trajectory_msgs::JointTrajectoryPoint point;
+  point.positions = jt_state_.position;
+  point.velocities = jt_state_.velocity;
+  new_jt_traj.points.push_back(point);
+
+  // Send the target joints
+  // Publish on /ur_driver/joint_speed
+  // TODO: parameterize the published topic name
+  joint_trajectory_pub_.publish(new_jt_traj);
 }
 
+bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
+{
+  for (std::size_t i = 0, size = joint_vels.size(); i < size; ++i) {
+    try {
+      output.velocity[i] = joint_vels(i);
+    } catch (std::out_of_range e) {
+      ROS_ERROR("[JogArmServer::updateJointVels] Vector lengths do not match.");
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Parse the incoming joint msg for the joints of our MoveGroup
 void JogArmServer::updateJoints()
 {
   // Check that the msg contains enough joints
-  if (joints_.name.size() < current_joints_.name.size()) {
+  if (incoming_jts_.name.size() < jt_state_.name.size()) {
     ROS_WARN("[JogArmServer::jointStateCB] The joint msg does not contain enough joints.");
     return;
   }
 
   // Store joints in a member variable
-  for (int m=0; m<joints_.name.size(); m++)
+  for (int m=0; m<incoming_jts_.name.size(); m++)
   {
-    for (int c=0; c<current_joints_.name.size(); c++)
+    for (int c=0; c<jt_state_.name.size(); c++)
     {
-      if ( joints_.name[m] == current_joints_.name[c])
+      if ( incoming_jts_.name[m] == jt_state_.name[c])
       {
-        current_joints_.position[c] = joints_.position[m];
+        jt_state_.position[c] = incoming_jts_.position[m];
         goto NEXT_JOINT;
       }
     }

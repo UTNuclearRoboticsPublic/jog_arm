@@ -47,6 +47,7 @@ Server node for the arm jogging with MoveIt.
 #include <sensor_msgs/Joy.h>
 #include <string>
 #include <tf/transform_listener.h>
+#include <trajectory_msgs/JointTrajectory.h>
 
 namespace jog_arm {
 
@@ -83,11 +84,15 @@ public:
   JogArmServer(std::string move_group_name);
   
 protected:
+  ros::NodeHandle nh_;
+
+  ros::Publisher joint_trajectory_pub_;
+
   moveit::planning_interface::MoveGroupInterface arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
 
-  sensor_msgs::JointState joints_;
+  sensor_msgs::JointState incoming_jts_;
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
@@ -100,6 +105,8 @@ protected:
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
   
   bool addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const;
+
+  bool updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const;
   
   bool checkConditionNumber(const Eigen::MatrixXd &matrix) const;
   
@@ -107,9 +114,13 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
   
-  sensor_msgs::JointState current_joints_;
+  sensor_msgs::JointState jt_state_;
   
   tf::TransformListener listener_;
+
+  ros::Time prev_time_;
+
+  double delta_t_;
 };
 
 } // namespace jog_arm
