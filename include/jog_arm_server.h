@@ -100,6 +100,8 @@ protected:
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
   
   bool addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const;
+
+  bool updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const;
   
   bool checkConditionNumber(const Eigen::MatrixXd &matrix) const;
   
@@ -110,6 +112,10 @@ protected:
   sensor_msgs::JointState current_joints_;
   
   tf::TransformListener listener_;
+
+  ros::Time prev_time_;
+
+  double delta_t_;
 };
 
 } // namespace jog_arm

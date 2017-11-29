@@ -115,6 +115,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     pthread_mutex_unlock(&joints_mutex);  
 
 
+    prev_time_ = ros::Time::now();
     updateJoints();
     jogCalcs(cmd_deltas_);
 
@@ -175,6 +176,12 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     return;
   }
   
+  // Include a velocity estimate to avoid stuttery motion
+  delta_t_ = (ros::Time::now() - prev_time_).toSec();
+  prev_time_ = ros::Time::now();
+  const Eigen::VectorXd joint_vel(delta_theta/delta_t_);
+  updateJointVels(new_theta, joint_vel);
+
   // Set planning goal
   if (!arm_.setJointValueTarget(new_theta)) {
     ROS_ERROR("JogArmServer::jogCalcs - Failed to set joint target.");
@@ -185,6 +192,20 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
    ROS_ERROR("JogArmServer::jogCalcs - Jogging movement failed.");
    return;
   }
+}
+
+bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
+{
+  for (std::size_t i = 0, size = joint_vels.size(); i < size; ++i) {
+    try {
+      output.velocity[i] += joint_vels(i);
+    } catch (std::out_of_range e) {
+      ROS_ERROR("[JogArmServer::updateJointVels] Lengths of output and increments do not match.");
+      return false;
+    }
+  }
+
+  return true;
 }
 
 void JogArmServer::updateJoints()
