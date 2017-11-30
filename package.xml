@@ -19,9 +19,13 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>cmake_modules</depend>
+  <depend>geometry_msgs</depend>
+  <depend>joy</depend>
   <depend>moveit_ros_manipulation</depend>
   <depend>moveit_ros_move_group</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
   <depend>tf</depend>
 </package>
