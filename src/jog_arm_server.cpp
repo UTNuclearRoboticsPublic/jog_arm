@@ -185,12 +185,6 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   kinematic_state_->setVariableValues(jt_state_);
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
-  // Verify that the future Jacobian is well-conditioned before moving
-  if (!checkConditionNumber(jacobian)) {
-    ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
-    return;
-  }
-
   // Include a velocity estimate to avoid stuttery motion
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
@@ -208,6 +202,15 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   trajectory_msgs::JointTrajectoryPoint point;
   point.velocities = jt_state_.velocity;
   new_jt_traj.points.push_back(point);
+
+  // Verify that the future Jacobian is well-conditioned before moving.
+  // Slow down if very close to a singularity.
+  if (!checkConditionNumber(jacobian)) {
+    ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
+
+    for (int i=0; i<jt_state_.velocity.size(); i++)
+      new_jt_traj.points[0].velocities[i] *= 0.1;
+  }
 
   // Share with main to be published
   pthread_mutex_lock(&jog_arm::new_traj_mutex);

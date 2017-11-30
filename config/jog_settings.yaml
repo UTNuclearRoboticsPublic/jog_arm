@@ -2,7 +2,7 @@ jog_arm_server:
   cmd_in_topic:  jog_arm_server/delta_jog_cmds
   joint_topic:  joint_states
   move_group_name:  right_ur5
-  singularity_threshold:  4.
+  singularity_threshold:  3.5
   cmd_out_topic:  right_ur5_controller/right_ur5_joint_speed
   planning_frame:  right_ur5_base_link
   low_pass_filter_coeff:  5.  # Larger c --> trust the filtered data more, trust the measurements less.
