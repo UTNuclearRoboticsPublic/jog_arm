@@ -60,6 +60,8 @@ geometry_msgs::TwistStamped cmd_deltas;
 pthread_mutex_t cmd_deltas_mutex;
 sensor_msgs::JointState joints;
 pthread_mutex_t joints_mutex;
+trajectory_msgs::JointTrajectory new_traj;
+pthread_mutex_t new_traj_mutex;
 
 // ROS subscriber callbacks
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
@@ -68,7 +70,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 // ROS params to be read
 void readParams(ros::NodeHandle& n);
 std::string move_group_name, joint_topic, cmd_in_topic, cmd_out_topic, planning_frame;
-double linear_scale, rot_scale, singularity_threshold, low_pass_filter_coeff;
+double linear_scale, rot_scale, singularity_threshold, low_pass_filter_coeff, pub_period;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
@@ -123,10 +125,6 @@ public:
   JogArmServer(std::string move_group_name);
   
 protected:
-  ros::NodeHandle nh_;
-
-  ros::Publisher joint_trajectory_pub_;
-
   moveit::planning_interface::MoveGroupInterface arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;

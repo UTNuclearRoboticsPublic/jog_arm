@@ -52,7 +52,20 @@ int main(int argc, char **argv)
   ros::Subscriber cmd_sub = n.subscribe( jog_arm::cmd_in_topic, 1, jog_arm::delta_cmd_cb);
   ros::Subscriber joints_sub = n.subscribe( jog_arm::joint_topic, 1, jog_arm::joints_cb);
 
-  ros::spin();
+  // Publish freshly-calculated joints to the robot
+  ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
+
+  while( ros::ok() )
+  {
+    ros::spinOnce();
+    ros::Duration(jog_arm::pub_period).sleep();
+
+    // Send the newest target joints
+    pthread_mutex_lock(&jog_arm::new_traj_mutex);
+    if ( jog_arm::new_traj.joint_names.size()!= 0 )
+      joint_trajectory_pub.publish( jog_arm::new_traj );
+    pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+  }
   
   return 0;
 }
@@ -68,9 +81,6 @@ void *joggingPipeline(void *threadid)
 JogArmServer::JogArmServer(std::string move_group_name) :
   arm_(move_group_name)
 {
-  // Publish freshly-calculated joints to the robot
-  joint_trajectory_pub_ = nh_.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
-
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
@@ -199,8 +209,10 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   point.velocities = jt_state_.velocity;
   new_jt_traj.points.push_back(point);
 
-  // Send the target joints
-  joint_trajectory_pub_.publish(new_jt_traj);
+  // Share with main to be published
+  pthread_mutex_lock(&jog_arm::new_traj_mutex);
+  jog_arm::new_traj = new_jt_traj;
+  pthread_mutex_unlock(&jog_arm::new_traj_mutex);
 }
 
 bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
@@ -321,6 +333,7 @@ void readParams(ros::NodeHandle& n)
   jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);
   jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
   jog_arm::planning_frame = jog_arm::getStringParam("jog_arm_server/planning_frame", n);
+  jog_arm::pub_period = jog_arm::getDoubleParam("jog_arm_server/pub_period", n);
 }
 
 std::string getStringParam(std::string s, ros::NodeHandle& n)
