@@ -5,11 +5,11 @@ jog_arm_server:
   singularity_threshold:  3.5
   cmd_out_topic:  right_ur5_controller/right_ur5_joint_speed
   planning_frame:  right_ur5_base_link
-  low_pass_filter_coeff:  5.  # Larger c --> trust the filtered data more, trust the measurements less.
+  low_pass_filter_coeff:  2.  # Larger c --> trust the filtered data more, trust the measurements less.
   pub_period:  0.01  # 1/Nominal publish rate [seconds]
   scale:
-    linear:  0.004
-    rotational:  0.008
+    linear:  0.0004
+    rotational:  0.0008
 
 # This node republishes joystick messages for the arm jogger.
 joy_to_twist:
