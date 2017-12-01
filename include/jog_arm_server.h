@@ -47,6 +47,8 @@ Server node for the arm jogging with MoveIt.
 #include <sensor_msgs/Joy.h>
 #include <string>
 #include <tf/transform_listener.h>
+#include <trajectory_msgs/JointTrajectory.h>
+
 
 namespace jog_arm {
 
@@ -58,6 +60,8 @@ geometry_msgs::TwistStamped cmd_deltas;
 pthread_mutex_t cmd_deltas_mutex;
 sensor_msgs::JointState joints;
 pthread_mutex_t joints_mutex;
+trajectory_msgs::JointTrajectory new_traj;
+pthread_mutex_t new_traj_mutex;
 
 // ROS subscriber callbacks
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
@@ -65,11 +69,49 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 
 // ROS params to be read
 void readParams(ros::NodeHandle& n);
-std::string move_group_name, joint_topic, cmd_topic, moveit_planning_frame;
-double linear_scale, rot_scale, singularity_threshold;
+std::string move_group_name, joint_topic, cmd_in_topic, cmd_out_topic, planning_frame;
+double linear_scale, rot_scale, singularity_threshold, low_pass_filter_coeff, pub_period;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
+
+
+/**
+ * Class lpf - Filter the joint velocities to avoid jerky motion.
+ */
+class lpf
+{
+  public:
+    lpf(double low_pass_filter_coeff);
+    double filter(const double& new_msrmt);
+    double c_ = 10.;
+
+  private:
+    double prev_msrmts_ [3] = {0., 0., 0.};
+    double prev_filtered_msrmts_ [2] = {0., 0.};
+};
+
+lpf::lpf(double low_pass_filter_coeff)
+{
+  c_ = low_pass_filter_coeff;
+}
+
+double lpf::filter(const double& new_msrmt)
+{
+  // Push in the new measurement
+  prev_msrmts_[2] = prev_msrmts_[1];
+  prev_msrmts_[1] = prev_msrmts_[0];
+  prev_msrmts_[0] = new_msrmt;
+
+  double new_filtered_msrmt = (1/(1+c_*c_+1.414*c_))*(prev_msrmts_[2]+2*prev_msrmts_[1]+prev_msrmts_[0]-(c_*c_-1.414*c_)*prev_filtered_msrmts_[1]-(-2*c_*c_+2)*prev_filtered_msrmts_[0]);;
+
+  // Store the new filtered measurement
+  prev_filtered_msrmts_[1] = prev_filtered_msrmts_[0];
+  prev_filtered_msrmts_[0] = new_filtered_msrmt;
+ 
+  return new_filtered_msrmt;
+}
+
  
 /**
  * Class JogArmServer - Provides the jog_arm action.
@@ -87,7 +129,7 @@ protected:
 
   geometry_msgs::TwistStamped cmd_deltas_;
 
-  sensor_msgs::JointState joints_;
+  sensor_msgs::JointState incoming_jts_;
   
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
   
@@ -109,13 +151,15 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
   
-  sensor_msgs::JointState current_joints_;
+  sensor_msgs::JointState jt_state_;
   
   tf::TransformListener listener_;
 
   ros::Time prev_time_;
 
   double delta_t_;
+
+  std::vector<jog_arm::lpf> filters_;
 };
 
 } // namespace jog_arm

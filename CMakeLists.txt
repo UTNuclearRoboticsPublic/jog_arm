@@ -14,8 +14,9 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 ## System dependencies are found with CMake's conventions
-find_package(Eigen REQUIRED)
+find_package(Eigen3 REQUIRED)
 
+add_compile_options(-std=c++11)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -106,7 +107,6 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES jog_arm
   CATKIN_DEPENDS roscpp moveit_ros_manipulation moveit_ros_move_group moveit_ros_planning_interface tf
-  DEPENDS Eigen
 )
 
 ###########

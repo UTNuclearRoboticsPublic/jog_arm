@@ -49,10 +49,23 @@ int main(int argc, char **argv)
   int rc = pthread_create(&joggingThread, NULL, jog_arm::joggingPipeline, 0);
 
   // ROS subscriptions. Share the data with the worker thread
-  ros::Subscriber cmd_sub = n.subscribe( jog_arm::cmd_topic, 1, jog_arm::delta_cmd_cb);
+  ros::Subscriber cmd_sub = n.subscribe( jog_arm::cmd_in_topic, 1, jog_arm::delta_cmd_cb);
   ros::Subscriber joints_sub = n.subscribe( jog_arm::joint_topic, 1, jog_arm::joints_cb);
 
-  ros::spin();
+  // Publish freshly-calculated joints to the robot
+  ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
+
+  while( ros::ok() )
+  {
+    ros::spinOnce();
+    ros::Duration(jog_arm::pub_period).sleep();
+
+    // Send the newest target joints
+    pthread_mutex_lock(&jog_arm::new_traj_mutex);
+    if ( jog_arm::new_traj.joint_names.size()!= 0 )
+      joint_trajectory_pub.publish( jog_arm::new_traj );
+    pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+  }
   
   return 0;
 }
@@ -68,7 +81,6 @@ void *joggingPipeline(void *threadid)
 JogArmServer::JogArmServer(std::string move_group_name) :
   arm_(move_group_name)
 {
-
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
@@ -84,13 +96,17 @@ JogArmServer::JogArmServer(std::string move_group_name) :
   std::vector<double> dummy_joint_values;
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
+  // Low-pass filters for the joints
+  for (int i=0; i<joint_names.size(); i++ )
+    filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
+
   // Wait for initial messages
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
-  current_joints_.name = arm_.getJointNames();
-  current_joints_.position.resize(current_joints_.name.size());
-  current_joints_.velocity.resize(current_joints_.name.size());
-  current_joints_.effort.resize(current_joints_.name.size());
+  jt_state_.name = arm_.getJointNames();
+  jt_state_.position.resize(jt_state_.name.size());
+  jt_state_.velocity.resize(jt_state_.name.size());
+  jt_state_.effort.resize(jt_state_.name.size());
   
   // Wait for the first jogging cmd.
   // Store it in a class member for further calcs.
@@ -111,11 +127,12 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     pthread_mutex_unlock(&cmd_deltas_mutex);
 
     pthread_mutex_lock(&joints_mutex);
-    joints_ = jog_arm::joints;
+    incoming_jts_ = jog_arm::joints;
     pthread_mutex_unlock(&joints_mutex);  
 
 
     prev_time_ = ros::Time::now();
+
     updateJoints();
     jogCalcs(cmd_deltas_);
 
@@ -128,7 +145,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Convert the cmd to the MoveGroup planning frame.
 
   try {
-    listener_.waitForTransform( cmd.header.frame_id, jog_arm::moveit_planning_frame, ros::Time::now(), ros::Duration(0.2) );
+    listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
     ROS_ERROR("JogArmServer::jogCalcs - Failed to transform command to planning frame.");
     return;
@@ -138,69 +155,76 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = cmd.twist.linear;
   lin_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(jog_arm::moveit_planning_frame, lin_vector, lin_vector);
+  listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
   
   geometry_msgs::Vector3Stamped rot_vector;
   rot_vector.vector = cmd.twist.angular;
   rot_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(jog_arm::moveit_planning_frame, rot_vector, rot_vector);
+  listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
   
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
-  twist_cmd.header.frame_id = jog_arm::moveit_planning_frame;
+  twist_cmd.header.frame_id = jog_arm::planning_frame;
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
   
   // Apply scaling
   const Vector6d delta_x = scaleCommand(twist_cmd);
 
-  kinematic_state_->setVariableValues(current_joints_);
+  kinematic_state_->setVariableValues(jt_state_);
   
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
 
-  // Add joint increments to current joints
-  sensor_msgs::JointState new_theta = current_joints_;
-  if (!addJointIncrements(new_theta, delta_theta)) {
+  if (!addJointIncrements(jt_state_, delta_theta)) {
     return;
   }
 
   // Check the Jacobian with these new joints. Halt before approaching a singularity.
-  kinematic_state_->setVariableValues(new_theta);
+  kinematic_state_->setVariableValues(jt_state_);
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
-  // Verify that the future Jacobian is well-conditioned before moving
-  if (!checkConditionNumber(jacobian)) {
-    ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
-    return;
-  }
-  
   // Include a velocity estimate to avoid stuttery motion
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
-  const Eigen::VectorXd joint_vel(delta_theta/delta_t_);
-  updateJointVels(new_theta, joint_vel);
+  Eigen::VectorXd joint_vel(delta_theta/delta_t_);
+  // Low-pass filter
+  for (int i=0; i<jt_state_.name.size(); i++)
+    joint_vel[i] = filters_[i].filter(joint_vel[i]);
+  updateJointVels(jt_state_, joint_vel);
 
-  // Set planning goal
-  if (!arm_.setJointValueTarget(new_theta)) {
-    ROS_ERROR("JogArmServer::jogCalcs - Failed to set joint target.");
-    return;
+  // Compose the outgoing msg
+  trajectory_msgs::JointTrajectory new_jt_traj;
+  new_jt_traj.header.frame_id = jog_arm::planning_frame;
+  new_jt_traj.header.stamp = ros::Time::now();
+  new_jt_traj.joint_names = jt_state_.name;
+  trajectory_msgs::JointTrajectoryPoint point;
+  point.velocities = jt_state_.velocity;
+  new_jt_traj.points.push_back(point);
+
+  // Verify that the future Jacobian is well-conditioned before moving.
+  // Slow down if very close to a singularity.
+  if (!checkConditionNumber(jacobian)) {
+    ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
+
+    for (int i=0; i<jt_state_.velocity.size(); i++)
+      new_jt_traj.points[0].velocities[i] *= 0.1;
   }
 
-  if (!arm_.move()) {
-   ROS_ERROR("JogArmServer::jogCalcs - Jogging movement failed.");
-   return;
-  }
+  // Share with main to be published
+  pthread_mutex_lock(&jog_arm::new_traj_mutex);
+  jog_arm::new_traj = new_jt_traj;
+  pthread_mutex_unlock(&jog_arm::new_traj_mutex);
 }
 
 bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
 {
   for (std::size_t i = 0, size = joint_vels.size(); i < size; ++i) {
     try {
-      output.velocity[i] += joint_vels(i);
+      output.velocity[i] = joint_vels(i);
     } catch (std::out_of_range e) {
-      ROS_ERROR("[JogArmServer::updateJointVels] Lengths of output and increments do not match.");
+      ROS_ERROR("[JogArmServer::updateJointVels] Vector lengths do not match.");
       return false;
     }
   }
@@ -208,22 +232,23 @@ bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen:
   return true;
 }
 
+// Parse the incoming joint msg for the joints of our MoveGroup
 void JogArmServer::updateJoints()
 {
   // Check that the msg contains enough joints
-  if (joints_.name.size() < current_joints_.name.size()) {
+  if (incoming_jts_.name.size() < jt_state_.name.size()) {
     ROS_WARN("[JogArmServer::jointStateCB] The joint msg does not contain enough joints.");
     return;
   }
 
   // Store joints in a member variable
-  for (int m=0; m<joints_.name.size(); m++)
+  for (int m=0; m<incoming_jts_.name.size(); m++)
   {
-    for (int c=0; c<current_joints_.name.size(); c++)
+    for (int c=0; c<jt_state_.name.size(); c++)
     {
-      if ( joints_.name[m] == current_joints_.name[c])
+      if ( incoming_jts_.name[m] == jt_state_.name[c])
       {
-        current_joints_.position[c] = joints_.position[m];
+        jt_state_.position[c] = incoming_jts_.position[m];
         goto NEXT_JOINT;
       }
     }
@@ -305,10 +330,13 @@ void readParams(ros::NodeHandle& n)
   jog_arm::move_group_name = jog_arm::getStringParam("jog_arm_server/move_group_name", n);
   jog_arm::linear_scale = jog_arm::getDoubleParam("jog_arm_server/scale/linear", n);
   jog_arm::rot_scale = jog_arm::getDoubleParam("jog_arm_server/scale/rotational", n);
+  jog_arm::low_pass_filter_coeff = jog_arm::getDoubleParam("jog_arm_server/low_pass_filter_coeff", n);
   jog_arm::joint_topic = jog_arm::getStringParam("jog_arm_server/joint_topic", n);
-  jog_arm::cmd_topic = jog_arm::getStringParam("jog_arm_server/cmd_topic", n);
+  jog_arm::cmd_in_topic = jog_arm::getStringParam("jog_arm_server/cmd_in_topic", n);
+  jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);
   jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
-  jog_arm::moveit_planning_frame = jog_arm::getStringParam("jog_arm_server/moveit_planning_frame", n);
+  jog_arm::planning_frame = jog_arm::getStringParam("jog_arm_server/planning_frame", n);
+  jog_arm::pub_period = jog_arm::getDoubleParam("jog_arm_server/pub_period", n);
 }
 
 std::string getStringParam(std::string s, ros::NodeHandle& n)
