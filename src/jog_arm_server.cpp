@@ -63,7 +63,9 @@ int main(int argc, char **argv)
     // Send the newest target joints
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
     if ( jog_arm::new_traj.joint_names.size()!= 0 )
+    {
       joint_trajectory_pub.publish( jog_arm::new_traj );
+    }
     pthread_mutex_unlock(&jog_arm::new_traj_mutex);
   }
   
@@ -90,8 +92,6 @@ JogArmServer::JogArmServer(std::string move_group_name) :
 
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
 
-  arm_.setMaxVelocityScalingFactor( 0.1 );
-
   const std::vector<std::string> &joint_names = joint_model_group_->getJointModelNames();
   std::vector<double> dummy_joint_values;
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
@@ -101,6 +101,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
   // Wait for initial messages
+  ROS_ERROR_STREAM("[JogArmServer::JogArmServer] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
   jt_state_.name = arm_.getJointNames();
@@ -113,12 +114,13 @@ JogArmServer::JogArmServer(std::string move_group_name) :
   // Then free up the shared variable again.
   while ( cmd_deltas.header.stamp == ros::Time(0.)  )
   {
-    ros::Duration(0.005).sleep();
+    ros::Duration(0.05).sleep();
     pthread_mutex_lock(&cmd_deltas_mutex);
     cmd_deltas_ = jog_arm::cmd_deltas;
     pthread_mutex_unlock(&cmd_deltas_mutex);
   }
-  // Now do jogging calcs as quickly as possible
+
+  // Now do jogging calcs
   while ( ros::ok() )
   {
     // Pull data from the shared variables.
@@ -327,16 +329,31 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg)
 // Read ROS parameters, typically from YAML file
 void readParams(ros::NodeHandle& n)
 {
+  ROS_INFO_STREAM("---------------------------------------");
+  ROS_INFO_STREAM("[jog_arm_server:readParams] Parameters:");
+  ROS_INFO_STREAM("---------------------------------------");
   jog_arm::move_group_name = jog_arm::getStringParam("jog_arm_server/move_group_name", n);
+  ROS_INFO_STREAM("move_group_name: " << jog_arm::move_group_name);
   jog_arm::linear_scale = jog_arm::getDoubleParam("jog_arm_server/scale/linear", n);
+  ROS_INFO_STREAM("linear_scale: " << jog_arm::linear_scale);
   jog_arm::rot_scale = jog_arm::getDoubleParam("jog_arm_server/scale/rotational", n);
+  ROS_INFO_STREAM("rot_scale: " << jog_arm::rot_scale);
   jog_arm::low_pass_filter_coeff = jog_arm::getDoubleParam("jog_arm_server/low_pass_filter_coeff", n);
+  ROS_INFO_STREAM("low_pass_filter_coeff: " << jog_arm::low_pass_filter_coeff);
   jog_arm::joint_topic = jog_arm::getStringParam("jog_arm_server/joint_topic", n);
+  ROS_INFO_STREAM("joint_topic: " << jog_arm::joint_topic);
   jog_arm::cmd_in_topic = jog_arm::getStringParam("jog_arm_server/cmd_in_topic", n);
+  ROS_INFO_STREAM("cmd_in_topic: " << jog_arm::cmd_in_topic);
   jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);
+  ROS_INFO_STREAM("cmd_out_topic: " << jog_arm::cmd_out_topic);
   jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
+  ROS_INFO_STREAM("singularity_threshold: " << jog_arm::singularity_threshold);
   jog_arm::planning_frame = jog_arm::getStringParam("jog_arm_server/planning_frame", n);
+  ROS_INFO_STREAM("planning_frame: " << jog_arm::planning_frame);
   jog_arm::pub_period = jog_arm::getDoubleParam("jog_arm_server/pub_period", n);
+  ROS_INFO_STREAM("pub_period: " << jog_arm::pub_period);
+  ROS_INFO_STREAM("---------------------------------------");
+  ROS_INFO_STREAM("---------------------------------------");
 }
 
 std::string getStringParam(std::string s, ros::NodeHandle& n)

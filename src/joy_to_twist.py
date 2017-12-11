@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Take joystick cmds. Republish them as twist for
+# Take joystick cmds. Republish them as TwistStamped for
 # e.g. jogging.
 
 # RB: +x, LB: -x

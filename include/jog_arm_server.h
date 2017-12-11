@@ -125,6 +125,7 @@ public:
   JogArmServer(std::string move_group_name);
   
 protected:
+
   moveit::planning_interface::MoveGroupInterface arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
