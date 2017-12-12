@@ -64,7 +64,15 @@ int main(int argc, char **argv)
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
     if ( jog_arm::new_traj.joint_names.size()!= 0 )
     {
-      joint_trajectory_pub.publish( jog_arm::new_traj );
+      if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(0.05) )
+      {
+        joint_trajectory_pub.publish( jog_arm::new_traj );
+      }
+      else
+      {
+        ROS_WARN_STREAM("[jog_arm_server::main] Stale joint trajectory msg.");
+        ROS_WARN_STREAM("[jog_arm_server::main] Did input from the controller get interrupted? Are calculations taking too long?");
+      }
     }
     pthread_mutex_unlock(&jog_arm::new_traj_mutex);
   }
@@ -101,7 +109,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
   // Wait for initial messages
-  ROS_ERROR_STREAM("[JogArmServer::JogArmServer] Waiting for first joint msg.");
+  ROS_WARN_STREAM("[JogArmServer::JogArmServer] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
   jt_state_.name = arm_.getJointNames();
@@ -130,7 +138,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
 
     pthread_mutex_lock(&joints_mutex);
     incoming_jts_ = jog_arm::joints;
-    pthread_mutex_unlock(&joints_mutex);  
+    pthread_mutex_unlock(&joints_mutex);
 
 
     prev_time_ = ros::Time::now();
