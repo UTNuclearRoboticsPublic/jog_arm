@@ -64,7 +64,7 @@ int main(int argc, char **argv)
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
     if ( jog_arm::new_traj.joint_names.size()!= 0 )
     {
-      if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(0.05) )
+      if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(0.2) )
       {
         joint_trajectory_pub.publish( jog_arm::new_traj );
       }
@@ -95,7 +95,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
 
-  kinematic_state_ = std::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
+  kinematic_state_ = boost::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();
 
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
