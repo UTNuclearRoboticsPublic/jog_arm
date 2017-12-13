@@ -64,7 +64,8 @@ int main(int argc, char **argv)
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
     if ( jog_arm::new_traj.joint_names.size()!= 0 )
     {
-      if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(0.05) )
+      // Check for stale cmds
+      if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
         joint_trajectory_pub.publish( jog_arm::new_traj );
       }
@@ -174,6 +175,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
+  twist_cmd.header.stamp = cmd.header.stamp;
   twist_cmd.header.frame_id = jog_arm::planning_frame;
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
@@ -207,7 +209,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Compose the outgoing msg
   trajectory_msgs::JointTrajectory new_jt_traj;
   new_jt_traj.header.frame_id = jog_arm::planning_frame;
-  new_jt_traj.header.stamp = ros::Time::now();
+  new_jt_traj.header.stamp = twist_cmd.header.stamp;
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.velocities = jt_state_.velocity;
@@ -352,6 +354,8 @@ void readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("joint_topic: " << jog_arm::joint_topic);
   jog_arm::cmd_in_topic = jog_arm::getStringParam("jog_arm_server/cmd_in_topic", n);
   ROS_INFO_STREAM("cmd_in_topic: " << jog_arm::cmd_in_topic);
+  jog_arm::incoming_cmd_timeout = jog_arm::getDoubleParam("jog_arm_server/incoming_cmd_timeout", n);
+  ROS_INFO_STREAM("incoming_cmd_timeout: " << jog_arm::incoming_cmd_timeout);
   jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);
   ROS_INFO_STREAM("cmd_out_topic: " << jog_arm::cmd_out_topic);
   jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
