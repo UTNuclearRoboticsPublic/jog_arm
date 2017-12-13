@@ -1,5 +1,6 @@
 jog_arm_server:
   cmd_in_topic:  jog_arm_server/delta_jog_cmds
+  incoming_cmd_timeout:  0.15  # Stop jogging if X seconds elapse without a new cmd
   joint_topic:  joint_states
   move_group_name:  right_ur5
   singularity_threshold:  3.5
