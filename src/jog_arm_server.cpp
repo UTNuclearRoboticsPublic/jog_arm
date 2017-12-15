@@ -212,6 +212,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   new_jt_traj.header.stamp = twist_cmd.header.stamp;
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
+  point.positions = jt_state_.position;
   point.velocities = jt_state_.velocity;
   new_jt_traj.points.push_back(point);
 
