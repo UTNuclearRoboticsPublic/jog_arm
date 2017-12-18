@@ -55,6 +55,8 @@ int main(int argc, char **argv)
   // Publish freshly-calculated joints to the robot
   ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
 
+  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+
   while( ros::ok() )
   {
     ros::spinOnce();
@@ -110,7 +112,6 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
   // Wait for initial messages
-  ROS_WARN_STREAM("[JogArmServer::JogArmServer] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
   jt_state_.name = arm_.getJointNames();
