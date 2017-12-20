@@ -70,7 +70,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 // ROS params to be read
 void readParams(ros::NodeHandle& n);
 std::string move_group_name, joint_topic, cmd_in_topic, cmd_out_topic, planning_frame;
-double linear_scale, rot_scale, singularity_threshold, low_pass_filter_coeff, pub_period;
+double linear_scale, rot_scale, singularity_threshold, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
@@ -160,6 +160,9 @@ protected:
   double delta_t_;
 
   std::vector<jog_arm::lpf> filters_;
+
+  // Check whether incoming cmds are stale. Pause if so
+  ros::Duration time_of_incoming_cmd_;
 };
 
 } // namespace jog_arm
