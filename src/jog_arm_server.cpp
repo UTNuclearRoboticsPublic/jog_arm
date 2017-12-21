@@ -224,7 +224,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
 
     for (int i=0; i<jt_state_.velocity.size(); i++)
-      new_jt_traj.points[0].velocities[i] *= 0.1;
+      new_jt_traj.points[0].velocities[i] *= 0.3;
   }
 
   // Share with main to be published

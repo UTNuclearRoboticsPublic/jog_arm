@@ -3,7 +3,7 @@ jog_arm_server:
   incoming_cmd_timeout:  0.3  # Stop jogging if X seconds elapse without a new cmd
   joint_topic:  joint_states
   move_group_name:  right_ur5
-  singularity_threshold:  3.5
+  singularity_threshold:  5.5
   cmd_out_topic:  right_ur5_controller/right_ur5_joint_speed
   planning_frame:  right_ur5_base_link
   low_pass_filter_coeff:  2.  # Larger c --> trust the filtered data more, trust the measurements less.
