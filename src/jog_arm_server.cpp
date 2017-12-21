@@ -112,6 +112,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
   // Wait for initial messages
+  ROS_WARN_STREAM("[JogArmServer::JogArmServer] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
   jt_state_.name = arm_.getJointNames();
@@ -223,7 +224,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
 
     for (int i=0; i<jt_state_.velocity.size(); i++)
-      new_jt_traj.points[0].velocities[i] *= 0.1;
+      new_jt_traj.points[0].velocities[i] *= 0.3;
   }
 
   // Share with main to be published
