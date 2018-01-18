@@ -70,7 +70,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 // ROS params to be read
 void readParams(ros::NodeHandle& n);
 std::string move_group_name, joint_topic, cmd_in_topic, cmd_out_topic, planning_frame;
-double linear_scale, rot_scale, singularity_threshold, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
+double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
@@ -145,13 +145,13 @@ protected:
 
   bool updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const;
   
-  bool checkConditionNumber(const Eigen::MatrixXd &matrix) const;
+  double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
   
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;
   
-  sensor_msgs::JointState jt_state_;
+  sensor_msgs::JointState jt_state_, orig_jts_;
   
   tf::TransformListener listener_;
 

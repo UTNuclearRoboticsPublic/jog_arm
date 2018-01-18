@@ -73,8 +73,8 @@ int main(int argc, char **argv)
       }
       else
       {
-        ROS_WARN_STREAM("[jog_arm_server::main] Stale joint trajectory msg.");
-        ROS_WARN_STREAM("[jog_arm_server::main] Did input from the controller get interrupted? Are calculations taking too long?");
+        ROS_WARN_STREAM_THROTTLE(2, "[jog_arm_server::main] Stale joint trajectory msg. Try a larger 'incoming_cmd_timeout' parameter.");
+        ROS_WARN_STREAM_THROTTLE(2, "[jog_arm_server::main] Did input from the controller get interrupted? Are calculations taking too long?");
       }
     }
     pthread_mutex_unlock(&jog_arm::new_traj_mutex);
@@ -186,6 +186,7 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   const Vector6d delta_x = scaleCommand(twist_cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
+  orig_jts_ = jt_state_;
   
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
@@ -220,11 +221,28 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 
   // Verify that the future Jacobian is well-conditioned before moving.
   // Slow down if very close to a singularity.
-  if (!checkConditionNumber(jacobian)) {
-    ROS_ERROR("[JogArmServer::jogCalcs] The arm is close to a singularity.");
-
-    for (int i=0; i<jt_state_.velocity.size(); i++)
-      new_jt_traj.points[0].velocities[i] *= 0.3;
+  double currentCN = checkConditionNumber(jacobian);
+  if ( currentCN > jog_arm::singularity_threshold )
+  {
+    // Dangerously close to singularity, joints may flip due to ill-conditioned matrix. Stop.
+    if ( currentCN > jog_arm::hard_stop_sing_thresh )
+    {
+      ROS_ERROR_THROTTLE(2,"[JogArmServer::jogCalcs] Dangerously close to a singularity. Halting.");
+      for (int i=0; i<jt_state_.velocity.size(); i++)
+      {
+        new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
+        new_jt_traj.points[0].velocities[i] = 0.;
+      }
+    }
+    // Only somewhat close to singularity. Just slow down.
+    else
+    {
+      for (int i=0; i<jt_state_.velocity.size(); i++)
+      {
+        new_jt_traj.points[0].positions[i] = new_jt_traj.points[0].positions[i] - 0.7*delta_theta[i];
+        new_jt_traj.points[0].velocities[i] *= 0.3;
+      }
+    }
   }
 
   // Share with main to be published
@@ -306,7 +324,7 @@ bool JogArmServer::addJointIncrements(sensor_msgs::JointState &output, const Eig
   return true;
 }
 
-bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix) const
+double JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix) const
 {
   // Get Eigenvalues
   Eigen::MatrixXd::EigenvaluesReturnType eigs = matrix.eigenvalues();
@@ -318,7 +336,7 @@ bool JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix) const
   
   double condition_number = max/min;
   
-  return (condition_number <= jog_arm::singularity_threshold);
+  return condition_number;
 }
 
 // Listen to cartesian delta commands.
@@ -363,6 +381,8 @@ void readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("cmd_out_topic: " << jog_arm::cmd_out_topic);
   jog_arm::singularity_threshold = jog_arm::getDoubleParam("jog_arm_server/singularity_threshold", n);
   ROS_INFO_STREAM("singularity_threshold: " << jog_arm::singularity_threshold);
+  jog_arm::hard_stop_sing_thresh = jog_arm::getDoubleParam("jog_arm_server/hard_stop_singularity_threshold", n);
+  ROS_INFO_STREAM("hard_stop_singularity_threshold: " << jog_arm::hard_stop_sing_thresh);
   jog_arm::planning_frame = jog_arm::getStringParam("jog_arm_server/planning_frame", n);
   ROS_INFO_STREAM("planning_frame: " << jog_arm::planning_frame);
   jog_arm::pub_period = jog_arm::getDoubleParam("jog_arm_server/pub_period", n);
