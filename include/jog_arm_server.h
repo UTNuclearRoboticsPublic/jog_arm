@@ -85,7 +85,6 @@ double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, lo
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
 
-
 /**
  * Class lpf - Filter the joint velocities to avoid jerky motion.
  */
