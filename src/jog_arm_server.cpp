@@ -108,7 +108,7 @@ void *collisionCheck(void *threadid)
 
 CollisionCheck::CollisionCheck(std::string move_group_name)
 {
-  moveit::planning_interface::MoveGroup* move_group_ptr = new moveit::planning_interface::MoveGroup(move_group_name);
+  moveit::planning_interface::MoveGroupInterface* move_group_ptr = new moveit::planning_interface::MoveGroupInterface(move_group_name);
   robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
   planning_scene::PlanningScene planning_scene(kinematic_model);
@@ -174,7 +174,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
 
-  kinematic_state_ = boost::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
+  kinematic_state_ = std::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();
 
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
