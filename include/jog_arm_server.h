@@ -39,6 +39,8 @@ Server node for the arm jogging with MoveIt.
 #include <geometry_msgs/Twist.h>
 #include <math.h>
 #include <moveit/move_group_interface/move_group.h>
+#include <moveit/planning_scene/planning_scene.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
 #include <pthread.h>
@@ -52,23 +54,31 @@ Server node for the arm jogging with MoveIt.
 
 namespace jog_arm {
 
-// For a worker thread
+// For jogging calc thread
 void *joggingPipeline(void *threadid);
+
+// For collision checking thread
+void *collisionCheck(void *threadid);
 
 // Shared variables
 geometry_msgs::TwistStamped cmd_deltas;
 pthread_mutex_t cmd_deltas_mutex;
+
 sensor_msgs::JointState joints;
 pthread_mutex_t joints_mutex;
+
 trajectory_msgs::JointTrajectory new_traj;
 pthread_mutex_t new_traj_mutex;
+
+bool imminent_collision;
+pthread_mutex_t imminent_collision_mutex;
 
 // ROS subscriber callbacks
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
 void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 
 // ROS params to be read
-void readParams(ros::NodeHandle& n);
+int readParams(ros::NodeHandle& n);
 std::string move_group_name, joint_topic, cmd_in_topic, cmd_out_topic, planning_frame;
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 
@@ -114,15 +124,12 @@ double lpf::filter(const double& new_msrmt)
 
  
 /**
- * Class JogArmServer - Provides the jog_arm action.
+ * Class JogCalcs - Provides the jog_arm action.
  */
-class JogArmServer
+class JogCalcs
 {
 public:
-  /**
-   * @brief: Default constructor for JogArmServer Class.
-   */
-  JogArmServer(std::string move_group_name);
+  JogCalcs(std::string move_group_name);
   
 protected:
   moveit::planning_interface::MoveGroup arm_;
@@ -163,6 +170,12 @@ protected:
 
   // Check whether incoming cmds are stale. Pause if so
   ros::Duration time_of_incoming_cmd_;
+};
+
+class CollisionCheck
+{
+public:
+    CollisionCheck(std::string move_group_name);
 };
 
 } // namespace jog_arm

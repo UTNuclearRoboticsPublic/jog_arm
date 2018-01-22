@@ -42,11 +42,20 @@ int main(int argc, char **argv)
   ros::NodeHandle n;
 
   // Read ROS parameters, typically from YAML file
-  jog_arm::readParams(n);
+  if ( jog_arm::readParams(n) )
+    return 1;
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
   int rc = pthread_create(&joggingThread, NULL, jog_arm::joggingPipeline, 0);
+
+  // Check collisions in this thread
+  pthread_t collisionThread;
+  rc = pthread_create(&collisionThread, NULL, jog_arm::collisionCheck, 0);
+  // Initialize to no collisions
+  pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
+  jog_arm::imminent_collision = false;
+  pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
 
   // ROS subscriptions. Share the data with the worker thread
   ros::Subscriber cmd_sub = n.subscribe( jog_arm::cmd_in_topic, 1, jog_arm::delta_cmd_cb);
@@ -85,13 +94,80 @@ int main(int argc, char **argv)
 
 namespace jog_arm {
 
-// A separate thread for the heavy calculations.
+// A separate thread for the heavy jogging calculations.
 void *joggingPipeline(void *threadid)
 {
-  jog_arm::JogArmServer ja(jog_arm::move_group_name);
+  jog_arm::JogCalcs ja(jog_arm::move_group_name);
 }
 
-JogArmServer::JogArmServer(std::string move_group_name) :
+// A separate thread for collision checking.
+void *collisionCheck(void *threadid)
+{
+  jog_arm::CollisionCheck cc(jog_arm::move_group_name);
+}
+
+CollisionCheck::CollisionCheck(std::string move_group_name)
+{
+  moveit::planning_interface::MoveGroup* move_group_ptr = new moveit::planning_interface::MoveGroup(move_group_name);
+  robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
+  robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+  planning_scene::PlanningScene planning_scene(kinematic_model);
+  collision_detection::CollisionRequest collision_request;
+  collision_request.group_name = move_group_name;
+  collision_detection::CollisionResult collision_result;
+  robot_state::RobotState& current_state = planning_scene.getCurrentStateNonConst();
+  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+  
+  // Wait for initial joint message
+  ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
+  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+
+  pthread_mutex_lock(&joints_mutex);
+  sensor_msgs::JointState jts = jog_arm::joints;
+  pthread_mutex_unlock(&joints_mutex);
+
+
+  /////////////////////////////////////////////////
+  // Spin while checking collisions
+  /////////////////////////////////////////////////
+  while ( ros::ok() )
+  {
+
+    for (int i=0; i<jts.position.size(); i++)
+      current_state.setJointPositions( jts.name[i], &jts.position[i] );
+
+    //process collision objects in scene
+    std::map<std::string, moveit_msgs::CollisionObject> c_objects_map = planning_scene_interface.getObjects();
+    for(auto& kv : c_objects_map){
+      planning_scene.processCollisionObjectMsg(kv.second);
+    }
+
+    collision_result.clear();
+    planning_scene.checkCollision(collision_request, collision_result);
+
+    // If collision, signal the jogging to stop
+    if ( collision_result.collision )
+    {
+      pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
+      jog_arm::imminent_collision = true;
+      pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+    }
+    else
+    {
+      pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
+      jog_arm::imminent_collision = false;
+      pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);     
+    }
+
+    ros::spinOnce();
+    ros::Duration(.01).sleep();
+  }
+
+
+
+}
+
+JogCalcs::JogCalcs(std::string move_group_name) :
   arm_(move_group_name)
 {
   /** MoveIt Setup **/
@@ -112,7 +188,7 @@ JogArmServer::JogArmServer(std::string move_group_name) :
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
   // Wait for initial messages
-  ROS_WARN_STREAM("[JogArmServer::JogArmServer] Waiting for first joint msg.");
+  ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   
   jt_state_.name = arm_.getJointNames();
@@ -153,14 +229,14 @@ JogArmServer::JogArmServer(std::string move_group_name) :
   }
 }
 
-void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
+void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
   // Convert the cmd to the MoveGroup planning frame.
 
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
-    ROS_ERROR("JogArmServer::jogCalcs - Failed to transform command to planning frame.");
+    ROS_ERROR("[jog_arm_server jogCalcs] - Failed to transform command to planning frame.");
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
@@ -219,15 +295,29 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   point.velocities = jt_state_.velocity;
   new_jt_traj.points.push_back(point);
 
+  // Stop if imminent collision
+  pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
+  bool collision = jog_arm::imminent_collision;
+  pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+  if (collision)
+  {
+    ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a collision. Halting.");
+    for (int i=0; i<jt_state_.velocity.size(); i++)
+    {
+      new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
+      new_jt_traj.points[0].velocities[i] = 0.;
+    }
+  }
+
   // Verify that the future Jacobian is well-conditioned before moving.
   // Slow down if very close to a singularity.
+  // Stop if extremely close.
   double currentCN = checkConditionNumber(jacobian);
   if ( currentCN > jog_arm::singularity_threshold )
   {
-    // Dangerously close to singularity, joints may flip due to ill-conditioned matrix. Stop.
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
-      ROS_ERROR_THROTTLE(2,"[JogArmServer::jogCalcs] Dangerously close to a singularity. Halting.");
+      ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity. Halting.");
       for (int i=0; i<jt_state_.velocity.size(); i++)
       {
         new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
@@ -251,13 +341,13 @@ void JogArmServer::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   pthread_mutex_unlock(&jog_arm::new_traj_mutex);
 }
 
-bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
+bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
 {
   for (std::size_t i = 0, size = joint_vels.size(); i < size; ++i) {
     try {
       output.velocity[i] = joint_vels(i);
     } catch (std::out_of_range e) {
-      ROS_ERROR("[JogArmServer::updateJointVels] Vector lengths do not match.");
+      ROS_ERROR("[JogCalcs::updateJointVels] Vector lengths do not match.");
       return false;
     }
   }
@@ -266,11 +356,11 @@ bool JogArmServer::updateJointVels(sensor_msgs::JointState &output, const Eigen:
 }
 
 // Parse the incoming joint msg for the joints of our MoveGroup
-void JogArmServer::updateJoints()
+void JogCalcs::updateJoints()
 {
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size()) {
-    ROS_WARN("[JogArmServer::jointStateCB] The joint msg does not contain enough joints.");
+    ROS_WARN("[JogCalcs::jointStateCB] The joint msg does not contain enough joints.");
     return;
   }
 
@@ -290,7 +380,7 @@ NEXT_JOINT:
   }
 }
 
-JogArmServer::Vector6d JogArmServer::scaleCommand(const geometry_msgs::TwistStamped &command) const
+JogCalcs::Vector6d JogCalcs::scaleCommand(const geometry_msgs::TwistStamped &command) const
 {
   Vector6d result;
   
@@ -304,19 +394,19 @@ JogArmServer::Vector6d JogArmServer::scaleCommand(const geometry_msgs::TwistStam
   return result;
 }
 
-Eigen::MatrixXd JogArmServer::pseudoInverse(const Eigen::MatrixXd &J) const
+Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd &J) const
 {
   Eigen::MatrixXd transpose = J.transpose();
   return transpose*(J*transpose).inverse();
 }
 
-bool JogArmServer::addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const
+bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const
 {
   for (std::size_t i = 0, size = increments.size(); i < size; ++i) {
     try {
       output.position[i] += increments(i);
     } catch (std::out_of_range e) {
-      ROS_ERROR("JogArmServer::addJointIncrements - Lengths of output and increments do not match.");
+      ROS_ERROR("JogCalcs::addJointIncrements - Lengths of output and increments do not match.");
       return false;
     }
   }
@@ -324,7 +414,7 @@ bool JogArmServer::addJointIncrements(sensor_msgs::JointState &output, const Eig
   return true;
 }
 
-double JogArmServer::checkConditionNumber(const Eigen::MatrixXd &matrix) const
+double JogCalcs::checkConditionNumber(const Eigen::MatrixXd &matrix) const
 {
   // Get Eigenvalues
   Eigen::MatrixXd::EigenvaluesReturnType eigs = matrix.eigenvalues();
@@ -358,7 +448,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg)
 }
 
 // Read ROS parameters, typically from YAML file
-void readParams(ros::NodeHandle& n)
+int readParams(ros::NodeHandle& n)
 {
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("[jog_arm_server:readParams] Parameters:");
@@ -389,12 +479,26 @@ void readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("pub_period: " << jog_arm::pub_period);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
+
+  // Input checking
+  if ( jog_arm::hard_stop_sing_thresh < jog_arm::singularity_threshold )
+  {
+    ROS_WARN("[jog_arm_server::readParams] Parameter 'hard_stop_sing_thresh' should be greater than 'singularity_threshold.'");
+    return 1;
+  }
+  if ( (jog_arm::hard_stop_sing_thresh < 0.) || (jog_arm::singularity_threshold < 0.) )
+  {
+    ROS_WARN("[jog_arm_server::readParams] Parameters 'hard_stop_sing_thresh' and 'singularity_threshold' should be greater than zero.");
+    return 1;
+  }
+
+  return 0;
 }
 
 std::string getStringParam(std::string s, ros::NodeHandle& n)
 {
   if( !n.getParam(s, s) )
-    ROS_ERROR_STREAM("[JogArmServer::getStringParam] YAML config file does not contain parameter " << s);
+    ROS_ERROR_STREAM("[JogCalcs::getStringParam] YAML config file does not contain parameter " << s);
   return s;
 }
 
@@ -402,7 +506,7 @@ double getDoubleParam(std::string name, ros::NodeHandle& n)
 {
   double value;
   if( !n.getParam(name, value) )
-    ROS_ERROR_STREAM("[JogArmServer::getDoubleParam] YAML config file does not contain parameter " << name);
+    ROS_ERROR_STREAM("[JogCalcs::getDoubleParam] YAML config file does not contain parameter " << name);
   return value;
 }
 
