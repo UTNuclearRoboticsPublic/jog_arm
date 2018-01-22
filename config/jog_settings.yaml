@@ -15,4 +15,4 @@ jog_arm_server:
 
 # This node republishes joystick messages for the arm jogger.
 joy_to_twist:
-  cmd_frame:  temoto_end_effector
+  cmd_frame:  right_ur5_temoto_ee
