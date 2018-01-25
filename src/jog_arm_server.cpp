@@ -236,7 +236,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
-    ROS_ERROR("[jog_arm_server jogCalcs] - Failed to transform command to planning frame.");
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
@@ -244,12 +244,22 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = cmd.twist.linear;
   lin_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
+  try {
+    listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
+  } catch (tf::TransformException ex) {
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
+    return;    
+  }
   
   geometry_msgs::Vector3Stamped rot_vector;
   rot_vector.vector = cmd.twist.angular;
   rot_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
+  try {
+    listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
+  } catch (tf::TransformException ex) {
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
+    return;    
+  }
   
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
