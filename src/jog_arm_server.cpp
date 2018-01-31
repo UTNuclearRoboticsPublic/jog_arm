@@ -277,9 +277,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
 
-  if (!addJointIncrements(jt_state_, delta_theta)) {
+  if (!addJointIncrements(jt_state_, delta_theta))
     return;
-  }
 
   // Check the Jacobian with these new joints. Halt before approaching a singularity.
   kinematic_state_->setVariableValues(jt_state_);
@@ -289,9 +288,16 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
   Eigen::VectorXd joint_vel(delta_theta/delta_t_);
+
   // Low-pass filter
   for (int i=0; i<jt_state_.name.size(); i++)
+  {
     joint_vel[i] = filters_[i].filter(joint_vel[i]);
+
+    // Check for nan's
+    if ( std::isnan(joint_vel[i]) )
+      joint_vel[i] = 0.;
+  }
   updateJointVels(jt_state_, joint_vel);
 
   // Compose the outgoing msg
@@ -301,8 +307,16 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
+  point.time_from_start = ros::Durataion(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
-  new_jt_traj.points.push_back(point);
+
+  // Spam several redundant points into the trajectory. The first few may be skipped if the
+  // time stamp is in the past when it reaches the client.
+  for (int i=1; i<20; i++)
+  {
+    point.time_from_start = ros::Duration(i*jog_arm::pub_period);
+    new_traj.points.push_back(point);
+  }
 
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
