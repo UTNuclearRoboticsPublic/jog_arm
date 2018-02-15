@@ -235,7 +235,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
-    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 238: " << ex.what());
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
@@ -246,7 +246,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
   } catch (tf::TransformException ex) {
-    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 249: " << ex.what());
     return;    
   }
   
@@ -256,7 +256,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
   } catch (tf::TransformException ex) {
-    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 259: " << ex.what());
     return;    
   }
   
@@ -307,7 +307,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
-  point.time_from_start = ros::Durataion(jog_arm::pub_period);
+  point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
 
   // Spam several redundant points into the trajectory. The first few may be skipped if the
@@ -458,6 +458,7 @@ void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&cmd_deltas_mutex);
   jog_arm::cmd_deltas = *msg;
+  jog_arm::cmd_deltas.header.frame_id = jog_arm::input_frame;
   pthread_mutex_unlock(&cmd_deltas_mutex);
 }
 
@@ -488,6 +489,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("joint_topic: " << jog_arm::joint_topic);
   jog_arm::cmd_in_topic = jog_arm::getStringParam("jog_arm_server/cmd_in_topic", n);
   ROS_INFO_STREAM("cmd_in_topic: " << jog_arm::cmd_in_topic);
+  jog_arm::input_frame = jog_arm::getStringParam("jog_arm_server/input_frame", n);
+  ROS_INFO_STREAM("input frame: " << jog_arm::input_frame);
   jog_arm::incoming_cmd_timeout = jog_arm::getDoubleParam("jog_arm_server/incoming_cmd_timeout", n);
   ROS_INFO_STREAM("incoming_cmd_timeout: " << jog_arm::incoming_cmd_timeout);
   jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);
