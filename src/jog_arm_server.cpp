@@ -307,7 +307,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
-  point.time_from_start = ros::Durataion(jog_arm::pub_period);
+  point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
 
   // Spam several redundant points into the trajectory. The first few may be skipped if the
