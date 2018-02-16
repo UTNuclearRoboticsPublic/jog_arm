@@ -47,6 +47,7 @@ Server node for the arm jogging with MoveIt.
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
+#include <std_msgs/String.h>
 #include <string>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>

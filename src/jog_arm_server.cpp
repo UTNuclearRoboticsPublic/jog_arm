@@ -62,7 +62,7 @@ int main(int argc, char **argv)
   ros::Subscriber joints_sub = n.subscribe( jog_arm::joint_topic, 1, jog_arm::joints_cb);
 
   // Publish freshly-calculated joints to the robot
-  ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
+  ros::Publisher joint_trajectory_pub = n.advertise<std_msgs::String>(jog_arm::cmd_out_topic, 1);
 
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
 
@@ -70,6 +70,8 @@ int main(int argc, char **argv)
   {
     ros::spinOnce();
     ros::Duration(jog_arm::pub_period).sleep();
+    std_msgs::String ur_string;
+    char ur_char [400];
 
     // Send the newest target joints
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
@@ -78,7 +80,23 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        joint_trajectory_pub.publish( jog_arm::new_traj );
+        // Convert to a string msg type for UR robots
+        //ROS_WARN_STREAM( jog_arm::new_traj.points.at(0).positions.at(0) );
+        sprintf(ur_char, "movej([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], %f, %f, %f, %f)\n", 
+          jog_arm::new_traj.points[0].positions[0], 
+          jog_arm::new_traj.points[0].positions[1], 
+          jog_arm::new_traj.points[0].positions[2], 
+          jog_arm::new_traj.points[0].positions[3],
+          jog_arm::new_traj.points[0].positions[4],
+          jog_arm::new_traj.points[0].positions[5], 
+          1.2,  // max acceleration
+          0.25, // max velocity
+          0, //jog_arm::new_traj.points[0].time_from_start.toSec(), // overrules accel and vel
+          0); // blending radius
+
+        ur_string.data = ur_char;
+
+        joint_trajectory_pub.publish( ur_string );
       }
       else
       {
@@ -161,9 +179,6 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
     ros::spinOnce();
     ros::Duration(.01).sleep();
   }
-
-
-
 }
 
 JogCalcs::JogCalcs(std::string move_group_name) :
@@ -231,7 +246,6 @@ JogCalcs::JogCalcs(std::string move_group_name) :
 void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
   // Convert the cmd to the MoveGroup planning frame.
-
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
@@ -309,7 +323,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   point.positions = jt_state_.position;
   point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
+  new_traj.points.push_back(point);
 
+/*
   // Spam several redundant points into the trajectory. The first few may be skipped if the
   // time stamp is in the past when it reaches the client.
   for (int i=1; i<20; i++)
@@ -317,7 +333,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     point.time_from_start = ros::Duration(i*jog_arm::pub_period);
     new_traj.points.push_back(point);
   }
+*/
 
+/*
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
   bool collision = jog_arm::imminent_collision;
@@ -347,6 +365,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
         new_jt_traj.points[0].velocities[i] = 0.;
       }
     }
+
     // Only somewhat close to singularity. Just slow down.
     else
     {
@@ -357,11 +376,13 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
       }
     }
   }
-
+*/
   // Share with main to be published
+  ROS_ERROR_STREAM(jog_arm::new_traj);
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
   jog_arm::new_traj = new_jt_traj;
   pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+
 }
 
 bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
