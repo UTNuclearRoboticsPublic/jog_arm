@@ -66,12 +66,13 @@ int main(int argc, char **argv)
 
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
 
+  std_msgs::String ur_string;
+  char ur_char [400];
+
   while( ros::ok() )
   {
     ros::spinOnce();
     ros::Duration(jog_arm::pub_period).sleep();
-    std_msgs::String ur_string;
-    char ur_char [400];
 
     // Send the newest target joints
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
@@ -83,22 +84,22 @@ int main(int argc, char **argv)
         ROS_INFO_STREAM( jog_arm::new_traj );
         if ( jog_arm::new_traj.points.size() > 0 )
         {
-          ROS_ERROR_STREAM( jog_arm::new_traj.points.at(0) );
-
           // Convert to a string msg type for UR robots
-          //ROS_WARN_STREAM( jog_arm::new_traj.points.at(0).positions.at(0) );
           sprintf(ur_char, "speedj([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], %f, %f)\n", 
-            jog_arm::new_traj.points.at(0).velocities[0], 
-            jog_arm::new_traj.points.at(0).velocities[1],
-            jog_arm::new_traj.points.at(0).velocities[2],
-            jog_arm::new_traj.points.at(0).velocities[3],
-            jog_arm::new_traj.points.at(0).velocities[4],
-            jog_arm::new_traj.points.at(0).velocities[5],
-            0.1, // max accel (rad/s^2)
+            jog_arm::new_traj.points.at(0).velocities.at(0), 
+            jog_arm::new_traj.points.at(0).velocities.at(1),
+            jog_arm::new_traj.points.at(0).velocities.at(2),
+            jog_arm::new_traj.points.at(0).velocities.at(3),
+            jog_arm::new_traj.points.at(0).velocities.at(4),
+            jog_arm::new_traj.points.at(0).velocities.at(5),
+            1.2, // max accel (rad/s^2)
             0.01); // min. time before function returns
 
           ur_string.data = ur_char;
-
+          joint_trajectory_pub.publish( ur_string );
+        }
+        else  // Invalid inputs, no change to previous cmd
+        {
           joint_trajectory_pub.publish( ur_string );
         }
       }
@@ -205,9 +206,9 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   for (int i=0; i<joint_names.size(); i++ )
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
-  // Wait for initial messages
   ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ROS_WARN_STREAM("[jog_arm_server JogCalcs] Received an initial joint msg.");
   
   jt_state_.name = arm_.getJointNames();
   jt_state_.position.resize(jt_state_.name.size());
@@ -405,8 +406,6 @@ bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::Vec
 // Parse the incoming joint msg for the joints of our MoveGroup
 void JogCalcs::updateJoints()
 {
-  ROS_WARN_STREAM( jt_state_ );
-  ROS_ERROR_STREAM( incoming_jts_ );
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size()) {
     ROS_WARN("[JogCalcs::jointStateCB] The joint msg does not contain enough joints.");
