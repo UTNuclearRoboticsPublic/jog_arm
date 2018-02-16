@@ -80,23 +80,27 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        // Convert to a string msg type for UR robots
-        //ROS_WARN_STREAM( jog_arm::new_traj.points.at(0).positions.at(0) );
-        sprintf(ur_char, "movej([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], %f, %f, %f, %f)\n", 
-          jog_arm::new_traj.points[0].positions[0], 
-          jog_arm::new_traj.points[0].positions[1], 
-          jog_arm::new_traj.points[0].positions[2], 
-          jog_arm::new_traj.points[0].positions[3],
-          jog_arm::new_traj.points[0].positions[4],
-          jog_arm::new_traj.points[0].positions[5], 
-          1.2,  // max acceleration
-          0.25, // max velocity
-          0, //jog_arm::new_traj.points[0].time_from_start.toSec(), // overrules accel and vel
-          0); // blending radius
+        ROS_INFO_STREAM( jog_arm::new_traj );
+        if ( jog_arm::new_traj.points.size() > 0 )
+        {
+          ROS_ERROR_STREAM( jog_arm::new_traj.points.at(0) );
 
-        ur_string.data = ur_char;
+          // Convert to a string msg type for UR robots
+          //ROS_WARN_STREAM( jog_arm::new_traj.points.at(0).positions.at(0) );
+          sprintf(ur_char, "speedj([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], %f, %f)\n", 
+            jog_arm::new_traj.points.at(0).velocities[0], 
+            jog_arm::new_traj.points.at(0).velocities[1],
+            jog_arm::new_traj.points.at(0).velocities[2],
+            jog_arm::new_traj.points.at(0).velocities[3],
+            jog_arm::new_traj.points.at(0).velocities[4],
+            jog_arm::new_traj.points.at(0).velocities[5],
+            0.1, // max accel (rad/s^2)
+            0.01); // min. time before function returns
 
-        joint_trajectory_pub.publish( ur_string );
+          ur_string.data = ur_char;
+
+          joint_trajectory_pub.publish( ur_string );
+        }
       }
       else
       {
@@ -249,7 +253,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
-    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 238: " << ex.what());
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
@@ -260,7 +264,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
   } catch (tf::TransformException ex) {
-    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 249: " << ex.what());
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
     return;    
   }
   
@@ -270,7 +274,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
   } catch (tf::TransformException ex) {
-    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 259: " << ex.what());
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
     return;    
   }
   
@@ -378,7 +382,6 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   }
 */
   // Share with main to be published
-  ROS_ERROR_STREAM(jog_arm::new_traj);
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
   jog_arm::new_traj = new_jt_traj;
   pthread_mutex_unlock(&jog_arm::new_traj_mutex);
@@ -402,6 +405,8 @@ bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::Vec
 // Parse the incoming joint msg for the joints of our MoveGroup
 void JogCalcs::updateJoints()
 {
+  ROS_WARN_STREAM( jt_state_ );
+  ROS_ERROR_STREAM( incoming_jts_ );
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size()) {
     ROS_WARN("[JogCalcs::jointStateCB] The joint msg does not contain enough joints.");
