@@ -328,19 +328,16 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   point.positions = jt_state_.position;
   point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
-  new_traj.points.push_back(point);
 
-/*
   // Spam several redundant points into the trajectory. The first few may be skipped if the
   // time stamp is in the past when it reaches the client.
+  // Not necessary on UR hardware, but yes necessary for Gazebo simulation.
   for (int i=1; i<20; i++)
   {
     point.time_from_start = ros::Duration(i*jog_arm::pub_period);
-    new_traj.points.push_back(point);
+    new_jt_traj.points.push_back(point);
   }
-*/
 
-/*
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
   bool collision = jog_arm::imminent_collision;
@@ -359,29 +356,30 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Slow down if very close to a singularity.
   // Stop if extremely close.
   double currentCN = checkConditionNumber(jacobian);
-  if ( currentCN > jog_arm::singularity_threshold )
+  if ( currentCN > jog_arm::singularity_threshold && new_jt_traj.points.size() > 0 )
   {
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
       ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity. Halting.");
-      for (int i=0; i<jt_state_.velocity.size(); i++)
+      for (int i=0; i<new_jt_traj.points.at(0).positions.size(); i++)
       {
-        new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
-        new_jt_traj.points[0].velocities[i] = 0.;
+        new_jt_traj.points.at(0).positions.at(i) = orig_jts_.position.at(i);
+        new_jt_traj.points.at(0).velocities.at(i) = 0.;
       }
     }
 
     // Only somewhat close to singularity. Just slow down.
     else
     {
-      for (int i=0; i<jt_state_.velocity.size(); i++)
+      ROS_ERROR_STREAM("[jog_arm_server jogCalcs] Close to a singularity. Slowing.");
+      for (int i=0; i<new_jt_traj.points.at(0).positions.size(); i++)
       {
-        new_jt_traj.points[0].positions[i] = new_jt_traj.points[0].positions[i] - 0.7*delta_theta[i];
-        new_jt_traj.points[0].velocities[i] *= 0.3;
+        new_jt_traj.points.at(0).positions.at(i) = new_jt_traj.points.at(0).positions.at(i) - 0.5*delta_theta[i];
+        new_jt_traj.points.at(0).velocities.at(i) *= 0.5;
       }
     }
   }
-*/
+
   // Share with main to be published
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
   jog_arm::new_traj = new_jt_traj;
