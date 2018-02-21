@@ -81,7 +81,6 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        ROS_INFO_STREAM( jog_arm::new_traj );
         if ( jog_arm::new_traj.points.size() > 0 )
         {
           // Convert to a string msg type for UR robots
