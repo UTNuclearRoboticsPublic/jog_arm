@@ -174,7 +174,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
 
-  kinematic_state_ = boost::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
+  kinematic_state_ = std::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();
 
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
@@ -316,7 +316,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   for (int i=1; i<20; i++)
   {
     point.time_from_start = ros::Duration(i*jog_arm::pub_period);
-    new_traj.points.push_back(point);
+    new_jt_traj.points.push_back(point);
   }
 
   // Stop if imminent collision
