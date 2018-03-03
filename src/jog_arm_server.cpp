@@ -174,7 +174,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
 
-  kinematic_state_ = std::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
+  kinematic_state_ = boost::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();
 
   joint_model_group_ = kinematic_model->getJointModelGroup(move_group_name);
@@ -236,7 +236,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
-    ROS_ERROR("[jog_arm_server jogCalcs] - Failed to transform command to planning frame.");
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 238: " << ex.what());
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org Q#199376 (Annoying! Maybe do a PR.)
@@ -244,12 +244,22 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = cmd.twist.linear;
   lin_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
+  try {
+    listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
+  } catch (tf::TransformException ex) {
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 249: " << ex.what());
+    return;
+  }
   
   geometry_msgs::Vector3Stamped rot_vector;
   rot_vector.vector = cmd.twist.angular;
   rot_vector.header.frame_id = cmd.header.frame_id;
-  listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
+  try {
+    listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
+  } catch (tf::TransformException ex) {
+    ROS_ERROR_STREAM("[jog_arm_server jogCalcs 259: " << ex.what());
+    return;
+  }
   
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
@@ -268,9 +278,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
 
-  if (!addJointIncrements(jt_state_, delta_theta)) {
+  if (!addJointIncrements(jt_state_, delta_theta))
     return;
-  }
 
   // Check the Jacobian with these new joints. Halt before approaching a singularity.
   kinematic_state_->setVariableValues(jt_state_);
@@ -280,9 +289,16 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
   Eigen::VectorXd joint_vel(delta_theta/delta_t_);
+
   // Low-pass filter
   for (int i=0; i<jt_state_.name.size(); i++)
+  {
     joint_vel[i] = filters_[i].filter(joint_vel[i]);
+
+    // Check for nan's
+    if ( std::isnan(joint_vel[i]) )
+      joint_vel[i] = 0.;
+  }
   updateJointVels(jt_state_, joint_vel);
 
   // Compose the outgoing msg
@@ -292,8 +308,16 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
+  point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
-  new_jt_traj.points.push_back(point);
+
+  // Spam several redundant points into the trajectory. The first few may be skipped if the
+  // time stamp is in the past when it reaches the client.
+  for (int i=1; i<20; i++)
+  {
+    point.time_from_start = ros::Duration(i*jog_arm::pub_period);
+    new_traj.points.push_back(point);
+  }
 
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
@@ -435,6 +459,7 @@ void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&cmd_deltas_mutex);
   jog_arm::cmd_deltas = *msg;
+  jog_arm::cmd_deltas.header.frame_id = jog_arm::input_frame;
   pthread_mutex_unlock(&cmd_deltas_mutex);
 }
 
@@ -465,6 +490,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("joint_topic: " << jog_arm::joint_topic);
   jog_arm::cmd_in_topic = jog_arm::getStringParam("jog_arm_server/cmd_in_topic", n);
   ROS_INFO_STREAM("cmd_in_topic: " << jog_arm::cmd_in_topic);
+  jog_arm::input_frame = jog_arm::getStringParam("jog_arm_server/input_frame", n);
+  ROS_INFO_STREAM("input frame: " << jog_arm::input_frame);
   jog_arm::incoming_cmd_timeout = jog_arm::getDoubleParam("jog_arm_server/incoming_cmd_timeout", n);
   ROS_INFO_STREAM("incoming_cmd_timeout: " << jog_arm::incoming_cmd_timeout);
   jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);
