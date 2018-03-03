@@ -315,7 +315,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   for (int i=1; i<20; i++)
   {
     point.time_from_start = ros::Duration(i*jog_arm::pub_period);
-    new_traj.points.push_back(point);
+    new_jt_traj.points.push_back(point);
   }
 
   // Stop if imminent collision
