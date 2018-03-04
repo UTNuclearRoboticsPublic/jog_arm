@@ -81,10 +81,11 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 int readParams(ros::NodeHandle& n);
 std::string move_group_name, joint_topic, cmd_in_topic, input_frame, cmd_out_topic, planning_frame;
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
+bool simu;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
-
+bool getBoolParam(std::string name, ros::NodeHandle& n);
 /**
  * Class lpf - Filter the joint velocities to avoid jerky motion.
  */
