@@ -65,6 +65,10 @@ int main(int argc, char **argv)
   ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
 
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
+
+  //Wait for jog filter to stablize
+  ros::Duration(1).sleep();
 
   while( ros::ok() )
   {
@@ -121,6 +125,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
   // Wait for initial joint message
   ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
 
   pthread_mutex_lock(&joints_mutex);
   sensor_msgs::JointState jts = jog_arm::joints;
@@ -190,7 +195,8 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   // Wait for initial messages
   ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
-  
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
+
   jt_state_.name = arm_.getJointNames();
   jt_state_.position.resize(jt_state_.name.size());
   jt_state_.velocity.resize(jt_state_.name.size());
