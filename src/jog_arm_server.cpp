@@ -312,9 +312,15 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 
   // Spam several redundant points into the trajectory. The first few may be skipped if the
   // time stamp is in the past when it reaches the client.
-  for (int i=1; i<20; i++)
-  {
-    point.time_from_start = ros::Duration(i*jog_arm::pub_period);
+  if (jog_arm::simu) {
+    // Spam several redundant points into the trajectory. The first few may be skipped if the
+    // time stamp is in the past when it reaches the client. Needed for gazebo simulation.
+    for (int i=1; i<30; i++)
+    {
+      point.time_from_start = ros::Duration(i*jog_arm::pub_period);
+      new_jt_traj.points.push_back(point);
+    }
+  } else {
     new_jt_traj.points.push_back(point);
   }
 
@@ -504,6 +510,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("planning_frame: " << jog_arm::planning_frame);
   jog_arm::pub_period = jog_arm::getDoubleParam("jog_arm_server/pub_period", n);
   ROS_INFO_STREAM("pub_period: " << jog_arm::pub_period);
+  jog_arm::simu = jog_arm::getBoolParam("jog_arm_server/simu", n);
+  ROS_INFO_STREAM("simu: " << jog_arm::simu);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
 
@@ -534,6 +542,14 @@ double getDoubleParam(std::string name, ros::NodeHandle& n)
   double value;
   if( !n.getParam(name, value) )
     ROS_ERROR_STREAM("[JogCalcs::getDoubleParam] YAML config file does not contain parameter " << name);
+  return value;
+}
+
+bool getBoolParam(std::string name, ros::NodeHandle& n)
+{
+  bool value;
+  if( !n.getParam(name, value) )
+    ROS_ERROR_STREAM("[JogCalcs::getBoolParam] YAML config file does not contain parameter " << name);
   return value;
 }
 
