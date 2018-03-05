@@ -444,6 +444,8 @@ void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&cmd_deltas_mutex);
   jog_arm::cmd_deltas = *msg;
+  // Input frame determined by YAML file:
+  jog_arm::cmd_deltas.header.frame_id = jog_arm::cmd_frame;
   pthread_mutex_unlock(&cmd_deltas_mutex);
 }
 
@@ -474,6 +476,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("joint_topic: " << jog_arm::joint_topic);
   jog_arm::cmd_in_topic = jog_arm::getStringParam("jog_arm_server/cmd_in_topic", n);
   ROS_INFO_STREAM("cmd_in_topic: " << jog_arm::cmd_in_topic);
+  jog_arm::cmd_frame = jog_arm::getStringParam("jog_arm_server/cmd_frame", n);
+  ROS_INFO_STREAM("cmd_frame: " << jog_arm::cmd_frame);
   jog_arm::incoming_cmd_timeout = jog_arm::getDoubleParam("jog_arm_server/incoming_cmd_timeout", n);
   ROS_INFO_STREAM("incoming_cmd_timeout: " << jog_arm::incoming_cmd_timeout);
   jog_arm::cmd_out_topic = jog_arm::getStringParam("jog_arm_server/cmd_out_topic", n);

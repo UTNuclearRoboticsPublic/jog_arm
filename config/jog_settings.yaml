@@ -1,5 +1,6 @@
 jog_arm_server:
   cmd_in_topic:  jog_arm_server/delta_jog_cmds
+  cmd_frame:  base_link  # TF frame that incoming cmds are given in
   incoming_cmd_timeout:  5  # Stop jogging if X seconds elapse without a new cmd
   joint_topic:  joint_states
   move_group_name:  right_ur5
@@ -13,6 +14,3 @@ jog_arm_server:
     linear:  0.0004
     rotational:  0.0008
 
-# This node republishes joystick messages for the arm jogger.
-joy_to_twist:
-  cmd_frame:  right_ur5_temoto_ee
