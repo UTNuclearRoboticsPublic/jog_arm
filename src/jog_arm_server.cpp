@@ -316,8 +316,6 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
 
-  // Spam several redundant points into the trajectory. The first few may be skipped if the
-  // time stamp is in the past when it reaches the client.
   if (jog_arm::simu) {
     // Spam several redundant points into the trajectory. The first few may be skipped if the
     // time stamp is in the past when it reaches the client. Needed for gazebo simulation.
