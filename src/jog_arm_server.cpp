@@ -353,7 +353,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   {
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
-      ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity. Halting.");
+      ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
       for (int i=0; i<jt_state_.velocity.size(); i++)
       {
         new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
