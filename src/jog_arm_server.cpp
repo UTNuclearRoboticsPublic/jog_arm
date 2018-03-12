@@ -68,7 +68,7 @@ int main(int argc, char **argv)
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
 
   //Wait for jog filter to stablize
-  ros::Duration(1).sleep();
+  ros::Duration(20*jog_arm::pub_period).sleep();
 
   while( ros::ok() )
   {
