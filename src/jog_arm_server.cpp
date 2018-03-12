@@ -65,6 +65,10 @@ int main(int argc, char **argv)
   ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
 
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
+
+  //Wait for jog filter to stablize
+  ros::Duration(1).sleep();
 
   while( ros::ok() )
   {
@@ -120,6 +124,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
   // Wait for initial joint message
   ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
 
   pthread_mutex_lock(&joints_mutex);
   sensor_msgs::JointState jts = jog_arm::joints;
@@ -189,7 +194,8 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   // Wait for initial messages
   ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
-  
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
+
   jt_state_.name = arm_.getJointNames();
   jt_state_.position.resize(jt_state_.name.size());
   jt_state_.velocity.resize(jt_state_.name.size());
@@ -277,9 +283,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
 
-  if (!addJointIncrements(jt_state_, delta_theta)) {
+  if (!addJointIncrements(jt_state_, delta_theta))
     return;
-  }
 
   // Check the Jacobian with these new joints. Halt before approaching a singularity.
   kinematic_state_->setVariableValues(jt_state_);
@@ -289,9 +294,16 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
   Eigen::VectorXd joint_vel(delta_theta/delta_t_);
+
   // Low-pass filter
   for (int i=0; i<jt_state_.name.size(); i++)
+  {
     joint_vel[i] = filters_[i].filter(joint_vel[i]);
+
+    // Check for nan's
+    if ( std::isnan(joint_vel[i]) )
+      joint_vel[i] = 0.;
+  }
   updateJointVels(jt_state_, joint_vel);
 
   // Compose the outgoing msg
@@ -301,8 +313,20 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
+  point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
-  new_jt_traj.points.push_back(point);
+
+  if (jog_arm::simu) {
+    // Spam several redundant points into the trajectory. The first few may be skipped if the
+    // time stamp is in the past when it reaches the client. Needed for gazebo simulation.
+    for (int i=1; i<30; i++)
+    {
+      point.time_from_start = ros::Duration(i*jog_arm::pub_period);
+      new_jt_traj.points.push_back(point);
+    }
+  } else {
+    new_jt_traj.points.push_back(point);
+  }
 
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
@@ -326,7 +350,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   {
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
-      ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity. Halting.");
+      ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
       for (int i=0; i<jt_state_.velocity.size(); i++)
       {
         new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
@@ -490,6 +514,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("planning_frame: " << jog_arm::planning_frame);
   jog_arm::pub_period = jog_arm::getDoubleParam("jog_arm_server/pub_period", n);
   ROS_INFO_STREAM("pub_period: " << jog_arm::pub_period);
+  jog_arm::simu = jog_arm::getBoolParam("jog_arm_server/simu", n);
+  ROS_INFO_STREAM("simu: " << jog_arm::simu);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
 
@@ -520,6 +546,14 @@ double getDoubleParam(std::string name, ros::NodeHandle& n)
   double value;
   if( !n.getParam(name, value) )
     ROS_ERROR_STREAM("[JogCalcs::getDoubleParam] YAML config file does not contain parameter " << name);
+  return value;
+}
+
+bool getBoolParam(std::string name, ros::NodeHandle& n)
+{
+  bool value;
+  if( !n.getParam(name, value) )
+    ROS_ERROR_STREAM("[JogCalcs::getBoolParam] YAML config file does not contain parameter " << name);
   return value;
 }
 
