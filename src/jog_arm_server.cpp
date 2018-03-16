@@ -30,10 +30,11 @@
 
 #include <jog_arm_server.h>
 
-/////////////////////////////////////////
+/////////////////////////////////////////////////
 // MAIN handles ROS subscriptions.
 // A worker thread does the calculations.
-/////////////////////////////////////////
+// Another worker thread does collision checking.
+/////////////////////////////////////////////////
 
 // MAIN: create the worker thread and subscribe to jogging cmds and joint angles
 int main(int argc, char **argv)
@@ -70,10 +71,11 @@ int main(int argc, char **argv)
   //Wait for jog filter to stablize
   ros::Duration(20*jog_arm::pub_period).sleep();
 
+  ros::Rate main_rate(1./jog_arm::pub_period);
+
   while( ros::ok() )
   {
     ros::spinOnce();
-    ros::Duration(jog_arm::pub_period).sleep();
 
     // Send the newest target joints
     pthread_mutex_lock(&jog_arm::new_traj_mutex);
@@ -91,6 +93,8 @@ int main(int argc, char **argv)
       }
     }
     pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+
+    main_rate.sleep();
   }
   
   return 0;
@@ -130,6 +134,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
   sensor_msgs::JointState jts = jog_arm::joints;
   pthread_mutex_unlock(&joints_mutex);
 
+  ros::Rate collision_rate(100);
 
   /////////////////////////////////////////////////
   // Spin while checking collisions
@@ -164,7 +169,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
     }
 
     ros::spinOnce();
-    ros::Duration(.01).sleep();
+    collision_rate.sleep();
   }
 
 
@@ -230,6 +235,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
     updateJoints();
     jogCalcs(cmd_deltas_);
 
+    // Generally want to do these calcs very quickly. Add a small sleep to avoid 100% CPU usage, if unneeded.
     ros::Duration(0.001).sleep();
   }
 }
