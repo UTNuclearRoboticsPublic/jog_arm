@@ -63,7 +63,7 @@ int main(int argc, char **argv)
   ros::Subscriber joints_sub = n.subscribe( jog_arm::joint_topic, 1, jog_arm::joints_cb);
 
   // Publish freshly-calculated joints to the robot
-  ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
+  ros::Publisher joint_trajectory_pub = n.advertise<std_msgs::String>(jog_arm::cmd_out_topic, 1);
 
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
@@ -72,6 +72,9 @@ int main(int argc, char **argv)
   ros::Duration(20*jog_arm::pub_period).sleep();
 
   ros::Rate main_rate(1./jog_arm::pub_period);
+
+  std_msgs::String ur_string;
+  char ur_char [400];
 
   while( ros::ok() )
   {
@@ -84,7 +87,26 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        joint_trajectory_pub.publish( jog_arm::new_traj );
+        if ( jog_arm::new_traj.points.size() > 0 )
+        {
+          // Convert to a string msg type for UR robots
+          sprintf(ur_char, "speedj([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], %f, %f)\n", 
+            jog_arm::new_traj.points.at(0).velocities.at(0), 
+            jog_arm::new_traj.points.at(0).velocities.at(1),
+            jog_arm::new_traj.points.at(0).velocities.at(2),
+            jog_arm::new_traj.points.at(0).velocities.at(3),
+            jog_arm::new_traj.points.at(0).velocities.at(4),
+            jog_arm::new_traj.points.at(0).velocities.at(5),
+            1.2, // max accel (rad/s^2)
+            0.01); // min. time before function returns
+
+          ur_string.data = ur_char;
+          joint_trajectory_pub.publish( ur_string );
+        }
+        else  // Invalid inputs, no change to previous cmd
+        {
+          joint_trajectory_pub.publish( ur_string );
+        }
       }
       else
       {
@@ -171,9 +193,6 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
     ros::spinOnce();
     collision_rate.sleep();
   }
-
-
-
 }
 
 JogCalcs::JogCalcs(std::string move_group_name) :
@@ -196,7 +215,6 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   for (int i=0; i<joint_names.size(); i++ )
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
-  // Wait for initial messages
   ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
@@ -243,7 +261,6 @@ JogCalcs::JogCalcs(std::string move_group_name) :
 void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
   // Convert the cmd to the MoveGroup planning frame.
-
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
@@ -352,24 +369,26 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Slow down if very close to a singularity.
   // Stop if extremely close.
   double currentCN = checkConditionNumber(jacobian);
-  if ( currentCN > jog_arm::singularity_threshold )
+  if ( currentCN > jog_arm::singularity_threshold && new_jt_traj.points.size() > 0 )
   {
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
       ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
       for (int i=0; i<jt_state_.velocity.size(); i++)
       {
-        new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
-        new_jt_traj.points[0].velocities[i] = 0.;
+        new_jt_traj.points.at(0).positions.at(i) = orig_jts_.position.at(i);
+        new_jt_traj.points.at(0).velocities.at(i) = 0.;
       }
     }
+
     // Only somewhat close to singularity. Just slow down.
     else
     {
-      for (int i=0; i<jt_state_.velocity.size(); i++)
+      ROS_ERROR_STREAM("[jog_arm_server jogCalcs] Close to a singularity. Slowing.");
+      for (int i=0; i<new_jt_traj.points.at(0).positions.size(); i++)
       {
-        new_jt_traj.points[0].positions[i] = new_jt_traj.points[0].positions[i] - 0.7*delta_theta[i];
-        new_jt_traj.points[0].velocities[i] *= 0.3;
+        new_jt_traj.points.at(0).positions.at(i) = new_jt_traj.points.at(0).positions.at(i) - 0.5*delta_theta[i];
+        new_jt_traj.points.at(0).velocities.at(i) *= 0.5;
       }
     }
   }
@@ -378,6 +397,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
   jog_arm::new_traj = new_jt_traj;
   pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+
 }
 
 bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
