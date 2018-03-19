@@ -38,7 +38,7 @@ Server node for the arm jogging with MoveIt.
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
 #include <math.h>
-#include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/move_group_interface/move_group.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
@@ -133,7 +133,7 @@ public:
   JogCalcs(std::string move_group_name);
   
 protected:
-  moveit::planning_interface::MoveGroupInterface arm_;
+  moveit::planning_interface::MoveGroup arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
 
