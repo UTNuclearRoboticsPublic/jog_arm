@@ -38,7 +38,7 @@ Server node for the arm jogging with MoveIt.
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
 #include <math.h>
-#include <moveit/move_group_interface/move_group.h>
+#include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
@@ -80,12 +80,13 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 
 // ROS params to be read
 int readParams(ros::NodeHandle& n);
-std::string move_group_name, joint_topic, cmd_in_topic, input_frame, cmd_out_topic, planning_frame;
+std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame;
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
+bool simu;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
-
+bool getBoolParam(std::string name, ros::NodeHandle& n);
 /**
  * Class lpf - Filter the joint velocities to avoid jerky motion.
  */
@@ -132,7 +133,7 @@ public:
   JogCalcs(std::string move_group_name);
   
 protected:
-  moveit::planning_interface::MoveGroup arm_;
+  moveit::planning_interface::MoveGroupInterface arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
 

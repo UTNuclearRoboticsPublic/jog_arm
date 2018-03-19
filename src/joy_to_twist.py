@@ -29,8 +29,6 @@ class joy_to_twist:
 
         ts.header.stamp = rospy.Time.now()
 
-        ts.header.frame_id = rospy.get_param("joy_to_twist/cmd_frame")
-
         # These buttons are binary
         ts.twist.linear.x = -joy.buttons[4] + joy.buttons[5]
         # Double buttons
