@@ -103,15 +103,17 @@ int main(int argc, char **argv)
 namespace jog_arm {
 
 // A separate thread for the heavy jogging calculations.
-void *joggingPipeline(void *threadid)
+void *joggingPipeline(void *)
 {
   jog_arm::JogCalcs ja(jog_arm::move_group_name);
+  return nullptr;
 }
 
 // A separate thread for collision checking.
-void *collisionCheck(void *threadid)
+void *collisionCheck(void *)
 {
   jog_arm::CollisionCheck cc(jog_arm::move_group_name);
+  return nullptr;
 }
 
 CollisionCheck::CollisionCheck(std::string move_group_name)
@@ -142,7 +144,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
   while ( ros::ok() )
   {
 
-    for (int i=0; i<jts.position.size(); i++)
+    for (std::size_t i=0; i<jts.position.size(); i++)
       current_state.setJointPositions( jts.name[i], &jts.position[i] );
 
     //process collision objects in scene
@@ -193,7 +195,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
   // Low-pass filters for the joints
-  for (int i=0; i<joint_names.size(); i++ )
+  for (std::size_t i=0; i<joint_names.size(); i++ )
     filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
 
   // Wait for initial messages
@@ -302,13 +304,13 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   Eigen::VectorXd joint_vel(delta_theta/delta_t_);
 
   // Low-pass filter
-  for (int i=0; i<jt_state_.name.size(); i++)
+  for (std::size_t i=0; i < jt_state_.name.size(); i++)
   {
-    joint_vel[i] = filters_[i].filter(joint_vel[i]);
+    joint_vel[static_cast<long>(i)] = filters_[i].filter(joint_vel[static_cast<long>(i)]);
 
     // Check for nan's
-    if ( std::isnan(joint_vel[i]) )
-      joint_vel[i] = 0.;
+    if ( std::isnan(joint_vel[static_cast<long>(i)]) )
+      joint_vel[static_cast<long>(i)] = 0.;
   }
   updateJointVels(jt_state_, joint_vel);
 
@@ -341,7 +343,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   if (collision)
   {
     ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a collision. Halting.");
-    for (int i=0; i<jt_state_.velocity.size(); i++)
+    for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
     {
       new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
       new_jt_traj.points[0].velocities[i] = 0.;
@@ -357,7 +359,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
       ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
-      for (int i=0; i<jt_state_.velocity.size(); i++)
+      for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
       {
         new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
         new_jt_traj.points[0].velocities[i] = 0.;
@@ -366,9 +368,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     // Only somewhat close to singularity. Just slow down.
     else
     {
-      for (int i=0; i<jt_state_.velocity.size(); i++)
+      for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
       {
-        new_jt_traj.points[0].positions[i] = new_jt_traj.points[0].positions[i] - 0.7*delta_theta[i];
+        new_jt_traj.points[0].positions[i] = new_jt_traj.points[0].positions[i] - 0.7*delta_theta[static_cast<long>(i)];
         new_jt_traj.points[0].velocities[i] *= 0.3;
       }
     }
@@ -382,9 +384,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 
 bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
 {
-  for (std::size_t i = 0, size = joint_vels.size(); i < size; ++i) {
+  for (std::size_t i = 0, size = static_cast<std::size_t>(joint_vels.size()); i < size; ++i) {
     try {
-      output.velocity[i] = joint_vels(i);
+      output.velocity[i] = joint_vels(static_cast<long>(i));
     } catch (std::out_of_range e) {
       ROS_ERROR("[JogCalcs::updateJointVels] Vector lengths do not match.");
       return false;
@@ -404,9 +406,9 @@ void JogCalcs::updateJoints()
   }
 
   // Store joints in a member variable
-  for (int m=0; m<incoming_jts_.name.size(); m++)
+  for (std::size_t m=0; m<incoming_jts_.name.size(); m++)
   {
-    for (int c=0; c<jt_state_.name.size(); c++)
+    for (std::size_t c=0; c<jt_state_.name.size(); c++)
     {
       if ( incoming_jts_.name[m] == jt_state_.name[c])
       {
@@ -441,9 +443,9 @@ Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd &J) const
 
 bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const
 {
-  for (std::size_t i = 0, size = increments.size(); i < size; ++i) {
+  for (std::size_t i = 0, size = static_cast<std::size_t>(increments.size()); i < size; ++i) {
     try {
-      output.position[i] += increments(i);
+      output.position[i] += increments(static_cast<long>(i));
     } catch (std::out_of_range e) {
       ROS_ERROR("JogCalcs::addJointIncrements - Lengths of output and increments do not match.");
       return false;
