@@ -118,64 +118,64 @@ void *collisionCheck(void *)
 
 CollisionCheck::CollisionCheck(std::string move_group_name)
 {
-  robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
-  robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
-  planning_scene::PlanningScene planning_scene(kinematic_model);
-  collision_detection::CollisionRequest collision_request;
-  collision_request.group_name = move_group_name;
-  collision_detection::CollisionResult collision_result;
-  robot_state::RobotState& current_state = planning_scene.getCurrentStateNonConst();
-  moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-  
-  // Wait for initial joint message
-  ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
-  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
-  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
-
-  pthread_mutex_lock(&joints_mutex);
-  sensor_msgs::JointState jts = jog_arm::joints;
-  pthread_mutex_unlock(&joints_mutex);
-
-  ros::Rate collision_rate(100);
-
-  /////////////////////////////////////////////////
-  // Spin while checking collisions
-  /////////////////////////////////////////////////
-  while ( ros::ok() )
+  // If user specified true in yaml file
+  if (jog_arm::coll_check)
   {
+    robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
+    robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+    planning_scene::PlanningScene planning_scene(kinematic_model);
+    collision_detection::CollisionRequest collision_request;
+    collision_request.group_name = move_group_name;
+    collision_detection::CollisionResult collision_result;
+    robot_state::RobotState& current_state = planning_scene.getCurrentStateNonConst();
+    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+    
+    // Wait for initial joint message
+    ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
+    ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+    ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
 
-    for (std::size_t i=0; i<jts.position.size(); i++)
-      current_state.setJointPositions( jts.name[i], &jts.position[i] );
+    pthread_mutex_lock(&joints_mutex);
+    sensor_msgs::JointState jts = jog_arm::joints;
+    pthread_mutex_unlock(&joints_mutex);
 
-    //process collision objects in scene
-    std::map<std::string, moveit_msgs::CollisionObject> c_objects_map = planning_scene_interface.getObjects();
-    for(auto& kv : c_objects_map){
-      planning_scene.processCollisionObjectMsg(kv.second);
-    }
+    ros::Rate collision_rate(100);
 
-    collision_result.clear();
-    planning_scene.checkCollision(collision_request, collision_result);
-
-    // If collision, signal the jogging to stop
-    if ( collision_result.collision )
+    /////////////////////////////////////////////////
+    // Spin while checking collisions
+    /////////////////////////////////////////////////
+    while ( ros::ok() )
     {
-      pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-      jog_arm::imminent_collision = true;
-      pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
-    }
-    else
-    {
-      pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-      jog_arm::imminent_collision = false;
-      pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);     
-    }
+      for (std::size_t i=0; i<jts.position.size(); i++)
+        current_state.setJointPositions( jts.name[i], &jts.position[i] );
 
-    ros::spinOnce();
-    collision_rate.sleep();
+      //process collision objects in scene
+      std::map<std::string, moveit_msgs::CollisionObject> c_objects_map = planning_scene_interface.getObjects();
+      for(auto& kv : c_objects_map){
+        planning_scene.processCollisionObjectMsg(kv.second);
+      }
+
+      collision_result.clear();
+      planning_scene.checkCollision(collision_request, collision_result);
+
+      // If collision, signal the jogging to stop
+      if ( collision_result.collision )
+      {
+        pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
+        jog_arm::imminent_collision = true;
+        pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+      }
+      else
+      {
+        pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
+        jog_arm::imminent_collision = false;
+        pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);     
+      }
+
+      ros::spinOnce();
+      collision_rate.sleep();
+    }
   }
-
-
-
 }
 
 JogCalcs::JogCalcs(std::string move_group_name) :
@@ -524,6 +524,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("pub_period: " << jog_arm::pub_period);
   jog_arm::simu = jog_arm::getBoolParam("jog_arm_server/simu", n);
   ROS_INFO_STREAM("simu: " << jog_arm::simu);
+  jog_arm::coll_check = jog_arm::getBoolParam("jog_arm_server/coll_check", n);
+  ROS_INFO_STREAM("coll_check: " << jog_arm::coll_check);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
 

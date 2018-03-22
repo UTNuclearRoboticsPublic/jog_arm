@@ -81,7 +81,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 int readParams(ros::NodeHandle& n);
 std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame;
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
-bool simu;
+bool simu, coll_check;
 
 std::string getStringParam(std::string s, ros::NodeHandle& n);
 double getDoubleParam(std::string name, ros::NodeHandle& n);
