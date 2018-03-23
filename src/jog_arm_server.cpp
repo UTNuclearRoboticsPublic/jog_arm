@@ -323,7 +323,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   updateJointVels(jt_state_, joint_vel);
 
   // Low-pass filter the positions
-  for (std::size_t i=0; i < 1; i++)
+  for (std::size_t i=0; i < jt_state_.name.size(); i++)
   {
     double filtered_jt = position_filters_[i].filter(jt_state_.position[static_cast<long>(i)]);
 
