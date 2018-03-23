@@ -84,7 +84,11 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        joint_trajectory_pub.publish( jog_arm::new_traj );
+        // Skip the jogging publication if all inputs are 0.
+        pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
+        if ( !jog_arm::zero_trajectory_flag_ )
+          joint_trajectory_pub.publish( jog_arm::new_traj );
+        pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
       }
       else
       {
@@ -235,6 +239,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
     prev_time_ = ros::Time::now();
 
     updateJoints();
+
     jogCalcs(cmd_deltas_);
 
     // Generally want to do these calcs very quickly. Add a small sleep to avoid 100% CPU usage, if unneeded.
@@ -479,6 +484,19 @@ void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
   // Input frame determined by YAML file:
   jog_arm::cmd_deltas.header.frame_id = jog_arm::cmd_frame;
   pthread_mutex_unlock(&cmd_deltas_mutex);
+
+  // Check if input is all zeros. Flag it if so to skip calculations/publication
+  pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
+  if ( jog_arm::cmd_deltas.twist.linear.x == 0 && 
+    jog_arm::cmd_deltas.twist.linear.y == 0 && 
+    jog_arm::cmd_deltas.twist.linear.z == 0 &&
+    jog_arm::cmd_deltas.twist.angular.x == 0 &&
+    jog_arm::cmd_deltas.twist.linear.y == 0 &&
+    jog_arm::cmd_deltas.twist.linear.z == 0 )
+    jog_arm::zero_trajectory_flag_ = true;
+  else
+    jog_arm::zero_trajectory_flag_ = false;
+  pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
 }
 
 // Listen to joint angles.

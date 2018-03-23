@@ -73,6 +73,9 @@ pthread_mutex_t new_traj_mutex;
 bool imminent_collision;
 pthread_mutex_t imminent_collision_mutex;
 
+bool zero_trajectory_flag_(false);
+pthread_mutex_t zero_trajectory_flag_mutex;
+
 // ROS subscriber callbacks
 void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
 void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
