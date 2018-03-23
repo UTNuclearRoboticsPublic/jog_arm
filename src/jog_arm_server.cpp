@@ -198,9 +198,12 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   std::vector<double> dummy_joint_values;
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
-  // Low-pass filters for the joints
+  // Low-pass filters for the joint positions & velocities
   for (std::size_t i=0; i<joint_names.size(); i++ )
-    filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ));
+  {
+    velocity_filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ) );
+    position_filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ) );
+  }
 
   // Wait for initial messages
   ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
@@ -308,16 +311,26 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   prev_time_ = ros::Time::now();
   Eigen::VectorXd joint_vel(delta_theta/delta_t_);
 
-  // Low-pass filter
+  // Low-pass filter the velocities
   for (std::size_t i=0; i < jt_state_.name.size(); i++)
   {
-    joint_vel[static_cast<long>(i)] = filters_[i].filter(joint_vel[static_cast<long>(i)]);
+    joint_vel[static_cast<long>(i)] = velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
 
     // Check for nan's
     if ( std::isnan(joint_vel[static_cast<long>(i)]) )
       joint_vel[static_cast<long>(i)] = 0.;
   }
   updateJointVels(jt_state_, joint_vel);
+
+  // Low-pass filter the positions
+  for (std::size_t i=0; i < 1; i++)
+  {
+    double filtered_jt = position_filters_[i].filter(jt_state_.position[static_cast<long>(i)]);
+
+    // Check for nan's
+    if ( std::isnan(jt_state_.position[static_cast<long>(i)]) )
+      jt_state_.position[static_cast<long>(i)] = 0.;
+  }
 
   // Compose the outgoing msg
   trajectory_msgs::JointTrajectory new_jt_traj;
@@ -337,9 +350,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
       point.time_from_start = ros::Duration(i*jog_arm::pub_period);
       new_jt_traj.points.push_back(point);
     }
-  } else {
+  } else
     new_jt_traj.points.push_back(point);
-  }
 
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);

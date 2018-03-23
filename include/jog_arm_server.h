@@ -116,7 +116,7 @@ double lpf::filter(const double& new_msrmt)
   prev_msrmts_[1] = prev_msrmts_[0];
   prev_msrmts_[0] = new_msrmt;
 
-  double new_filtered_msrmt = (1/(1+c_*c_+1.414*c_))*(prev_msrmts_[2]+2*prev_msrmts_[1]+prev_msrmts_[0]-(c_*c_-1.414*c_)*prev_filtered_msrmts_[1]-(-2*c_*c_+2)*prev_filtered_msrmts_[0]);;
+  double new_filtered_msrmt = (1/(1+c_*c_+1.414*c_))*(prev_msrmts_[2]+2*prev_msrmts_[1]+prev_msrmts_[0]-(c_*c_-1.414*c_+1)*prev_filtered_msrmts_[1]-(-2*c_*c_+2)*prev_filtered_msrmts_[0]);
 
   // Store the new filtered measurement
   prev_filtered_msrmts_[1] = prev_filtered_msrmts_[0];
@@ -169,7 +169,8 @@ protected:
 
   double delta_t_;
 
-  std::vector<jog_arm::lpf> filters_;
+  std::vector<jog_arm::lpf> velocity_filters_;
+  std::vector<jog_arm::lpf> position_filters_;
 
   // Check whether incoming cmds are stale. Pause if so
   ros::Duration time_of_incoming_cmd_;
