@@ -5,7 +5,7 @@
 //      Author    : Brian O'Neil, Andy Zelenak, Blake Anderson
 //      Platforms : Ubuntu 64-bit
 //      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
-//                 
+//
 //          All files within this directory are subject to the following, unless an alternative
 //          license is explicitly included within the text of each file.
 //
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 
     main_rate.sleep();
   }
-  
+
   return 0;
 }
 
@@ -133,7 +133,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
     collision_detection::CollisionResult collision_result;
     robot_state::RobotState& current_state = planning_scene.getCurrentStateNonConst();
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-    
+
     // Wait for initial joint message
     ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
     ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
@@ -173,7 +173,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
       {
         pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
         jog_arm::imminent_collision = false;
-        pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);     
+        pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
       }
 
       ros::spinOnce();
@@ -214,7 +214,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   jt_state_.position.resize(jt_state_.name.size());
   jt_state_.velocity.resize(jt_state_.name.size());
   jt_state_.effort.resize(jt_state_.name.size());
-  
+
   // Wait for the first jogging cmd.
   // Store it in a class member for further calcs.
   // Then free up the shared variable again.
@@ -268,7 +268,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
     return;
   }
-  
+
   geometry_msgs::Vector3Stamped rot_vector;
   rot_vector.vector = cmd.twist.angular;
   rot_vector.header.frame_id = cmd.header.frame_id;
@@ -278,20 +278,20 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     ROS_ERROR_STREAM("[jog_arm_server jogCalcs: " << ex.what());
     return;
   }
-  
+
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
   twist_cmd.header.stamp = cmd.header.stamp;
   twist_cmd.header.frame_id = jog_arm::planning_frame;
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
-  
+
   // Apply scaling
   const Vector6d delta_x = scaleCommand(twist_cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
   orig_jts_ = jt_state_;
-  
+
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   const Eigen::VectorXd delta_theta = pseudoInverse(jacobian)*delta_x;
@@ -323,11 +323,11 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Low-pass filter the positions
   for (std::size_t i=0; i < jt_state_.name.size(); i++)
   {
-    jt_state_.position[static_cast<long>(i)] = position_filters_[i].filter(jt_state_.position[static_cast<long>(i)]);
+    jt_state_.position[i] = position_filters_[i].filter(jt_state_.position[i]);
 
     // Check for nan's
-    if ( std::isnan(jt_state_.position[static_cast<long>(i)]) )
-      jt_state_.position[static_cast<long>(i)] = 0.;
+    if ( std::isnan(jt_state_.position[i]) )
+      jt_state_.position[i] = 0.;
   }
 
   // Compose the outgoing msg
@@ -439,14 +439,14 @@ NEXT_JOINT:
 JogCalcs::Vector6d JogCalcs::scaleCommand(const geometry_msgs::TwistStamped &command) const
 {
   Vector6d result;
-  
+
   result(0) = jog_arm::linear_scale*command.twist.linear.x;
   result(1) = jog_arm::linear_scale*command.twist.linear.y;
   result(2) = jog_arm::linear_scale*command.twist.linear.z;
   result(3) = jog_arm::rot_scale*command.twist.angular.x;
   result(4) = jog_arm::rot_scale*command.twist.angular.y;
   result(5) = jog_arm::rot_scale*command.twist.angular.z;
-  
+
   return result;
 }
 
@@ -466,7 +466,7 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output, const Eigen::
       return false;
     }
   }
-  
+
   return true;
 }
 
@@ -475,13 +475,13 @@ double JogCalcs::checkConditionNumber(const Eigen::MatrixXd &matrix) const
   // Get Eigenvalues
   Eigen::MatrixXd::EigenvaluesReturnType eigs = matrix.eigenvalues();
   Eigen::VectorXd eig_vector = eigs.cwiseAbs();
-  
+
   // CN = max(eigs)/min(eigs)
   double min = eig_vector.minCoeff();
   double max = eig_vector.maxCoeff();
-  
+
   double condition_number = max/min;
-  
+
   return condition_number;
 }
 
@@ -497,8 +497,8 @@ void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg)
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
-  if ( jog_arm::cmd_deltas.twist.linear.x == 0 && 
-    jog_arm::cmd_deltas.twist.linear.y == 0 && 
+  if ( jog_arm::cmd_deltas.twist.linear.x == 0 &&
+    jog_arm::cmd_deltas.twist.linear.y == 0 &&
     jog_arm::cmd_deltas.twist.linear.z == 0 &&
     jog_arm::cmd_deltas.twist.angular.x == 0 &&
     jog_arm::cmd_deltas.twist.linear.y == 0 &&
@@ -571,5 +571,4 @@ int readParams(ros::NodeHandle& n)
 
   return 0;
 }
-
 } // namespace jog_arm
