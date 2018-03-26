@@ -37,7 +37,7 @@ Server node for the arm jogging with MoveIt.
 
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <get_ros_params.h>
+#include <jog_arm/get_ros_params.h>
 #include <math.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -87,9 +87,6 @@ std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 bool simu, coll_check;
 
-std::string getStringParam(std::string s, ros::NodeHandle& n);
-double getDoubleParam(std::string name, ros::NodeHandle& n);
-bool getBoolParam(std::string name, ros::NodeHandle& n);
 /**
  * Class lpf - Filter the joint velocities to avoid jerky motion.
  */
@@ -98,6 +95,7 @@ class lpf
   public:
     lpf(double low_pass_filter_coeff);
     double filter(const double& new_msrmt);
+    void reset();
     double c_ = 10.;
 
   private:
@@ -108,6 +106,16 @@ class lpf
 lpf::lpf(double low_pass_filter_coeff)
 {
   c_ = low_pass_filter_coeff;
+}
+
+void lpf::reset()
+{
+  prev_msrmts_[0] = 0.;
+  prev_msrmts_[1] = 0.;
+  prev_msrmts_[2] = 0.;
+
+  prev_filtered_msrmts_[0] = 0.;
+  prev_filtered_msrmts_[1] = 0.;
 }
 
 double lpf::filter(const double& new_msrmt)
@@ -126,9 +134,9 @@ double lpf::filter(const double& new_msrmt)
   return new_filtered_msrmt;
 }
 
- 
+
 /**
- * Class JogCalcs - Provides the jog_arm action.
+ * Class JogCalcs - Perform the Jacobian calculations.
  */
 class JogCalcs
 {
@@ -157,7 +165,10 @@ protected:
   bool updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const;
   
   double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
-  
+
+  // Reset the data stored in low-pass filters so the trajectory won't jump when jogging is resumed.
+  void reset_lpf_filters();
+
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;

@@ -1,5 +1,5 @@
 
-#include "get_ros_params.h"
+#include "jog_arm/get_ros_params.h"
 
 std::string get_ros_params::getStringParam(std::string s, ros::NodeHandle& n)
 {

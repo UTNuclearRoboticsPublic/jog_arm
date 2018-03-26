@@ -68,8 +68,8 @@ int main(int argc, char **argv)
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
 
-  //Wait for jog filter to stablize
-  ros::Duration(20*jog_arm::pub_period).sleep();
+  //Wait for jog filters to stablize
+  ros::Duration(10*jog_arm::pub_period).sleep();
 
   ros::Rate main_rate(1./jog_arm::pub_period);
 
@@ -84,10 +84,13 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        // Skip the jogging publication if all inputs are 0.
+        // Skip the jogging publication if all inputs are 0 and wait for the filters to stabilize again.
         pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
         if ( !jog_arm::zero_trajectory_flag_ )
+        {
           joint_trajectory_pub.publish( jog_arm::new_traj );
+          ros::Duration(10*jog_arm::pub_period).sleep();
+        }
         pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
       }
       else
@@ -229,6 +232,16 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   // Now do jogging calcs
   while ( ros::ok() )
   {
+    pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
+    if ( jog_arm::zero_trajectory_flag_ )
+    {
+      // Reset low-pass filters, skip calculations
+      reset_lpf_filters();
+
+      continue;
+    }
+    pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
+
     // Pull data from the shared variables.
     pthread_mutex_lock(&cmd_deltas_mutex);
     cmd_deltas_ = jog_arm::cmd_deltas;
@@ -303,7 +316,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   kinematic_state_->setVariableValues(jt_state_);
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
-  // Include a velocity estimate to avoid stuttery motion
+  // Include a velocity estimate for velocity-controller robots
   auto current_time = ros::Time::now();
   delta_t_ = (current_time - prev_time_).toSec();
   prev_time_ = current_time;
@@ -395,6 +408,19 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
   jog_arm::new_traj = new_jt_traj;
   pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+}
+
+// Reset the data stored in filters so the trajectory won't jump when jogging is resumed.
+void JogCalcs::reset_lpf_filters()
+{
+  // Low-pass filter the positions
+  for (std::size_t i=0; i < jt_state_.name.size(); i++)
+  {
+    position_filters_[i].reset();
+    velocity_filters_[i].reset();
+  } 
+
+  return;
 }
 
 bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
