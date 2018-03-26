@@ -132,7 +132,7 @@ include_directories(
 ## either from message generation or dynamic reconfigure
 # add_dependencies(jog_arm ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(jog_arm_server src/jog_arm_server.cpp)
+add_executable(jog_arm_server src/jog_arm_server.cpp src/get_ros_params.cpp)
 add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
