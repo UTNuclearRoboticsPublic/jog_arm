@@ -325,11 +325,11 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Low-pass filter the positions
   for (std::size_t i=0; i < jt_state_.name.size(); i++)
   {
-    jt_state_.position[static_cast<long>(i)] = position_filters_[i].filter(jt_state_.position[static_cast<long>(i)]);
+    jt_state_.position[i] = position_filters_[i].filter(jt_state_.position[i]);
 
     // Check for nan's
-    if ( std::isnan(jt_state_.position[static_cast<long>(i)]) )
-      jt_state_.position[static_cast<long>(i)] = 0.;
+    if ( std::isnan(jt_state_.position[i]) )
+      jt_state_.position[i] = 0.;
   }
 
   // Compose the outgoing msg
