@@ -5,7 +5,7 @@
 //      Author    : Brian O'Neil, Blake Anderson, Andy Zelenak
 //      Platforms : Ubuntu 64-bit
 //      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
-//                 
+//
 //          All files within this directory are subject to the following, unless an alternative
 //          license is explicitly included within the text of each file.
 //
@@ -121,11 +121,11 @@ double lpf::filter(const double& new_msrmt)
   // Store the new filtered measurement
   prev_filtered_msrmts_[1] = prev_filtered_msrmts_[0];
   prev_filtered_msrmts_[0] = new_filtered_msrmt;
- 
+
   return new_filtered_msrmt;
 }
 
- 
+
 /**
  * Class JogCalcs - Provides the jog_arm action.
  */
@@ -133,36 +133,36 @@ class JogCalcs
 {
 public:
   JogCalcs(std::string move_group_name);
-  
+
 protected:
   moveit::planning_interface::MoveGroupInterface arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
 
   sensor_msgs::JointState incoming_jts_;
-  
+
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
-  
+
   void jogCalcs(const geometry_msgs::TwistStamped& cmd);
 
   void updateJoints();
 
   Vector6d scaleCommand(const geometry_msgs::TwistStamped& command) const;
-  
+
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
-  
+
   bool addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const;
 
   bool updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const;
-  
+
   double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
-  
+
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;
-  
+
   sensor_msgs::JointState jt_state_, orig_jts_;
-  
+
   tf::TransformListener listener_;
 
   ros::Time prev_time_;
