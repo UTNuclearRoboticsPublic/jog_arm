@@ -238,9 +238,6 @@ JogCalcs::JogCalcs(std::string move_group_name) :
     incoming_jts_ = jog_arm::joints;
     pthread_mutex_unlock(&joints_mutex);
 
-
-    prev_time_ = ros::Time::now();
-
     updateJoints();
 
     jogCalcs(cmd_deltas_);
