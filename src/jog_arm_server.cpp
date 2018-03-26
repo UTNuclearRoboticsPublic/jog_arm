@@ -238,9 +238,6 @@ JogCalcs::JogCalcs(std::string move_group_name) :
     incoming_jts_ = jog_arm::joints;
     pthread_mutex_unlock(&joints_mutex);
 
-
-    prev_time_ = ros::Time::now();
-
     updateJoints();
 
     jogCalcs(cmd_deltas_);
@@ -307,8 +304,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   // Include a velocity estimate to avoid stuttery motion
-  delta_t_ = (ros::Time::now() - prev_time_).toSec();
-  prev_time_ = ros::Time::now();
+  auto current_time = ros::Time::now();
+  delta_t_ = (current_time - prev_time_).toSec();
+  prev_time_ = current_time;
   Eigen::VectorXd joint_vel(delta_theta/delta_t_);
 
   // Low-pass filter the velocities
@@ -335,7 +333,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   // Compose the outgoing msg
   trajectory_msgs::JointTrajectory new_jt_traj;
   new_jt_traj.header.frame_id = jog_arm::planning_frame;
-  new_jt_traj.header.stamp = twist_cmd.header.stamp;
+  new_jt_traj.header.stamp = current_time;
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
