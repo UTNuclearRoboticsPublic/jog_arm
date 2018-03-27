@@ -95,7 +95,7 @@ class lpf
   public:
     lpf(double low_pass_filter_coeff);
     double filter(const double& new_msrmt);
-    void reset();
+    void reset(double data);
     double c_ = 10.;
 
   private:
@@ -108,14 +108,14 @@ lpf::lpf(double low_pass_filter_coeff)
   c_ = low_pass_filter_coeff;
 }
 
-void lpf::reset()
+void lpf::reset(double data)
 {
-  prev_msrmts_[0] = 0.;
-  prev_msrmts_[1] = 0.;
-  prev_msrmts_[2] = 0.;
+  prev_msrmts_[0] = data;
+  prev_msrmts_[1] = data;
+  prev_msrmts_[2] = data;
 
-  prev_filtered_msrmts_[0] = 0.;
-  prev_filtered_msrmts_[1] = 0.;
+  prev_filtered_msrmts_[0] = data;
+  prev_filtered_msrmts_[1] = data;
 }
 
 double lpf::filter(const double& new_msrmt)
@@ -167,7 +167,7 @@ protected:
   double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
 
   // Reset the data stored in low-pass filters so the trajectory won't jump when jogging is resumed.
-  void reset_lpf_filters();
+  void reset_velocity_filters();
 
   const robot_state::JointModelGroup* joint_model_group_;
 

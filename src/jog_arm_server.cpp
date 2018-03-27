@@ -32,7 +32,7 @@
 
 /////////////////////////////////////////////////
 // MAIN handles ROS subscriptions.
-// A worker thread does the calculations.
+// A worker thread does the jogging calculations.
 // Another worker thread does collision checking.
 /////////////////////////////////////////////////
 
@@ -84,13 +84,10 @@ int main(int argc, char **argv)
       // Check for stale cmds
       if ( ros::Time::now()-jog_arm::new_traj.header.stamp < ros::Duration(jog_arm::incoming_cmd_timeout) )
       {
-        // Skip the jogging publication if all inputs are 0 and wait for the filters to stabilize again.
+        // Skip the jogging publication if all inputs are 0.
         pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
         if ( !jog_arm::zero_trajectory_flag_ )
-        {
           joint_trajectory_pub.publish( jog_arm::new_traj );
-          ros::Duration(10*jog_arm::pub_period).sleep();
-        }
         pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
       }
       else
@@ -123,6 +120,7 @@ void *collisionCheck(void *)
   return nullptr;
 }
 
+// Constructor for the class that handles collision checking
 CollisionCheck::CollisionCheck(std::string move_group_name)
 {
   // If user specified true in yaml file
@@ -185,6 +183,7 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
   }
 }
 
+// Constructor for the class that handles jogging calculations
 JogCalcs::JogCalcs(std::string move_group_name) :
   arm_(move_group_name)
 {
@@ -232,15 +231,14 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   // Now do jogging calcs
   while ( ros::ok() )
   {
+    // If user commands are all zero, reset the low-pass filters
+    // when commands resume
     pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
-    if ( jog_arm::zero_trajectory_flag_ )
-    {
-      // Reset low-pass filters, skip calculations
-      reset_lpf_filters();
-
-      continue;
-    }
+    bool flag = jog_arm::zero_trajectory_flag_;
     pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
+    if ( flag )
+      // Reset low-pass filters
+      reset_velocity_filters();
 
     // Pull data from the shared variables.
     pthread_mutex_lock(&cmd_deltas_mutex);
@@ -260,6 +258,7 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   }
 }
 
+// Perform the jogging calculations
 void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
   // Convert the cmd to the MoveGroup planning frame.
@@ -411,18 +410,13 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 }
 
 // Reset the data stored in filters so the trajectory won't jump when jogging is resumed.
-void JogCalcs::reset_lpf_filters()
+void JogCalcs::reset_velocity_filters()
 {
-  // Low-pass filter the positions
   for (std::size_t i=0; i < jt_state_.name.size(); i++)
-  {
-    position_filters_[i].reset();
-    velocity_filters_[i].reset();
-  } 
-
-  return;
+    velocity_filters_[i].reset( 0 );  // Zero velocity
 }
 
+// Update joint velocities
 bool JogCalcs::updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const
 {
   for (std::size_t i = 0, size = static_cast<std::size_t>(joint_vels.size()); i < size; ++i) {
@@ -462,6 +456,7 @@ NEXT_JOINT:
   }
 }
 
+// Scale the incoming jog command
 JogCalcs::Vector6d JogCalcs::scaleCommand(const geometry_msgs::TwistStamped &command) const
 {
   Vector6d result;
@@ -476,12 +471,14 @@ JogCalcs::Vector6d JogCalcs::scaleCommand(const geometry_msgs::TwistStamped &com
   return result;
 }
 
+// Calculate a pseudo-inverse.
 Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd &J) const
 {
   Eigen::MatrixXd transpose = J.transpose();
   return transpose*(J*transpose).inverse();
 }
 
+// Add the deltas to each joint
 bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const
 {
   for (std::size_t i = 0, size = static_cast<std::size_t>(increments.size()); i < size; ++i) {
@@ -496,6 +493,7 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output, const Eigen::
   return true;
 }
 
+/// Calculate the condition number of the jacobian, to check for singularities
 double JogCalcs::checkConditionNumber(const Eigen::MatrixXd &matrix) const
 {
   // Get Eigenvalues
