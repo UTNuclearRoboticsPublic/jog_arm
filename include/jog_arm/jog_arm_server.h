@@ -28,9 +28,8 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-/*
-Server node for the arm jogging with MoveIt.
-*/
+
+//Server node for arm jogging with MoveIt.
 
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H

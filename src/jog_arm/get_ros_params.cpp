@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : get_ros_params.h
+//      Title     : get_ros_params.cpp
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -28,18 +28,35 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef GET_ROS_PARAMS_H
-#define GET_ROS_PARAMS_H
+#include "jog_arm/get_ros_params.h"
 
-#include <ros/ros.h>
-#include <string>
-
-namespace get_ros_params
+std::string get_ros_params::getStringParam(std::string s, ros::NodeHandle& n)
 {
-  std::string getStringParam(std::string s, ros::NodeHandle& n);
-  double getDoubleParam(std::string name, ros::NodeHandle& n);
-  double getIntParam(std::string name, ros::NodeHandle& n);
-  bool getBoolParam(std::string name, ros::NodeHandle& n);
+  if( !n.getParam(s, s) )
+    ROS_ERROR_STREAM("[JogCalcs::getStringParam] YAML config file does not contain parameter " << s);
+  return s;
 }
 
-#endif // GET_ROS_PARAMS_H
+double get_ros_params::getDoubleParam(std::string name, ros::NodeHandle& n)
+{
+  double value;
+  if( !n.getParam(name, value) )
+    ROS_ERROR_STREAM("[JogCalcs::getDoubleParam] YAML config file does not contain parameter " << name);
+  return value;
+}
+
+double get_ros_params::getIntParam(std::string name, ros::NodeHandle& n)
+{
+  int value;
+  if( !n.getParam(name, value) )
+    ROS_ERROR_STREAM("[JogCalcs::getDoubleParam] YAML config file does not contain parameter " << name);
+  return value;
+}
+
+bool get_ros_params::getBoolParam(std::string name, ros::NodeHandle& n)
+{
+  bool value;
+  if( !n.getParam(name, value) )
+    ROS_ERROR_STREAM("[JogCalcs::getBoolParam] YAML config file does not contain parameter " << name);
+  return value;
+}
