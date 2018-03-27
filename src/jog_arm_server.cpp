@@ -136,9 +136,10 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 
     // Wait for initial joint message
-    ROS_WARN_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
+    ROS_INFO_STREAM("[jog_arm_server CollisionCheck] Waiting for first joint msg.");
     ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
     ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
+    ROS_INFO_STREAM("[jog_arm_server CollisionCheck] Received first joint msg.");
 
     pthread_mutex_lock(&joints_mutex);
     sensor_msgs::JointState jts = jog_arm::joints;
@@ -208,9 +209,10 @@ JogCalcs::JogCalcs(std::string move_group_name) :
   }
 
   // Wait for initial messages
-  ROS_WARN_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
+  ROS_INFO_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::cmd_in_topic);
+  ROS_INFO_STREAM("[jog_arm_server JogCalcs] Received first joint msg.");
 
   jt_state_.name = arm_.getJointNames();
   jt_state_.position.resize(jt_state_.name.size());
@@ -352,16 +354,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   point.time_from_start = ros::Duration(jog_arm::pub_period);
   point.velocities = jt_state_.velocity;
 
-  if (jog_arm::simu) {
-    // Spam several redundant points into the trajectory. The first few may be skipped if the
-    // time stamp is in the past when it reaches the client. Needed for gazebo simulation.
-    for (int i=1; i<30; i++)
-    {
-      point.time_from_start = ros::Duration(i*jog_arm::pub_period);
-      new_jt_traj.points.push_back(point);
-    }
-  } else
-    new_jt_traj.points.push_back(point);
+  new_jt_traj.points.push_back(point);
 
   // Stop if imminent collision
   pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
@@ -385,11 +378,14 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   {
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
-      ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
+      ROS_ERROR_THROTTLE(2, "[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
       for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
       {
         new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
         new_jt_traj.points[0].velocities[i] = 0.;
+
+        // Store all zeros in the velocity filter
+        reset_velocity_filters();
       }
     }
     // Only somewhat close to singularity. Just slow down.
@@ -402,6 +398,17 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
       }
     }
   }
+
+  if (jog_arm::simu)
+    // Spam several redundant points into the trajectory. The first few may be skipped if the
+    // time stamp is in the past when it reaches the client. Needed for gazebo simulation.
+    // Start from 2 because the first point's timestamp is already 1*jog_arm::pub_period
+    point = new_jt_traj.points[0];
+    for (int i=2; i<30; i++)
+    {
+      point.time_from_start = ros::Duration(i*jog_arm::pub_period);
+      new_jt_traj.points.push_back(point);
+    }
 
   // Share with main to be published
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
