@@ -89,6 +89,7 @@ int main(int argc, char **argv)
   ////////////////////////////////////////
   // move to every pose then back to start
   ////////////////////////////////////////
+  ros::Time begin = ros::Time::now();
   int successes = 0;
   for(auto it = poses.begin(); it != poses.end(); ++it)
   {
@@ -110,6 +111,7 @@ int main(int argc, char **argv)
   }
 
   ROS_INFO_STREAM("Completed " << successes << " of " << poses.size() << " poses.");
+  ROS_INFO_STREAM("Trial took " << ros::Time::now()-begin << " seconds.");
 
   return 0;
 }
@@ -117,13 +119,14 @@ int main(int argc, char **argv)
 bool move_to_pose(jog_api& jogger, geometry_msgs::PoseStamped& target_pose)
 {
   // 1cm tolerance on the linear motion.
-  // 0.01rad tolerance on the angular
-  // Scale linear velocity commands between -0.5:0.5
-  // Scale angular velocity commands between -1.0 : 1.0
-  if ( !jogger.jacobian_move(target_pose, 0.01, 0.005, 0.3, 0.5))
+  // 0.005rad tolerance on the angular
+  // Scale linear velocity commands between -0.8:0.8
+  // Scale angular velocity commands between -0.5 : 0.5
+  // Give 10s to complete the motion
+  if ( !jogger.jacobian_move(target_pose, 0.01, 0.005, 0.8, 0.5, ros::Duration(10)) )
   {
     ROS_ERROR_STREAM("Jacobian move failed");
-    return 1;
+    return false;
   }
 
   return true;

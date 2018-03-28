@@ -64,7 +64,8 @@ int main(int argc, char **argv)
   // 0.01rad tolerance on the angular
   // Scale linear velocity commands between -0.5:0.5
   // Scale angular velocity commands between -1.0 : 1.0
-  if ( !jogger.jacobian_move(new_pose, 0.01, 0.01, 0.5, 1.0))
+  // Timeout, i.e. stop sending commands, after 10s
+  if ( !jogger.jacobian_move(new_pose, 0.01, 0.01, 0.5, 1.0, ros::Duration(10)) )
 	{
   	ROS_ERROR_STREAM("Jacobian move failed");
   	return 1;
