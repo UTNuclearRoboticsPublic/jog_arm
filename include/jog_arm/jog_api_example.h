@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : motion_api.h
+//      Title     : get_ros_params.h
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -28,49 +28,13 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-// Provide a C++ interface for sending motion commands to the jog_arm server.
+// Perform a series of motions with the jog_arm API
 
-#ifndef MOTION_API_H
-#define MOTION_API_H
+#ifndef JOG_API_EXAMPLE_H
+#define JOG_API_EXAMPLE_H
 
 #include <geometry_msgs/PoseStamped.h>
-#include <moveit/move_group_interface/move_group_interface.h>
+#include <jog_arm/jog_api.h>
 #include <ros/ros.h>
-#include <std_msgs/Float64.h>
-#include <tf/transform_listener.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <tf2_ros/transform_listener.h>
-
-class jog_api {
-public:
-	// Constructor
-  jog_api(std::string move_group_name) :
-    move_group_(move_group_name),
-    tf2_listener_(tf_buffer_)
-  {
-  	jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/jog_arm_server/delta_jog_cmds", 1);
-  }
-
-  // Publish cmds for a Cartesian motion to bring the robot to the target pose.
-  bool jacobian_move(geometry_msgs::PoseStamped& target_pose, const double tolerance, const double vel_scale);
-
-private:
-	ros::NodeHandle nh_;
-
-	// Used to retrieve the current robot pose, etc.
-  moveit::planning_interface::MoveGroupInterface move_group_;
-
-	ros::Publisher jog_vel_pub_;
-
-  tf2_ros::Buffer tf_buffer_;
-  tf2_ros::TransformListener tf2_listener_;
-
-  // Calculate Euclidean distance between 2 Poses
-  struct distance_and_twist {
-    double distance;
-    geometry_msgs::TwistStamped twist;
-  };
-  distance_and_twist calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const double &vel_scale);
-};
 
 #endif

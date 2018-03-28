@@ -37,7 +37,7 @@
 // Param vel_scale: scales the velocity components of outgoing Twist msgs. Should be 0<vel_scale<1
 // Return true if successful.
 //////////////////////////////////////////////////////////////////////////////////////////////////
-bool jog_api::jacobian_move(const geometry_msgs::PoseStamped& target_pose, const std_msgs::Float64& tolerance, const double& vel_scale)
+bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const double tolerance, const double vel_scale)
 {
   // Velocity scaling should be between 0 and 1
   if ( 0.>vel_scale || 1.<vel_scale )
@@ -48,19 +48,38 @@ bool jog_api::jacobian_move(const geometry_msgs::PoseStamped& target_pose, const
 
   geometry_msgs::PoseStamped current_pose;
   current_pose = move_group_.getCurrentPose();
+  // Transform to the frame of target_pose
+  geometry_msgs::TransformStamped current_frame_to_target;
+  // Remove a leading slash, if any
+  if ( current_pose.header.frame_id.at(0) == '/' )
+    current_pose.header.frame_id.erase(0,1);
+  if ( target_pose.header.frame_id.at(0) == '/' )
+    target_pose.header.frame_id.erase(0,1);
+  current_frame_to_target = tf_buffer_.lookupTransform(current_pose.header.frame_id, target_pose.header.frame_id, ros::Time(0), ros::Duration(1.0) );
+  tf2::doTransform(current_pose, current_pose, current_frame_to_target);
 
   // A structure to hold the result
   distance_and_twist distance_and_twist;
   distance_and_twist = calc_distance_and_twist(current_pose, target_pose, vel_scale);
 
   // Is the current pose close enough?
-  while ( distance_and_twist.distance > tolerance.data && ros::ok() )
+  while ( distance_and_twist.distance > tolerance && ros::ok() )
   {
     // Get current robot pose
     current_pose = move_group_.getCurrentPose();
 
+    // Transform to the frame of target_pose
+    // Remove a leading slash, if any
+    if ( current_pose.header.frame_id.at(0) == '/' )
+      current_pose.header.frame_id.erase(0,1);
+    if ( target_pose.header.frame_id.at(0) == '/' )
+      target_pose.header.frame_id.erase(0,1);
+    current_frame_to_target = tf_buffer_.lookupTransform(current_pose.header.frame_id, target_pose.header.frame_id, ros::Time(0), ros::Duration(1.0) );
+    tf2::doTransform(current_pose, current_pose, current_frame_to_target);
+
     // Update distance and twist to target
-    distance_and_twist = calc_distance_and_twist(current_pose, target_pose, vel_scale);
+    // TODO: change this back to current_pose, target_pose
+    distance_and_twist = calc_distance_and_twist(current_pose, current_pose, vel_scale);
 
     // Publish the twist commands to move the robot
     jog_vel_pub_.publish(distance_and_twist.twist);

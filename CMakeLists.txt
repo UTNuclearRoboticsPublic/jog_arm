@@ -123,9 +123,7 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(jog_api
-  src/jog_arm/jog_api.cpp
-)
+add_library(jog_api src/jog_arm/jog_api.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -135,6 +133,10 @@ add_library(jog_api
 add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/jog_arm/get_ros_params.cpp)
 add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
+
+add_executable(jog_api_example src/jog_arm/jog_api_example.cpp)
+add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})
+target_link_libraries(jog_api_example ${catkin_LIBRARIES} jog_api)
 
 #############
 ## Install ##
