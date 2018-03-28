@@ -52,7 +52,7 @@ public:
   }
 
   // Publish cmds for a Cartesian motion to bring the robot to the target pose.
-  bool jacobian_move(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, const double rot_tolerance, const double vel_scale);
+  bool jacobian_move(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, const double rot_tolerance, const double linear_vel_scale, const double rot_vel_scale);
 
 private:
 	ros::NodeHandle nh_;
@@ -70,7 +70,7 @@ private:
     double translational_distance, rotational_distance;
     geometry_msgs::TwistStamped twist;
   };
-  distance_and_twist calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const double &vel_scale);
+  distance_and_twist calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const double &linear_vel_scale, const double &rot_vel_scale);
 };
 
 #endif

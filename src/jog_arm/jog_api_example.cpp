@@ -62,8 +62,9 @@ int main(int argc, char **argv)
 
   // 1cm tolerance on the linear motion.
   // 0.01rad tolerance on the angular
-  // Scale commands between 0:0.2
-  if ( !jog.jacobian_move(start_pose, 0.01, 0.01, 0.2))
+  // Scale linear velocity commands between -0.5:0.5
+  // Scale angular velocity commands between -1.0 : 1.0
+  if ( !jog.jacobian_move(start_pose, 0.01, 0.01, 0.5, 1.0))
 	{
   	ROS_ERROR_STREAM("Jacobian move failed");
   	return 1;
@@ -76,24 +77,6 @@ int main(int argc, char **argv)
   geometry_msgs::PoseStamped current_pose = mgi.getCurrentPose();
 
   ROS_INFO_STREAM("Current pose: " << current_pose);
-
-/*
-  ///////////////////////////////////////////
-  // First motion: a triangle in the YZ plane
-  ///////////////////////////////////////////
-  geometry_msgs::PoseStamped target_pose = current_pose;
-  target_pose.pose.position.y += 0.25;
-
-  // 1cm tolerance on the motion.
-  // Scale commands between 0:0.2
-  jog.jacobian_move(target_pose, 0.01, 0.2);
-
-  current_pose = mgi.getCurrentPose();
-  ROS_INFO_STREAM("Curent pose: " << current_pose);
-
-	target_pose.pose.position.y -= 0.25;
-  jog.jacobian_move(target_pose, 0.01, 0.2);
-*/
 
   return 0;
 }
