@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : motion_api.h
+//      Title     : jog_api.h
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak

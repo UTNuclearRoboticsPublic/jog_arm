@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   cmake_modules
   tf
+  tf2_geometry_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -137,6 +138,10 @@ target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 add_executable(jog_api_example src/jog_arm/jog_api_example.cpp)
 add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_api_example ${catkin_LIBRARIES} jog_api)
+
+add_executable(grid_test src/jog_arm/grid_test.cpp)
+add_dependencies(grid_test ${catkin_EXPORTED_TARGETS})
+target_link_libraries(grid_test ${catkin_LIBRARIES} jog_api)
 
 #############
 ## Install ##

@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : motion_api.cpp
+//      Title     : jog_api.cpp
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
