@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : get_ros_params.h
+//      Title     : motion_api.h
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -28,18 +28,49 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef GET_ROS_PARAMS_H
-#define GET_ROS_PARAMS_H
+// Provide a C++ interface for sending motion commands to the jog_arm server.
 
+#ifndef MOTION_API_H
+#define MOTION_API_H
+
+#include <geometry_msgs/PoseStamped.h>
+#include <moveit/move_group_interface/move_group_interface.h>
 #include <ros/ros.h>
-#include <string>
+#include <std_msgs/Float64.h>
+#include <tf/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/transform_listener.h>
 
-namespace get_ros_params
-{
-  std::string getStringParam(std::string s, ros::NodeHandle& n);
-  double getDoubleParam(std::string name, ros::NodeHandle& n);
-  double getIntParam(std::string name, ros::NodeHandle& n);
-  bool getBoolParam(std::string name, ros::NodeHandle& n);
-}
+class jog_api {
+public:
+	// Constructor
+  jog_api(std::string move_group_name) :
+    move_group_(move_group_name),
+    tf2_listener_(tf_buffer_)
+  {
+  	jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/jog_arm_server/delta_jog_cmds", 1);
+  }
 
-#endif // GET_ROS_PARAMS_H
+  // Publish cmds for a Cartesian motion to bring the robot to the target pose.
+  bool jacobian_move(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, const double rot_tolerance, const double linear_vel_scale, const double rot_vel_scale);
+
+private:
+	ros::NodeHandle nh_;
+
+	// Used to retrieve the current robot pose, etc.
+  moveit::planning_interface::MoveGroupInterface move_group_;
+
+	ros::Publisher jog_vel_pub_;
+
+  tf2_ros::Buffer tf_buffer_;
+  tf2_ros::TransformListener tf2_listener_;
+
+  // Calculate Euclidean distance between 2 Poses
+  struct distance_and_twist {
+    double translational_distance, rotational_distance;
+    geometry_msgs::TwistStamped twist;
+  };
+  distance_and_twist calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const double &linear_vel_scale, const double &rot_vel_scale);
+};
+
+#endif

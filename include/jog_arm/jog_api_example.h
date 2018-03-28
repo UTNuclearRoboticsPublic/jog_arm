@@ -28,18 +28,13 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef GET_ROS_PARAMS_H
-#define GET_ROS_PARAMS_H
+// Perform a series of motions with the jog_arm API
 
+#ifndef JOG_API_EXAMPLE_H
+#define JOG_API_EXAMPLE_H
+
+#include <geometry_msgs/PoseStamped.h>
+#include <jog_arm/jog_api.h>
 #include <ros/ros.h>
-#include <string>
 
-namespace get_ros_params
-{
-  std::string getStringParam(std::string s, ros::NodeHandle& n);
-  double getDoubleParam(std::string name, ros::NodeHandle& n);
-  double getIntParam(std::string name, ros::NodeHandle& n);
-  bool getBoolParam(std::string name, ros::NodeHandle& n);
-}
-
-#endif // GET_ROS_PARAMS_H
+#endif

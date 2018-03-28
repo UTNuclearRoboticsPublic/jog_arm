@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : get_ros_params.h
+//      Title     : cpp_example.cpp
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -28,18 +28,55 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef GET_ROS_PARAMS_H
-#define GET_ROS_PARAMS_H
+// Perform a series of motions with the jog_arm API
 
-#include <ros/ros.h>
-#include <string>
+#include "jog_arm/jog_api_example.h"
 
-namespace get_ros_params
+int main(int argc, char **argv)
 {
-  std::string getStringParam(std::string s, ros::NodeHandle& n);
-  double getDoubleParam(std::string name, ros::NodeHandle& n);
-  double getIntParam(std::string name, ros::NodeHandle& n);
-  bool getBoolParam(std::string name, ros::NodeHandle& n);
-}
+	ros::init(argc, argv, "jog_api_example");
 
-#endif // GET_ROS_PARAMS_H
+	ros::AsyncSpinner spinner(1);
+	spinner.start();
+
+	//////////////////////////////////////////////////
+  // Send motion commands with this jog_api object.
+  // Put your robot name here -- often "manipulator"
+  //////////////////////////////////////////////////
+  std::string move_group_name = "manipulator";
+  jog_api jog(move_group_name);
+
+  ////////////////////////////
+  // Move to a good start pose
+  ////////////////////////////
+  geometry_msgs::PoseStamped start_pose;
+  start_pose.header.frame_id = "world";
+  start_pose.header.stamp = ros::Time::now();
+  start_pose.pose.position.x = 0.4;
+  start_pose.pose.position.y = 0.23;
+  start_pose.pose.position.z = 0.4;
+  start_pose.pose.orientation.x = 0.025;
+  start_pose.pose.orientation.y = 0.247;
+  start_pose.pose.orientation.z = 0.283;
+  start_pose.pose.orientation.w = 0.926;
+
+  // 1cm tolerance on the linear motion.
+  // 0.01rad tolerance on the angular
+  // Scale linear velocity commands between -0.5:0.5
+  // Scale angular velocity commands between -1.0 : 1.0
+  if ( !jog.jacobian_move(start_pose, 0.01, 0.01, 0.5, 1.0))
+	{
+  	ROS_ERROR_STREAM("Jacobian move failed");
+  	return 1;
+	}
+
+  ////////////////////////////////////////////
+  // Get robot's current pose via MoveIt's api
+  ////////////////////////////////////////////
+  moveit::planning_interface::MoveGroupInterface mgi(move_group_name);
+  geometry_msgs::PoseStamped current_pose = mgi.getCurrentPose();
+
+  ROS_INFO_STREAM("Current pose: " << current_pose);
+
+  return 0;
+}
