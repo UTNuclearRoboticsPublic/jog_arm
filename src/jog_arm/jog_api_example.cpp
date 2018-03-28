@@ -52,17 +52,18 @@ int main(int argc, char **argv)
   geometry_msgs::PoseStamped start_pose;
   start_pose.header.frame_id = "world";
   start_pose.header.stamp = ros::Time::now();
-  start_pose.pose.position.x = 0.46;
+  start_pose.pose.position.x = 0.4;
   start_pose.pose.position.y = 0.23;
-  start_pose.pose.position.z = 0.58;
+  start_pose.pose.position.z = 0.4;
   start_pose.pose.orientation.x = 0.025;
   start_pose.pose.orientation.y = 0.247;
   start_pose.pose.orientation.z = 0.283;
   start_pose.pose.orientation.w = 0.926;
 
-  // 1cm tolerance on the motion.
+  // 1cm tolerance on the linear motion.
+  // 0.01rad tolerance on the angular
   // Scale commands between 0:0.2
-  if ( !jog.jacobian_move(start_pose, 0.01, 0.2))
+  if ( !jog.jacobian_move(start_pose, 0.01, 0.01, 0.2))
 	{
   	ROS_ERROR_STREAM("Jacobian move failed");
   	return 1;

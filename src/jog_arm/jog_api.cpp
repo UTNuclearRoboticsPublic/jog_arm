@@ -37,7 +37,7 @@
 // Param vel_scale: scales the velocity components of outgoing Twist msgs. Should be 0<vel_scale<1
 // Return true if successful.
 //////////////////////////////////////////////////////////////////////////////////////////////////
-bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const double tolerance, const double vel_scale)
+bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, const double rot_tolerance, const double vel_scale)
 {
   // Velocity scaling should be between 0 and 1
   if ( 0.>vel_scale || 1.<vel_scale )
@@ -63,7 +63,10 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const doubl
   distance_and_twist = calc_distance_and_twist(current_pose, target_pose, vel_scale);
 
   // Is the current pose close enough?
-  while ( distance_and_twist.distance > tolerance && ros::ok() )
+  while ( 
+    (distance_and_twist.translational_distance > trans_tolerance 
+    || distance_and_twist.rotational_distance > rot_tolerance) 
+    && ros::ok() )
   {
     // Get current robot pose
     current_pose = move_group_.getCurrentPose();
@@ -78,8 +81,7 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const doubl
     tf2::doTransform(current_pose, current_pose, current_frame_to_target);
 
     // Update distance and twist to target
-    // TODO: change this back to current_pose, target_pose
-    distance_and_twist = calc_distance_and_twist(current_pose, current_pose, vel_scale);
+    distance_and_twist = calc_distance_and_twist(current_pose, target_pose, vel_scale);
 
     // Publish the twist commands to move the robot
     jog_vel_pub_.publish(distance_and_twist.twist);
@@ -93,7 +95,8 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const doubl
 ////////////////////////////////////////////////////////////////////////////////
 // Calculate Euclidean distance between 2 poses
 // Returns a distance_and_twist structure.
-// distance_and_twist.distance holds the linear distance to target pose
+// distance_and_twist.translational_distance holds the linear distance to target pose
+// distance_and_twist.rotational_distance holds the rotational distance to target pose
 // distance_and_twist.twist: these components have been normalized between -1:1,
 // they can serve as motion commands as if from a joystick.
 ////////////////////////////////////////////////////////////////////////////////
@@ -125,27 +128,39 @@ jog_api::distance_and_twist jog_api::calc_distance_and_twist(const geometry_msgs
   /////////////////////////////////////
   // Calculate the twist to target_pose
   /////////////////////////////////////
+  // Linear
   result.twist.twist.linear.x = target_pose.pose.position.x - current_pose.pose.position.x;
   result.twist.twist.linear.y = target_pose.pose.position.y - current_pose.pose.position.y;
   result.twist.twist.linear.z = target_pose.pose.position.z - current_pose.pose.position.z;
 
+  // Angular
+  result.twist.twist.angular.x = targ_r - curr_r;
+  result.twist.twist.angular.y = targ_p - curr_p;
+  result.twist.twist.angular.z = targ_y - curr_y;
+
   ///////////////////////////////////////////////////////////////////////////////
   // Normalize the twist to the target pose. Calculate distance while we're at it
   ///////////////////////////////////////////////////////////////////////////////
-  double sos = pow(result.twist.twist.linear.x, 2.);
+  // Linear:
+  double sos = pow(result.twist.twist.linear.x, 2.); // Sum-of-squares
   sos += pow(result.twist.twist.linear.y, 2.);
   sos += pow(result.twist.twist.linear.z, 2.);
-  // Ignore rot
-  result.distance = pow( sos, 0.5);
+  result.translational_distance = pow( sos, 0.5 );
 
-  result.twist.twist.linear.x = vel_scale*result.twist.twist.linear.x/result.distance;
-  result.twist.twist.linear.y = vel_scale*result.twist.twist.linear.y/result.distance;
-  result.twist.twist.linear.z = vel_scale*result.twist.twist.linear.z/result.distance;
+  result.twist.twist.linear.x = vel_scale*result.twist.twist.linear.x/result.translational_distance;
+  result.twist.twist.linear.y = vel_scale*result.twist.twist.linear.y/result.translational_distance;
+  result.twist.twist.linear.z = vel_scale*result.twist.twist.linear.z/result.translational_distance;
+
+  // Angular:
+  sos = pow(result.twist.twist.angular.x, 2.);
+  sos += pow(result.twist.twist.angular.y, 2.);
+  sos += pow(result.twist.twist.angular.z, 2.);
+  result.rotational_distance = pow( sos, 0.5 );
 
   // Ignore angle for now
-  result.twist.twist.angular.x = 0.;
-  result.twist.twist.angular.y = 0.;
-  result.twist.twist.angular.z = 0.;
+  result.twist.twist.angular.x = vel_scale*result.twist.twist.angular.x/result.rotational_distance;
+  result.twist.twist.angular.y = vel_scale*result.twist.twist.angular.y/result.rotational_distance;
+  result.twist.twist.angular.z = vel_scale*result.twist.twist.angular.z/result.rotational_distance;
 
   return result;
 }
