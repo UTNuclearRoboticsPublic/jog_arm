@@ -52,13 +52,13 @@ int main(int argc, char **argv)
   geometry_msgs::PoseStamped start_pose;
   start_pose.header.frame_id = "world";
   start_pose.header.stamp = ros::Time::now();
-  start_pose.pose.position.x = 0.4;
-  start_pose.pose.position.y = -0.4;
-  start_pose.pose.position.z = 0.6;
-  start_pose.pose.orientation.x = 0.025;
-  start_pose.pose.orientation.y = 0.247;
-  start_pose.pose.orientation.z = 0.283;
-  start_pose.pose.orientation.w = 0.926;
+  start_pose.pose.position.x = 0.282;
+  start_pose.pose.position.y = -0.864;
+  start_pose.pose.position.z = 0.678;
+  start_pose.pose.orientation.x = -0.149;
+  start_pose.pose.orientation.y = 0.182;
+  start_pose.pose.orientation.z = -0.497;
+  start_pose.pose.orientation.w = 0.835;
 
 
   /////////////////////////
@@ -67,12 +67,12 @@ int main(int argc, char **argv)
   std::vector<geometry_msgs::PoseStamped> poses;
   geometry_msgs::PoseStamped p = start_pose;
 
-  double step = 0.03;
-  for (double delta_x=-0.03; delta_x<=0.06; delta_x+=step)
+  double step = 0.2;
+  for (double delta_x=-0.2; delta_x<=0.2; delta_x+=step)
   {
-    for (double delta_y=-0.03; delta_y<=0.06; delta_y+=step)
+    for (double delta_y=-0.2; delta_y<=0.2; delta_y+=step)
     {
-      for (double delta_z=-0.03; delta_z<=0.06; delta_z+=step)
+      for (double delta_z=-0.2; delta_z<=0.2; delta_z+=step)
       {
         p.pose.position.x += delta_x;
         p.pose.position.y += delta_y;
@@ -100,8 +100,8 @@ int main(int argc, char **argv)
   std::vector<geometry_msgs::Pose> waypoints;
 
   // Move to start pose
-  //mgi.setPoseTarget(start_pose);
-  std::vector<double> start_joints = {-1.343, -1.485, 1.697, 2.042, 0.596, 2.572};
+  mgi.setPoseTarget(start_pose);
+  std::vector<double> start_joints = {-4.010, -1.5153276047168491, -1.9685252858741595, 0.1811619951451231, 1.3323315704027818, 1.1586193681385275};
   mgi.setJointValueTarget(start_joints);
   if ( !mgi.move() )
   {
@@ -115,7 +115,6 @@ int main(int argc, char **argv)
   ////////////////////////////////////////
   ros::Time begin = ros::Time::now();
   int jog_arm_successes = 0;
-/*
   for(auto it = poses.begin(); it != poses.end(); ++it)
   {
     if (ros::ok())
@@ -133,13 +132,19 @@ int main(int argc, char **argv)
 
   ROS_INFO_STREAM("Completed " << jog_arm_successes << " of " << poses.size() << " poses.");
   ROS_INFO_STREAM("Trial took " << ros::Time::now()-begin << " seconds.");
-*/
-  // Move to start pose
-  mgi.setJointValueTarget(start_joints);
-  if ( !mgi.move() )
+
+  // Move to start pose.
+  // Often fails... try it a few times.
+  for (int i=0; i<3; i++)
   {
-    ROS_ERROR_STREAM("Move to start pose failed. Exiting.");
-    return 1;
+    mgi.setJointValueTarget(start_joints);
+    if ( !mgi.move() )
+    {
+      // Try a PoseTarget move
+      mgi.setPoseTarget(start_pose);
+      if ( !mgi.move() )
+        ROS_ERROR_STREAM("Move to start pose failed. Attempt #" << i);
+    }
   }
 
 
@@ -160,7 +165,7 @@ int main(int argc, char **argv)
       ROS_INFO_STREAM("Moving to pose " << std::distance( poses.begin(),it ));
       waypoints.clear();
       waypoints.push_back( (*it).pose );
-      fraction = mgi.computeCartesianPath(waypoints, 0.005, 15., trajectory);
+      fraction = mgi.computeCartesianPath(waypoints, 0.005, 0., trajectory);
       ROS_INFO_STREAM(fraction);
       if (fraction == 1.)
         moveit_successes++;
@@ -185,8 +190,8 @@ bool move_to_pose(jog_api& jogger, geometry_msgs::PoseStamped& target_pose)
   // 0.05rad tolerance on the angular
   // Scale linear velocity commands between -0.8:0.8
   // Scale angular velocity commands between -0.8 : 0.8
-  // Give 10s to complete the motion
-  if ( !jogger.jacobian_move(target_pose, 0.01, 0.05, 0.8, 0.8, ros::Duration(10)) )
+  // Give 15s to complete the motion
+  if ( !jogger.jacobian_move(target_pose, 0.01, 0.05, 0.8, 0.8, ros::Duration(15)) )
   {
     ROS_ERROR_STREAM("Jacobian move failed");
     return false;
