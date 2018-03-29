@@ -67,12 +67,12 @@ int main(int argc, char **argv)
   std::vector<geometry_msgs::PoseStamped> poses;
   geometry_msgs::PoseStamped p = start_pose;
 
-  double step = 0.1;
-  for (double delta_x=-0.1; delta_x<=0.1; delta_x+=step)
+  double step = 0.03;
+  for (double delta_x=-0.03; delta_x<=0.03; delta_x+=step)
   {
-    for (double delta_y=-0.1; delta_y<=0.1; delta_y+=step)
+    for (double delta_y=-0.03; delta_y<=0.03; delta_y+=step)
     {
-      for (double delta_z=-0.1; delta_z<=0.1; delta_z+=step)
+      for (double delta_z=-0.03; delta_z<=0.03; delta_z+=step)
       {
         p.pose.position.x += delta_x;
         p.pose.position.y += delta_y;
@@ -86,23 +86,39 @@ int main(int argc, char **argv)
   }
   ROS_INFO_STREAM("Checking a grid of " << poses.size() <<" points.");
 
+
+  /////////////////
+  // Set up MoveIt!
+  /////////////////
+  moveit::planning_interface::MoveGroupInterface mgi(move_group_name);
+  mgi.setPlannerId("RRTConnectkConfigDefault");
+  mgi.setGoalPositionTolerance(0.01);
+  mgi.setGoalOrientationTolerance(0.02);
+  mgi.setPlanningTime(5);
+  mgi.setMaxVelocityScalingFactor(0.2);
+  mgi.setPoseReferenceFrame(start_pose.header.frame_id);
+  std::vector<geometry_msgs::Pose> waypoints;
+
+  // Move to start pose
+  //mgi.setPoseTarget(start_pose);
+  std::vector<double> start_joints = {-1.343, -1.485, 1.697, 2.042, 0.596, 2.572};
+  mgi.setJointValueTarget(start_joints);
+  mgi.move();
+
+
   ////////////////////////////////////////
-  // move to every pose then back to start
+  // Test the jog_arm Cartesian motion API
   ////////////////////////////////////////
   ros::Time begin = ros::Time::now();
-  int successes = 0;
+  int jog_arm_successes = 0;
   for(auto it = poses.begin(); it != poses.end(); ++it)
   {
     if (ros::ok())
     {
-      // Move to the start pose
-      ROS_INFO_STREAM("Moving to start pose");
-      move_to_pose( jogger, start_pose );
-
       // Move to next grid pose
       ROS_INFO_STREAM("Moving to pose " << std::distance( poses.begin(),it ));
       if ( move_to_pose( jogger, *it ) )
-        successes++;
+        jog_arm_successes++;
       else
         ROS_WARN_STREAM("Failed to reach this pose.");
     }
@@ -110,8 +126,46 @@ int main(int argc, char **argv)
       return 1;
   }
 
-  ROS_INFO_STREAM("Completed " << successes << " of " << poses.size() << " poses.");
+  ROS_INFO_STREAM("Completed " << jog_arm_successes << " of " << poses.size() << " poses.");
   ROS_INFO_STREAM("Trial took " << ros::Time::now()-begin << " seconds.");
+
+  // Move to start pose
+  mgi.setJointValueTarget(start_joints);
+  mgi.move();
+
+
+  ////////////////////////////////////////////
+  // Now test the MoveIt! Cartesian motion API
+  ////////////////////////////////////////////
+  begin = ros::Time::now();
+  moveit_msgs::RobotTrajectory trajectory;
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  int moveit_successes = 0;
+  double fraction = 0.;
+
+  for(auto it = poses.begin(); it != poses.end(); ++it)
+  {
+    if (ros::ok())
+    {
+      // Move to next grid pose
+      ROS_INFO_STREAM("Moving to pose " << std::distance( poses.begin(),it ));
+      waypoints.clear();
+      waypoints.push_back( (*it).pose );
+      fraction = mgi.computeCartesianPath(waypoints, 0.005, 15., trajectory);
+      ROS_INFO_STREAM(fraction);
+      if (fraction == 1.)
+        moveit_successes++;
+      else
+        ROS_WARN_STREAM("Failed to reach this pose.");
+      plan.trajectory_ = trajectory;
+      mgi.execute(plan);
+    }
+    else
+      return 1;
+  }
+
+  ROS_INFO_STREAM("MoveIt! completed " << moveit_successes << " of " << poses.size() << " poses.");
+  ROS_INFO_STREAM("MoveIt! trial took " << ros::Time::now()-begin << " seconds.");
 
   return 0;
 }
@@ -119,11 +173,11 @@ int main(int argc, char **argv)
 bool move_to_pose(jog_api& jogger, geometry_msgs::PoseStamped& target_pose)
 {
   // 1cm tolerance on the linear motion.
-  // 0.005rad tolerance on the angular
+  // 0.05rad tolerance on the angular
   // Scale linear velocity commands between -0.8:0.8
-  // Scale angular velocity commands between -0.5 : 0.5
+  // Scale angular velocity commands between -0.8 : 0.8
   // Give 10s to complete the motion
-  if ( !jogger.jacobian_move(target_pose, 0.01, 0.005, 0.8, 0.5, ros::Duration(10)) )
+  if ( !jogger.jacobian_move(target_pose, 0.01, 0.05, 0.8, 0.8, ros::Duration(10)) )
   {
     ROS_ERROR_STREAM("Jacobian move failed");
     return false;
