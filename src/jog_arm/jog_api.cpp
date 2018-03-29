@@ -42,7 +42,7 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose,
   const double rot_tolerance,
   const double linear_vel_scale,
   const double rot_vel_scale,
-  ros::Duration timeout)
+  const ros::Duration& timeout)
 {
   // Velocity scaling should be between 0 and 1
   if ( 0.>linear_vel_scale || 1.<linear_vel_scale )

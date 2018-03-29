@@ -44,7 +44,7 @@
 class jog_api {
 public:
 	// Constructor
-  jog_api(std::string move_group_name) :
+  jog_api(const std::string& move_group_name) :
     move_group_(move_group_name),
     tf2_listener_(tf_buffer_)
   {
@@ -57,7 +57,7 @@ public:
     const double rot_tolerance,
     const double linear_vel_scale,
     const double rot_vel_scale,
-    ros::Duration timeout);
+    const ros::Duration& timeout);
 
 private:
 	ros::NodeHandle nh_;

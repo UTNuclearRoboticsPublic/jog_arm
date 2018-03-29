@@ -126,13 +126,13 @@ void *collisionCheck(void *)
 }
 
 // Constructor for the class that handles collision checking
-CollisionCheck::CollisionCheck(std::string move_group_name)
+CollisionCheck::CollisionCheck(const std::string &move_group_name)
 {
   // If user specified true in yaml file
   if (jog_arm::coll_check)
   {
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
-    robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+    const robot_model::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
     planning_scene::PlanningScene planning_scene(kinematic_model);
     collision_detection::CollisionRequest collision_request;
     collision_request.group_name = move_group_name;
@@ -190,12 +190,12 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(std::string move_group_name) :
+JogCalcs::JogCalcs(const std::string& move_group_name) :
   arm_(move_group_name)
 {
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
-  robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
+  const robot_model::RobotModelPtr& kinematic_model = model_loader.getModel();
 
   kinematic_state_ = std::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();

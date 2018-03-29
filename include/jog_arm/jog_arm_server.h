@@ -140,7 +140,7 @@ double lpf::filter(const double& new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(std::string move_group_name);
+  JogCalcs(const std::string& move_group_name);
   
 protected:
   moveit::planning_interface::MoveGroupInterface arm_;
@@ -190,7 +190,7 @@ protected:
 class CollisionCheck
 {
 public:
-    CollisionCheck(std::string move_group_name);
+    CollisionCheck(const std::string &move_group_name);
 };
 
 } // namespace jog_arm
