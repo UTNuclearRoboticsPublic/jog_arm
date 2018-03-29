@@ -30,14 +30,15 @@
 
 #include "jog_arm/get_ros_params.h"
 
-std::string get_ros_params::getStringParam(std::string s, ros::NodeHandle& n)
+std::string get_ros_params::getStringParam(const std::string& name, ros::NodeHandle& n)
 {
-  if( !n.getParam(s, s) )
+  std::string s;
+  if( !n.getParam(name, s) )
     ROS_ERROR_STREAM("[JogCalcs::getStringParam] YAML config file does not contain parameter " << s);
   return s;
 }
 
-double get_ros_params::getDoubleParam(std::string name, ros::NodeHandle& n)
+double get_ros_params::getDoubleParam(const std::string& name, ros::NodeHandle& n)
 {
   double value;
   if( !n.getParam(name, value) )
@@ -45,7 +46,7 @@ double get_ros_params::getDoubleParam(std::string name, ros::NodeHandle& n)
   return value;
 }
 
-double get_ros_params::getIntParam(std::string name, ros::NodeHandle& n)
+double get_ros_params::getIntParam(const std::string& name, ros::NodeHandle& n)
 {
   int value;
   if( !n.getParam(name, value) )
@@ -53,7 +54,7 @@ double get_ros_params::getIntParam(std::string name, ros::NodeHandle& n)
   return value;
 }
 
-bool get_ros_params::getBoolParam(std::string name, ros::NodeHandle& n)
+bool get_ros_params::getBoolParam(const std::string& name, ros::NodeHandle& n)
 {
   bool value;
   if( !n.getParam(name, value) )
