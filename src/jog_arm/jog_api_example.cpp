@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : cpp_example.cpp
+//      Title     : jog_api_example.cpp
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -28,7 +28,7 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-// Perform a series of motions with the jog_arm API
+// Perform a motion with the jog_arm API
 
 #include "jog_arm/jog_api_example.h"
 
@@ -44,27 +44,28 @@ int main(int argc, char **argv)
   // Put your robot name here -- often "manipulator"
   //////////////////////////////////////////////////
   std::string move_group_name = "manipulator";
-  jog_api jog(move_group_name);
+  jog_api jogger(move_group_name);
 
   ////////////////////////////
   // Move to a good start pose
   ////////////////////////////
-  geometry_msgs::PoseStamped start_pose;
-  start_pose.header.frame_id = "world";
-  start_pose.header.stamp = ros::Time::now();
-  start_pose.pose.position.x = 0.4;
-  start_pose.pose.position.y = 0.23;
-  start_pose.pose.position.z = 0.4;
-  start_pose.pose.orientation.x = 0.025;
-  start_pose.pose.orientation.y = 0.247;
-  start_pose.pose.orientation.z = 0.283;
-  start_pose.pose.orientation.w = 0.926;
+  geometry_msgs::PoseStamped new_pose;
+  new_pose.header.frame_id = "world";
+  new_pose.header.stamp = ros::Time::now();
+  new_pose.pose.position.x = 0.4;
+  new_pose.pose.position.y = 0.23;
+  new_pose.pose.position.z = 0.4;
+  new_pose.pose.orientation.x = 0.025;
+  new_pose.pose.orientation.y = 0.247;
+  new_pose.pose.orientation.z = 0.283;
+  new_pose.pose.orientation.w = 0.926;
 
   // 1cm tolerance on the linear motion.
   // 0.01rad tolerance on the angular
   // Scale linear velocity commands between -0.5:0.5
   // Scale angular velocity commands between -1.0 : 1.0
-  if ( !jog.jacobian_move(start_pose, 0.01, 0.01, 0.5, 1.0))
+  // Timeout, i.e. stop sending commands, after 10s
+  if ( !jogger.jacobian_move(new_pose, 0.01, 0.01, 0.5, 1.0, ros::Duration(10)) )
 	{
   	ROS_ERROR_STREAM("Jacobian move failed");
   	return 1;

@@ -126,13 +126,13 @@ void *collisionCheck(void *)
 }
 
 // Constructor for the class that handles collision checking
-CollisionCheck::CollisionCheck(std::string move_group_name)
+CollisionCheck::CollisionCheck(const std::string &move_group_name)
 {
   // If user specified true in yaml file
   if (jog_arm::coll_check)
   {
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
-    robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+    const robot_model::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
     planning_scene::PlanningScene planning_scene(kinematic_model);
     collision_detection::CollisionRequest collision_request;
     collision_request.group_name = move_group_name;
@@ -190,12 +190,12 @@ CollisionCheck::CollisionCheck(std::string move_group_name)
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(std::string move_group_name) :
+JogCalcs::JogCalcs(const std::string& move_group_name) :
   arm_(move_group_name)
 {
   /** MoveIt Setup **/
   robot_model_loader::RobotModelLoader model_loader("robot_description");
-  robot_model::RobotModelPtr kinematic_model = model_loader.getModel();
+  const robot_model::RobotModelPtr& kinematic_model = model_loader.getModel();
 
   kinematic_state_ = std::shared_ptr<robot_state::RobotState>(new robot_state::RobotState(kinematic_model));
   kinematic_state_->setToDefaultValues();
@@ -368,11 +368,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   if (collision)
   {
     ROS_ERROR_THROTTLE(2,"[jog_arm_server jogCalcs] Dangerously close to a collision. Halting.");
-    for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
-    {
-      new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
-      new_jt_traj.points[0].velocities[i] = 0.;
-    }
+
+    halt(new_jt_traj);
   }
 
   // Verify that the future Jacobian is well-conditioned before moving.
@@ -384,14 +381,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
     if ( currentCN > jog_arm::hard_stop_sing_thresh )
     {
       ROS_ERROR_THROTTLE(2, "[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
-      for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
-      {
-        new_jt_traj.points[0].positions[i] = orig_jts_.position[i];
-        new_jt_traj.points[0].velocities[i] = 0.;
 
-        // Store all zeros in the velocity filter
-        reset_velocity_filters();
-      }
+      halt(new_jt_traj);
     }
     // Only somewhat close to singularity. Just slow down.
     else
@@ -419,6 +410,18 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
   pthread_mutex_lock(&jog_arm::new_traj_mutex);
   jog_arm::new_traj = new_jt_traj;
   pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+}
+
+// Halt the robot
+void JogCalcs::halt(trajectory_msgs::JointTrajectory& jt_traj)
+{
+  for (std::size_t i=0; i<jt_state_.velocity.size(); i++)
+  {
+    jt_traj.points[0].positions[i] = orig_jts_.position[i];
+    jt_traj.points[0].velocities[i] = 0.;
+  }
+  // Store all zeros in the velocity filter
+  reset_velocity_filters(); 
 }
 
 // Reset the data stored in filters so the trajectory won't jump when jogging is resumed.

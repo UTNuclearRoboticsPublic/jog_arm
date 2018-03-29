@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : motion_api.cpp
+//      Title     : jog_api.cpp
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -37,8 +37,12 @@
 // Param linear_vel_scale: scales the velocity components of outgoing Twist msgs. Should be 0<linear_vel_scale<1
 // Return true if successful.
 //////////////////////////////////////////////////////////////////////////////////////////////////
-bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, 
-  const double rot_tolerance, const double linear_vel_scale, const double rot_vel_scale)
+bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose,
+  const double trans_tolerance, 
+  const double rot_tolerance,
+  const double linear_vel_scale,
+  const double rot_vel_scale,
+  const ros::Duration& timeout)
 {
   // Velocity scaling should be between 0 and 1
   if ( 0.>linear_vel_scale || 1.<linear_vel_scale )
@@ -54,37 +58,28 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const doubl
 
   geometry_msgs::PoseStamped current_pose;
   current_pose = move_group_.getCurrentPose();
-  // Transform to the frame of target_pose
-  geometry_msgs::TransformStamped current_frame_to_target;
-  // Remove a leading slash, if any
-  if ( current_pose.header.frame_id.at(0) == '/' )
-    current_pose.header.frame_id.erase(0,1);
-  if ( target_pose.header.frame_id.at(0) == '/' )
-    target_pose.header.frame_id.erase(0,1);
-  current_frame_to_target = tf_buffer_.lookupTransform(current_pose.header.frame_id, target_pose.header.frame_id, ros::Time(0), ros::Duration(1.0) );
-  tf2::doTransform(current_pose, current_pose, current_frame_to_target);
+  // Transform to target frame
+  transform_a_pose(current_pose, target_pose.header.frame_id);
 
   // A structure to hold the result
   distance_and_twist distance_and_twist;
   distance_and_twist = calc_distance_and_twist(current_pose, target_pose, linear_vel_scale, rot_vel_scale);
 
+  ros::Time begin = ros::Time::now();
+
   // Is the current pose close enough?
-  while ( 
-    (distance_and_twist.translational_distance > trans_tolerance 
-    || distance_and_twist.rotational_distance > rot_tolerance) 
+  while (
+    (distance_and_twist.translational_distance > trans_tolerance || distance_and_twist.rotational_distance > rot_tolerance)
     && ros::ok() )
   {
+    // Have we timed out?
+    if ( ros::Time::now()-begin > timeout )
+      return false;
+
     // Get current robot pose
     current_pose = move_group_.getCurrentPose();
 
-    // Transform to the frame of target_pose
-    // Remove a leading slash, if any
-    if ( current_pose.header.frame_id.at(0) == '/' )
-      current_pose.header.frame_id.erase(0,1);
-    if ( target_pose.header.frame_id.at(0) == '/' )
-      target_pose.header.frame_id.erase(0,1);
-    current_frame_to_target = tf_buffer_.lookupTransform(current_pose.header.frame_id, target_pose.header.frame_id, ros::Time(0), ros::Duration(1.0) );
-    tf2::doTransform(current_pose, current_pose, current_frame_to_target);
+    transform_a_pose(current_pose, target_pose.header.frame_id);
 
     // Update distance and twist to target
     distance_and_twist = calc_distance_and_twist(current_pose, target_pose, linear_vel_scale, rot_vel_scale);
@@ -93,6 +88,24 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose, const doubl
     jog_vel_pub_.publish(distance_and_twist.twist);
     ros::Duration(0.01).sleep();
   }
+
+  return true;
+}
+
+
+////////////////////////////////////
+// Transform a pose into given frame
+////////////////////////////////////
+bool jog_api::transform_a_pose(geometry_msgs::PoseStamped &pose, std::string& desired_frame)
+{
+  // Remove a leading slash, if any
+  if ( pose.header.frame_id.at(0) == '/' )
+    pose.header.frame_id.erase(0,1);
+  if ( desired_frame.at(0) == '/' )
+    desired_frame.erase(0,1);
+
+  geometry_msgs::TransformStamped current_frame_to_target = tf_buffer_.lookupTransform(pose.header.frame_id, desired_frame, ros::Time(0), ros::Duration(1.0) );
+  tf2::doTransform(pose, pose, current_frame_to_target);
 
   return true;
 }

@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : motion_api.h
+//      Title     : jog_api.h
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
@@ -44,7 +44,7 @@
 class jog_api {
 public:
 	// Constructor
-  jog_api(std::string move_group_name) :
+  jog_api(const std::string& move_group_name) :
     move_group_(move_group_name),
     tf2_listener_(tf_buffer_)
   {
@@ -52,7 +52,12 @@ public:
   }
 
   // Publish cmds for a Cartesian motion to bring the robot to the target pose.
-  bool jacobian_move(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, const double rot_tolerance, const double linear_vel_scale, const double rot_vel_scale);
+  bool jacobian_move(geometry_msgs::PoseStamped& target_pose,
+    const double trans_tolerance,
+    const double rot_tolerance,
+    const double linear_vel_scale,
+    const double rot_vel_scale,
+    const ros::Duration& timeout);
 
 private:
 	ros::NodeHandle nh_;
@@ -64,6 +69,8 @@ private:
 
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf2_listener_;
+
+  bool transform_a_pose(geometry_msgs::PoseStamped &pose, std::string &desired_frame);
 
   // Calculate Euclidean distance between 2 Poses
   struct distance_and_twist {

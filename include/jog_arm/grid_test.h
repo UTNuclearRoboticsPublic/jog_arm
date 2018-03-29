@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : jog_api_example.h
+//      Title     : grid_test.h
 //      Project   : jog_arm
-//      Created   : 3/27/2018
+//      Created   : 3/28/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
 //      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
@@ -30,11 +30,13 @@
 
 // Perform a series of motions with the jog_arm API
 
-#ifndef JOG_API_EXAMPLE_H
-#define JOG_API_EXAMPLE_H
+#ifndef GRID_TEST_H
+#define GRID_TEST_H
 
 #include <geometry_msgs/PoseStamped.h>
 #include <jog_arm/jog_api.h>
 #include <ros/ros.h>
+
+bool move_to_pose(jog_api& jogger, geometry_msgs::PoseStamped& target_pose);
 
 #endif

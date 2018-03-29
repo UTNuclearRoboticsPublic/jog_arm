@@ -140,7 +140,7 @@ double lpf::filter(const double& new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(std::string move_group_name);
+  JogCalcs(const std::string& move_group_name);
   
 protected:
   moveit::planning_interface::MoveGroupInterface arm_;
@@ -168,6 +168,9 @@ protected:
   // Reset the data stored in low-pass filters so the trajectory won't jump when jogging is resumed.
   void reset_velocity_filters();
 
+  // Halt the robot
+  void halt(trajectory_msgs::JointTrajectory& jt_traj);
+
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;
@@ -190,7 +193,7 @@ protected:
 class CollisionCheck
 {
 public:
-    CollisionCheck(std::string move_group_name);
+    CollisionCheck(const std::string &move_group_name);
 };
 
 } // namespace jog_arm
