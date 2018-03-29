@@ -168,6 +168,9 @@ protected:
   // Reset the data stored in low-pass filters so the trajectory won't jump when jogging is resumed.
   void reset_velocity_filters();
 
+  // Halt the robot
+  void halt(trajectory_msgs::JointTrajectory& jt_traj);
+
   const robot_state::JointModelGroup* joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;

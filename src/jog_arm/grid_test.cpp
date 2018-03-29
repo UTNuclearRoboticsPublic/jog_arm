@@ -68,11 +68,11 @@ int main(int argc, char **argv)
   geometry_msgs::PoseStamped p = start_pose;
 
   double step = 0.03;
-  for (double delta_x=-0.03; delta_x<=0.03; delta_x+=step)
+  for (double delta_x=-0.03; delta_x<=0.06; delta_x+=step)
   {
-    for (double delta_y=-0.03; delta_y<=0.03; delta_y+=step)
+    for (double delta_y=-0.03; delta_y<=0.06; delta_y+=step)
     {
-      for (double delta_z=-0.03; delta_z<=0.03; delta_z+=step)
+      for (double delta_z=-0.03; delta_z<=0.06; delta_z+=step)
       {
         p.pose.position.x += delta_x;
         p.pose.position.y += delta_y;
@@ -103,7 +103,11 @@ int main(int argc, char **argv)
   //mgi.setPoseTarget(start_pose);
   std::vector<double> start_joints = {-1.343, -1.485, 1.697, 2.042, 0.596, 2.572};
   mgi.setJointValueTarget(start_joints);
-  mgi.move();
+  if ( !mgi.move() )
+  {
+    ROS_ERROR_STREAM("Move to start pose failed. Exiting.");
+    return 1;
+  }
 
 
   ////////////////////////////////////////
@@ -111,6 +115,7 @@ int main(int argc, char **argv)
   ////////////////////////////////////////
   ros::Time begin = ros::Time::now();
   int jog_arm_successes = 0;
+/*
   for(auto it = poses.begin(); it != poses.end(); ++it)
   {
     if (ros::ok())
@@ -128,10 +133,14 @@ int main(int argc, char **argv)
 
   ROS_INFO_STREAM("Completed " << jog_arm_successes << " of " << poses.size() << " poses.");
   ROS_INFO_STREAM("Trial took " << ros::Time::now()-begin << " seconds.");
-
+*/
   // Move to start pose
   mgi.setJointValueTarget(start_joints);
-  mgi.move();
+  if ( !mgi.move() )
+  {
+    ROS_ERROR_STREAM("Move to start pose failed. Exiting.");
+    return 1;
+  }
 
 
   ////////////////////////////////////////////

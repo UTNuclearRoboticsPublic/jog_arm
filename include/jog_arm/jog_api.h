@@ -70,7 +70,7 @@ private:
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf2_listener_;
 
-  bool transform_a_pose(geometry_msgs::PoseStamped &pose, std::string desired_frame);
+  bool transform_a_pose(geometry_msgs::PoseStamped &pose, std::string &desired_frame);
 
   // Calculate Euclidean distance between 2 Poses
   struct distance_and_twist {

@@ -96,7 +96,7 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped& target_pose,
 ////////////////////////////////////
 // Transform a pose into given frame
 ////////////////////////////////////
-bool jog_api::transform_a_pose(geometry_msgs::PoseStamped &pose, std::string desired_frame)
+bool jog_api::transform_a_pose(geometry_msgs::PoseStamped &pose, std::string& desired_frame)
 {
   // Remove a leading slash, if any
   if ( pose.header.frame_id.at(0) == '/' )
