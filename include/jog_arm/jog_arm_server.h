@@ -70,7 +70,7 @@ pthread_mutex_t joints_mutex;
 trajectory_msgs::JointTrajectory new_traj;
 pthread_mutex_t new_traj_mutex;
 
-bool imminent_collision;
+bool imminent_collision(false);
 pthread_mutex_t imminent_collision_mutex;
 
 bool zero_trajectory_flag_(false);

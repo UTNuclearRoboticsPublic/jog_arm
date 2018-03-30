@@ -55,10 +55,6 @@ int main(int argc, char **argv)
   // Check collisions in this thread
   pthread_t collisionThread;
   rc = pthread_create(&collisionThread, NULL, jog_arm::collisionCheck, 0);
-  // Initialize to no collisions
-  pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-  jog_arm::imminent_collision = false;
-  pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
 
   // ROS subscriptions. Share the data with the worker thread
   ros::Subscriber cmd_sub = n.subscribe( jog_arm::cmd_in_topic, 1, jog_arm::delta_cmd_cb);
