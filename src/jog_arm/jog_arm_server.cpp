@@ -55,10 +55,6 @@ int main(int argc, char **argv)
   // Check collisions in this thread
   pthread_t collisionThread;
   rc = pthread_create(&collisionThread, NULL, jog_arm::collisionCheck, 0);
-  // Initialize to no collisions
-  pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-  jog_arm::imminent_collision = false;
-  pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
 
   // ROS subscriptions. Share the data with the worker thread
   ros::Subscriber cmd_sub = n.subscribe( jog_arm::cmd_in_topic, 1, jog_arm::delta_cmd_cb);
@@ -563,35 +559,41 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("[jog_arm_server:readParams] Parameters:");
   ROS_INFO_STREAM("---------------------------------------");
-  jog_arm::move_group_name = get_ros_params::getStringParam("jog_arm_server/move_group_name", n);
+
+  // If specified in the launch file, all of the other parameters will be read from this namespace.
+  std::string parameter_ns;
+  ros::param::get("~parameter_ns", parameter_ns);
+  ROS_INFO_STREAM("Parameter namespace: " << parameter_ns);
+
+  jog_arm::move_group_name = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/move_group_name", n);
   ROS_INFO_STREAM("move_group_name: " << jog_arm::move_group_name);
-  jog_arm::linear_scale = get_ros_params::getDoubleParam("jog_arm_server/scale/linear", n);
+  jog_arm::linear_scale = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/scale/linear", n);
   ROS_INFO_STREAM("linear_scale: " << jog_arm::linear_scale);
-  jog_arm::rot_scale = get_ros_params::getDoubleParam("jog_arm_server/scale/rotational", n);
+  jog_arm::rot_scale = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/scale/rotational", n);
   ROS_INFO_STREAM("rot_scale: " << jog_arm::rot_scale);
-  jog_arm::low_pass_filter_coeff = get_ros_params::getDoubleParam("jog_arm_server/low_pass_filter_coeff", n);
+  jog_arm::low_pass_filter_coeff = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/low_pass_filter_coeff", n);
   ROS_INFO_STREAM("low_pass_filter_coeff: " << jog_arm::low_pass_filter_coeff);
-  jog_arm::joint_topic = get_ros_params::getStringParam("jog_arm_server/joint_topic", n);
+  jog_arm::joint_topic = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/joint_topic", n);
   ROS_INFO_STREAM("joint_topic: " << jog_arm::joint_topic);
-  jog_arm::cmd_in_topic = get_ros_params::getStringParam("jog_arm_server/cmd_in_topic", n);
+  jog_arm::cmd_in_topic = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/cmd_in_topic", n);
   ROS_INFO_STREAM("cmd_in_topic: " << jog_arm::cmd_in_topic);
-  jog_arm::cmd_frame = get_ros_params::getStringParam("jog_arm_server/cmd_frame", n);
+  jog_arm::cmd_frame = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/cmd_frame", n);
   ROS_INFO_STREAM("cmd_frame: " << jog_arm::cmd_frame);
-  jog_arm::incoming_cmd_timeout = get_ros_params::getDoubleParam("jog_arm_server/incoming_cmd_timeout", n);
+  jog_arm::incoming_cmd_timeout = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/incoming_cmd_timeout", n);
   ROS_INFO_STREAM("incoming_cmd_timeout: " << jog_arm::incoming_cmd_timeout);
-  jog_arm::cmd_out_topic = get_ros_params::getStringParam("jog_arm_server/cmd_out_topic", n);
+  jog_arm::cmd_out_topic = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/cmd_out_topic", n);
   ROS_INFO_STREAM("cmd_out_topic: " << jog_arm::cmd_out_topic);
-  jog_arm::singularity_threshold = get_ros_params::getDoubleParam("jog_arm_server/singularity_threshold", n);
+  jog_arm::singularity_threshold = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/singularity_threshold", n);
   ROS_INFO_STREAM("singularity_threshold: " << jog_arm::singularity_threshold);
-  jog_arm::hard_stop_sing_thresh = get_ros_params::getDoubleParam("jog_arm_server/hard_stop_singularity_threshold", n);
+  jog_arm::hard_stop_sing_thresh = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/hard_stop_singularity_threshold", n);
   ROS_INFO_STREAM("hard_stop_singularity_threshold: " << jog_arm::hard_stop_sing_thresh);
-  jog_arm::planning_frame = get_ros_params::getStringParam("jog_arm_server/planning_frame", n);
+  jog_arm::planning_frame = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/planning_frame", n);
   ROS_INFO_STREAM("planning_frame: " << jog_arm::planning_frame);
-  jog_arm::pub_period = get_ros_params::getDoubleParam("jog_arm_server/pub_period", n);
+  jog_arm::pub_period = get_ros_params::getDoubleParam(parameter_ns + "/jog_arm_server/pub_period", n);
   ROS_INFO_STREAM("pub_period: " << jog_arm::pub_period);
-  jog_arm::simu = get_ros_params::getBoolParam("jog_arm_server/simu", n);
+  jog_arm::simu = get_ros_params::getBoolParam(parameter_ns + "/jog_arm_server/simu", n);
   ROS_INFO_STREAM("simu: " << jog_arm::simu);
-  jog_arm::coll_check = get_ros_params::getBoolParam("jog_arm_server/coll_check", n);
+  jog_arm::coll_check = get_ros_params::getBoolParam(parameter_ns + "/jog_arm_server/coll_check", n);
   ROS_INFO_STREAM("coll_check: " << jog_arm::coll_check);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
