@@ -105,8 +105,8 @@ add_compile_options(-std=c++11)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES jog_arm
+  INCLUDE_DIRS include
+  LIBRARIES jog_api
   CATKIN_DEPENDS roscpp moveit_ros_manipulation moveit_ros_move_group moveit_ros_planning_interface tf
 )
 
