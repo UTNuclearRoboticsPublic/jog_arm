@@ -34,7 +34,7 @@ std::string get_ros_params::getStringParam(const std::string& name, ros::NodeHan
 {
   std::string s;
   if( !n.getParam(name, s) )
-    ROS_ERROR_STREAM("[JogCalcs::getStringParam] YAML config file does not contain parameter " << s);
+    ROS_ERROR_STREAM("[JogCalcs::getStringParam] YAML config file does not contain parameter " << name);
   return s;
 }
 
