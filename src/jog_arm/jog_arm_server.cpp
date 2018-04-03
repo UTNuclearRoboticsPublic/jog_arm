@@ -196,7 +196,10 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name)
 JogCalcs::JogCalcs(const std::string& move_group_name) :
   arm_(move_group_name)
 {
-  /** MoveIt Setup **/
+  // Publish collision status 
+  in_singularity_pub_ = nh_.advertise<std_msgs::Bool>(jog_arm::in_singularity_topic, 1);
+
+  // MoveIt Setup
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   const robot_model::RobotModelPtr& kinematic_model = model_loader.getModel();
 
@@ -280,7 +283,6 @@ JogCalcs::JogCalcs(const std::string& move_group_name) :
 void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
 {
   // Convert the cmd to the MoveGroup planning frame.
-
   try {
     listener_.waitForTransform( cmd.header.frame_id, jog_arm::planning_frame, ros::Time::now(), ros::Duration(0.2) );
   } catch (tf::TransformException ex) {
@@ -394,6 +396,10 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd)
       ROS_ERROR_THROTTLE(2, "[jog_arm_server jogCalcs] Dangerously close to a singularity (%f). Halting.", currentCN);
 
       halt(new_jt_traj);
+
+      std_msgs::Bool singularity_status;
+      singularity_status.data = true;
+      in_singularity_pub_.publish(singularity_status);
     }
     // Only somewhat close to singularity. Just slow down.
     else
@@ -612,6 +618,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("coll_check: " << jog_arm::coll_check);
   jog_arm::in_collision_topic = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/in_collision_topic", n);
   ROS_INFO_STREAM("in_collision_topic: " << jog_arm::in_collision_topic);
+  jog_arm::in_singularity_topic = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/in_singularity_topic", n);
+  ROS_INFO_STREAM("in_singularity_topic: " << jog_arm::in_singularity_topic);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
 

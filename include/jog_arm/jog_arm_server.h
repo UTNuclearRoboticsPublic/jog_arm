@@ -83,7 +83,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 
 // ROS params to be read
 int readParams(ros::NodeHandle& n);
-std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame, in_collision_topic;
+std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame, in_collision_topic, in_singularity_topic;
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 bool simu, coll_check;
 
@@ -144,6 +144,8 @@ public:
   JogCalcs(const std::string& move_group_name);
   
 protected:
+  ros::NodeHandle nh_;
+
   moveit::planning_interface::MoveGroupInterface arm_;
 
   geometry_msgs::TwistStamped cmd_deltas_;
@@ -190,6 +192,8 @@ protected:
 
   // Check whether incoming cmds are stale. Pause if so
   ros::Duration time_of_incoming_cmd_;
+
+  ros::Publisher in_singularity_pub_;
 };
 
 class CollisionCheck
