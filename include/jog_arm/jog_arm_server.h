@@ -47,6 +47,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
+#include <std_msgs/Bool.h>
 #include <string>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
@@ -82,7 +83,7 @@ void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
 
 // ROS params to be read
 int readParams(ros::NodeHandle& n);
-std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame;
+std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame, in_collision_topic;
 double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 bool simu, coll_check;
 
@@ -153,6 +154,7 @@ protected:
   
   void jogCalcs(const geometry_msgs::TwistStamped& cmd);
 
+  // Parse the incoming joint msg for the joints of our MoveGroup
   void updateJoints();
 
   Vector6d scaleCommand(const geometry_msgs::TwistStamped& command) const;
@@ -193,7 +195,12 @@ protected:
 class CollisionCheck
 {
 public:
-    CollisionCheck(const std::string &move_group_name);
+  CollisionCheck(const std::string &move_group_name);
+
+private:
+  ros::NodeHandle nh_;
+
+  ros::Publisher in_collision_pub_;
 };
 
 } // namespace jog_arm

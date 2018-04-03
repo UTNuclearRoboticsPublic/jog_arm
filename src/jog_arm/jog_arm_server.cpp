@@ -127,6 +127,10 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name)
   // If user specified true in yaml file
   if (jog_arm::coll_check)
   {
+    // Publish collision status 
+    in_collision_pub_ = nh_.advertise<std_msgs::Bool>(jog_arm::in_collision_topic, 1);
+    std_msgs::Bool collision_status;
+
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
     const robot_model::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
     planning_scene::PlanningScene planning_scene(kinematic_model);
@@ -171,6 +175,9 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name)
         pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
         jog_arm::imminent_collision = true;
         pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+
+        collision_status.data = true;
+        in_collision_pub_.publish(collision_status);
       }
       else
       {
@@ -202,13 +209,6 @@ JogCalcs::JogCalcs(const std::string& move_group_name) :
   std::vector<double> dummy_joint_values;
   kinematic_state_ -> copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
-  // Low-pass filters for the joint positions & velocities
-  for (std::size_t i=0; i<joint_names.size(); i++ )
-  {
-    velocity_filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ) );
-    position_filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ) );
-  }
-
   // Wait for initial messages
   ROS_INFO_STREAM("[jog_arm_server JogCalcs] Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
@@ -219,6 +219,21 @@ JogCalcs::JogCalcs(const std::string& move_group_name) :
   jt_state_.position.resize(jt_state_.name.size());
   jt_state_.velocity.resize(jt_state_.name.size());
   jt_state_.effort.resize(jt_state_.name.size());
+
+  // Low-pass filters for the joint positions & velocities
+  for (std::size_t i=0; i<joint_names.size(); i++ )
+  {
+    velocity_filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ) );
+    position_filters_.push_back( jog_arm::lpf( jog_arm::low_pass_filter_coeff ) );
+  }
+
+  // Initialize the position filters to initial robot joints
+  pthread_mutex_lock(&joints_mutex);
+  incoming_jts_ = jog_arm::joints;
+  pthread_mutex_unlock(&joints_mutex);
+  updateJoints();
+  for (std::size_t i=0; i < jt_state_.name.size(); i++)
+    position_filters_[i].reset( jt_state_.position[i] );
 
   // Wait for the first jogging cmd.
   // Store it in a class member for further calcs.
@@ -595,6 +610,8 @@ int readParams(ros::NodeHandle& n)
   ROS_INFO_STREAM("simu: " << jog_arm::simu);
   jog_arm::coll_check = get_ros_params::getBoolParam(parameter_ns + "/jog_arm_server/coll_check", n);
   ROS_INFO_STREAM("coll_check: " << jog_arm::coll_check);
+  jog_arm::in_collision_topic = get_ros_params::getStringParam(parameter_ns + "/jog_arm_server/in_collision_topic", n);
+  ROS_INFO_STREAM("in_collision_topic: " << jog_arm::in_collision_topic);
   ROS_INFO_STREAM("---------------------------------------");
   ROS_INFO_STREAM("---------------------------------------");
 
