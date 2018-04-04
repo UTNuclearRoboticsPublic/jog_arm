@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_move_group
   moveit_ros_planning_interface
   cmake_modules
+  std_msgs
   tf
   tf2_geometry_msgs
 )
@@ -106,7 +107,7 @@ add_compile_options(-std=c++11)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES jog_api
+  LIBRARIES compliant_control jog_api
   CATKIN_DEPENDS roscpp moveit_ros_manipulation moveit_ros_move_group moveit_ros_planning_interface tf
 )
 
@@ -125,6 +126,7 @@ include_directories(
 
 ## Declare a C++ library
 add_library(jog_api src/jog_arm/jog_api.cpp)
+add_library(compliant_control src/compliant_control/compliant_control.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -182,11 +184,11 @@ install(DIRECTORY include/${PROJECT_NAME}/
 ## Testing ##
 #############
 
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_jog_arm.cpp)
-# if(TARGET ${PROJECT_NAME}-test)
-#   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-# endif()
+if(CATKIN_ENABLE_TESTING)
+  find_package(rostest)
+  set(UTEST_SRC_FILES test/utest.cpp
+      test/compliant_control.cpp)
 
-## Add folders to be run by python nosetests
-# catkin_add_nosetests(test)
+  add_rostest_gtest(${PROJECT_NAME}_utest test/launch/utest.launch ${UTEST_SRC_FILES})
+  target_link_libraries(${PROJECT_NAME}_utest ${PROJECT_NAME} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+endif()
