@@ -16,6 +16,7 @@
   <author>Brian O'Neil</author>
   <author email="andyz@utexas.edu">Andy Zelenak</author>
   <author email="blakeanderson@utexas.edu">Blake Anderson</author>
+  <author>Nitish Sharma</author>
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>cmake_modules</depend>
