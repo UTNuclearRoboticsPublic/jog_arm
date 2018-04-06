@@ -133,17 +133,21 @@ add_library(compliant_control src/compliant_control/compliant_control.cpp)
 ## either from message generation or dynamic reconfigure
 # add_dependencies(jog_arm ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/jog_arm/get_ros_params.cpp)
+add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/support/get_ros_params.cpp)
 add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
-add_executable(jog_api_example src/jog_arm/jog_api_example.cpp)
+add_executable(jog_api_example src/support/jog_api_example.cpp)
 add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_api_example ${catkin_LIBRARIES} jog_api)
 
-add_executable(grid_test src/jog_arm/grid_test.cpp)
+add_executable(grid_test src/support/grid_test.cpp)
 add_dependencies(grid_test ${catkin_EXPORTED_TARGETS})
 target_link_libraries(grid_test ${catkin_LIBRARIES} jog_api)
+
+add_executable(compliance_test src/compliance_test/compliance_test.cpp)
+add_dependencies(compliance_test ${catkin_EXPORTED_TARGETS})
+target_link_libraries(compliance_test ${catkin_LIBRARIES} compliant_control)
 
 #############
 ## Install ##

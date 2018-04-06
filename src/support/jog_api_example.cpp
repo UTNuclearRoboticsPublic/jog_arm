@@ -30,7 +30,7 @@
 
 // Perform a motion with the jog_arm API
 
-#include "jog_arm/jog_api_example.h"
+#include "support/jog_api_example.h"
 
 int main(int argc, char **argv)
 {

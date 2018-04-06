@@ -30,7 +30,7 @@
 
 // Test with motions to a grid of poses.
 
-#include "jog_arm/grid_test.h"
+#include "support/grid_test.h"
 
 int main(int argc, char **argv)
 {
