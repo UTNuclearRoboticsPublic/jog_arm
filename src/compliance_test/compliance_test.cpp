@@ -60,16 +60,27 @@ compliance_test::compliance_class::compliance_class() :
   // Listen to wrench data from a force/torque sensor
   ft_sub_ = n_.subscribe("left_ur5_wrench", 1, &compliance_class::ft_cb, this);
 
+  // Wait for first ft data to arrive
+  ROS_INFO_STREAM("[compliance_test] Waiting for first force/torque data.");
+  while (ros::ok() && ft_data_.header.frame_id == "")
+  	ros::Duration(0.1).sleep();
+  ROS_INFO_STREAM("[compliance_test] Received initial FT data.");
+  // Wait for the FT data to stabilize.
+  ros::Duration(2.).sleep();
+
   // Sleep to allow the publishers to be created
   ros::Duration(2.).sleep();
 
-  // Objects to handle compliant motions
   // Key equation: compliance_velocity[i] = wrench[i]/stiffness[i]
-  std::vector<double> stiffness(6, 5.0);
+  std::vector<double> stiffness(6, 30.);
   double filterCutoff = 10.;
 
-  // Stop when any force exceeds 5 N, or torque exceeds 5 Nm
-  std::vector<double> endConditionWrench(6, 5.0);
+  // Stop when any force exceeds X N, or torque exceeds X Nm
+  std::vector<double> endConditionWrench(6, 60.0);
+
+  ROS_INFO_STREAM("[compliance_test] The wrench used for initialization was:");
+  ROS_INFO_STREAM(ft_data_);
+
   // An object for compliant control
   compliant_control::compliantControl comp(stiffness, endConditionWrench, filterCutoff, ft_data_);
 
@@ -85,8 +96,8 @@ compliance_test::compliance_class::compliance_class() :
   ft_data_ = transformToEEF(ft_data_, jog_cmd.header.frame_id);
   compliantEnum::exitCondition compliance_condition = comp.getVelocity(vel_nom, ft_data_, vel_out);
 
-  // Loop at 100 Hz. Specific frequency is not critical
-  ros::Rate rate(1.);
+  // Loop at X Hz. Specific frequency is not critical
+  ros::Rate rate(100.);
 
   while ( ros::ok() && 
     !jog_is_halted_  && 
@@ -99,16 +110,19 @@ compliance_test::compliance_class::compliance_class() :
 
     // Send cmds to the robots
     jog_cmd.header.stamp = ros::Time::now();
-    jog_cmd.twist.linear.x = vel_out[0]; jog_cmd.twist.linear.y = vel_out[1]; jog_cmd.twist.linear.z = vel_out[2];
-    jog_cmd.twist.angular.x = vel_out[3]; jog_cmd.twist.angular.y = vel_out[4]; jog_cmd.twist.angular.z = vel_out[5];
-    //vel_pub_.publish(jog_cmd);
-    ROS_INFO_STREAM(jog_cmd);
+    jog_cmd.twist.linear.x = vel_out[0]; 
+    jog_cmd.twist.linear.y = vel_out[1];
+    jog_cmd.twist.linear.z = vel_out[2];
+    jog_cmd.twist.angular.x = vel_out[3];
+    jog_cmd.twist.angular.y = vel_out[4];
+    jog_cmd.twist.angular.z = vel_out[5];
+    vel_pub_.publish(jog_cmd);
 
   	rate.sleep();
   }
 
   if (jog_is_halted_)
-    ROS_WARN_STREAM("[two_hand_turn::turn_class] Jogging was halted. Singularity, jt limit, or collision?");
+    ROS_WARN_STREAM("[compliance_test] Jogging was halted. Singularity, jt limit, or collision?");
 }
 
 
@@ -130,11 +144,9 @@ void compliance_test::compliance_class::ft_cb(const geometry_msgs::WrenchStamped
 // Transform a wrench to the EE frame
 geometry_msgs::WrenchStamped compliance_test::compliance_class::transformToEEF(const geometry_msgs::WrenchStamped wrench_in, const std::string desired_ee_frame)
 {
-
   geometry_msgs::TransformStamped prev_frame_to_new;
 
-  prev_frame_to_new = tf_buffer_.lookupTransform(wrench_in.header.frame_id, desired_ee_frame, ros::Time(0), ros::Duration(1.0) );
-
+  prev_frame_to_new = tf_buffer_.lookupTransform(desired_ee_frame, wrench_in.header.frame_id, ros::Time(0), ros::Duration(1.0) );
 
   // There is no method to transform a Wrench, so break it into vectors and transform one at a time
   geometry_msgs::Vector3Stamped force_vector;
@@ -153,8 +165,6 @@ geometry_msgs::WrenchStamped compliance_test::compliance_class::transformToEEF(c
   wrench_out.header.frame_id = desired_ee_frame;
   wrench_out.wrench.force = force_vector.vector;
   wrench_out.wrench.torque = torque_vector.vector;
-
-  ROS_ERROR_STREAM(wrench_out);
 
   return wrench_out;
 }
