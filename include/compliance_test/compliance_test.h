@@ -4,9 +4,11 @@
 //      Created   : 4/2/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
-//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
+//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
+//      rights reserved.
 //
-//          All files within this directory are subject to the following, unless an alternative
+//          All files within this directory are subject to the following, unless
+//          an alternative
 //          license is explicitly included within the text of each file.
 //
 //          This software and documentation constitute an unpublished work
@@ -22,17 +24,20 @@
 //          THE SOFTWARE OR DOCUMENTATION. Under no circumstances shall the
 //          University be liable for incidental, special, indirect, direct or
 //          consequential damages or loss of profits, interruption of business,
-//          or related expenses which may arise from use of software or documentation,
-//          including but not limited to those resulting from defects in software
+//          or related expenses which may arise from use of software or
+//          documentation,
+//          including but not limited to those resulting from defects in
+//          software
 //          and/or documentation, or loss or inaccuracy of data of any kind.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-// Demonstrate compliance on a stationary robot. The robot should act like a spring
+// Demonstrate compliance on a stationary robot. The robot should act like a
+// spring
 // when pushed.
 
-#ifndef TEACH_MOTIONS_H
-#define TEACH_MOTIONS_H
+#ifndef COMPLIANCE_TEST_H
+#define COMPLIANCE_TEST_H
 
 #include <compliant_control/compliant_control.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -44,22 +49,22 @@
 
 namespace compliance_test {
 
-class compliance_class
-{
+class compliance_class {
 
 public:
-	compliance_class();
+  compliance_class();
 
 private:
-
   // CB for halt warnings from the jog_arm nodes
-  void halt_cb(const std_msgs::Bool::ConstPtr& msg);
+  void halt_cb(const std_msgs::Bool::ConstPtr &msg);
 
   // CB for force/torque data
-  void ft_cb(const geometry_msgs::WrenchStamped::ConstPtr& msg);
+  void ft_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg);
 
   // Transform a wrench to the EE frame
-  geometry_msgs::WrenchStamped transformToEEF(const geometry_msgs::WrenchStamped wrench_in, const std::string desired_ee_frame);
+  geometry_msgs::WrenchStamped
+  transformToEEF(const geometry_msgs::WrenchStamped wrench_in,
+                 const std::string desired_ee_frame);
 
   ros::NodeHandle n_;
 
@@ -76,7 +81,7 @@ private:
   bool jog_is_halted_ = false;
 
   tf2_ros::Buffer tf_buffer_;
-	tf2_ros::TransformListener tf_listener_;
+  tf2_ros::TransformListener tf_listener_;
 };
 
 } // end namespace compliance_test

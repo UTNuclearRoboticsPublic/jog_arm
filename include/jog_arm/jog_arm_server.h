@@ -4,9 +4,11 @@
 //      Created   : 3/9/2017
 //      Author    : Brian O'Neil, Blake Anderson, Andy Zelenak
 //      Platforms : Ubuntu 64-bit
-//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
-//                 
-//          All files within this directory are subject to the following, unless an alternative
+//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
+//      rights reserved.
+//
+//          All files within this directory are subject to the following, unless
+//          an alternative
 //          license is explicitly included within the text of each file.
 //
 //          This software and documentation constitute an unpublished work
@@ -22,21 +24,21 @@
 //          THE SOFTWARE OR DOCUMENTATION. Under no circumstances shall the
 //          University be liable for incidental, special, indirect, direct or
 //          consequential damages or loss of profits, interruption of business,
-//          or related expenses which may arise from use of software or documentation,
-//          including but not limited to those resulting from defects in software
+//          or related expenses which may arise from use of software or
+//          documentation,
+//          including but not limited to those resulting from defects in
+//          software
 //          and/or documentation, or loss or inaccuracy of data of any kind.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-
-//Server node for arm jogging with MoveIt.
+// Server node for arm jogging with MoveIt.
 
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H
 
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <support/get_ros_params.h>
 #include <math.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -49,9 +51,9 @@
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
 #include <string>
+#include <support/get_ros_params.h>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
-
 
 namespace jog_arm {
 
@@ -78,38 +80,35 @@ bool zero_trajectory_flag_(false);
 pthread_mutex_t zero_trajectory_flag_mutex;
 
 // ROS subscriber callbacks
-void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr& msg);
-void joints_cb(const sensor_msgs::JointStateConstPtr& msg);
+void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr &msg);
+void joints_cb(const sensor_msgs::JointStateConstPtr &msg);
 
 // ROS params to be read
-int readParams(ros::NodeHandle& n);
-std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame, cmd_out_topic, planning_frame, in_collision_topic, in_singularity_topic;
-double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh, low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
+int readParams(ros::NodeHandle &n);
+std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame,
+    cmd_out_topic, planning_frame, in_collision_topic, in_singularity_topic;
+double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh,
+    low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
 bool simu, coll_check;
 
 /**
  * Class lpf - Filter the joint velocities to avoid jerky motion.
  */
-class lpf
-{
-  public:
-    lpf(double low_pass_filter_coeff);
-    double filter(const double& new_msrmt);
-    void reset(double data);
-    double c_ = 10.;
+class lpf {
+public:
+  lpf(double low_pass_filter_coeff);
+  double filter(const double &new_msrmt);
+  void reset(double data);
+  double c_ = 10.;
 
-  private:
-    double prev_msrmts_ [3] = {0., 0., 0.};
-    double prev_filtered_msrmts_ [2] = {0., 0.};
+private:
+  double prev_msrmts_[3] = {0., 0., 0.};
+  double prev_filtered_msrmts_[2] = {0., 0.};
 };
 
-lpf::lpf(double low_pass_filter_coeff)
-{
-  c_ = low_pass_filter_coeff;
-}
+lpf::lpf(double low_pass_filter_coeff) { c_ = low_pass_filter_coeff; }
 
-void lpf::reset(double data)
-{
+void lpf::reset(double data) {
   prev_msrmts_[0] = data;
   prev_msrmts_[1] = data;
   prev_msrmts_[2] = data;
@@ -118,31 +117,32 @@ void lpf::reset(double data)
   prev_filtered_msrmts_[1] = data;
 }
 
-double lpf::filter(const double& new_msrmt)
-{
+double lpf::filter(const double &new_msrmt) {
   // Push in the new measurement
   prev_msrmts_[2] = prev_msrmts_[1];
   prev_msrmts_[1] = prev_msrmts_[0];
   prev_msrmts_[0] = new_msrmt;
 
-  double new_filtered_msrmt = (1/(1+c_*c_+1.414*c_))*(prev_msrmts_[2]+2*prev_msrmts_[1]+prev_msrmts_[0]-(c_*c_-1.414*c_+1)*prev_filtered_msrmts_[1]-(-2*c_*c_+2)*prev_filtered_msrmts_[0]);
+  double new_filtered_msrmt =
+      (1 / (1 + c_ * c_ + 1.414 * c_)) *
+      (prev_msrmts_[2] + 2 * prev_msrmts_[1] + prev_msrmts_[0] -
+       (c_ * c_ - 1.414 * c_ + 1) * prev_filtered_msrmts_[1] -
+       (-2 * c_ * c_ + 2) * prev_filtered_msrmts_[0]);
 
   // Store the new filtered measurement
   prev_filtered_msrmts_[1] = prev_filtered_msrmts_[0];
   prev_filtered_msrmts_[0] = new_filtered_msrmt;
- 
+
   return new_filtered_msrmt;
 }
-
 
 /**
  * Class JogCalcs - Perform the Jacobian calculations.
  */
-class JogCalcs
-{
+class JogCalcs {
 public:
-  JogCalcs(const std::string& move_group_name);
-  
+  JogCalcs(const std::string &move_group_name);
+
 protected:
   ros::NodeHandle nh_;
 
@@ -151,36 +151,39 @@ protected:
   geometry_msgs::TwistStamped cmd_deltas_;
 
   sensor_msgs::JointState incoming_jts_;
-  
+
   typedef Eigen::Matrix<double, 6, 1> Vector6d;
-  
-  void jogCalcs(const geometry_msgs::TwistStamped& cmd);
+
+  void jogCalcs(const geometry_msgs::TwistStamped &cmd);
 
   // Parse the incoming joint msg for the joints of our MoveGroup
   void updateJoints();
 
-  Vector6d scaleCommand(const geometry_msgs::TwistStamped& command) const;
-  
-  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
-  
-  bool addJointIncrements(sensor_msgs::JointState &output, const Eigen::VectorXd &increments) const;
+  Vector6d scaleCommand(const geometry_msgs::TwistStamped &command) const;
 
-  bool updateJointVels(sensor_msgs::JointState &output, const Eigen::VectorXd &joint_vels) const;
-  
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
+
+  bool addJointIncrements(sensor_msgs::JointState &output,
+                          const Eigen::VectorXd &increments) const;
+
+  bool updateJointVels(sensor_msgs::JointState &output,
+                       const Eigen::VectorXd &joint_vels) const;
+
   double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
 
-  // Reset the data stored in low-pass filters so the trajectory won't jump when jogging is resumed.
+  // Reset the data stored in low-pass filters so the trajectory won't jump when
+  // jogging is resumed.
   void reset_velocity_filters();
 
   // Halt the robot
-  void halt(trajectory_msgs::JointTrajectory& jt_traj);
+  void halt(trajectory_msgs::JointTrajectory &jt_traj);
 
-  const robot_state::JointModelGroup* joint_model_group_;
+  const robot_state::JointModelGroup *joint_model_group_;
 
   robot_state::RobotStatePtr kinematic_state_;
-  
+
   sensor_msgs::JointState jt_state_, orig_jts_;
-  
+
   tf::TransformListener listener_;
 
   ros::Time prev_time_;
@@ -196,8 +199,7 @@ protected:
   ros::Publisher in_singularity_pub_;
 };
 
-class CollisionCheck
-{
+class CollisionCheck {
 public:
   CollisionCheck(const std::string &move_group_name);
 

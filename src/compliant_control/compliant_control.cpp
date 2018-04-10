@@ -5,7 +5,8 @@
 namespace compliant_control {
 
 compliantControl::compliantControl(std::vector<double> stiffness,
-                                   std::vector<double> endConditionWrench, double filterCutoff,
+                                   std::vector<double> endConditionWrench,
+                                   double filterCutoff,
                                    geometry_msgs::WrenchStamped bias)
     : stiffness_(stiffness), endConditionWrench_(endConditionWrench) {
   bias_.resize(compliantEnum::NUM_DIMS);
@@ -57,15 +58,19 @@ void compliantControl::setStiffness(std::vector<double> b) {
   }
 }
 
-void compliantControl::setSafetyLimit(double safeWrenchLimit) { safeWrenchLimit_ = safeWrenchLimit; }
+void compliantControl::setSafetyLimit(double safeWrenchLimit) {
+  safeWrenchLimit_ = safeWrenchLimit;
+}
 
-void compliantControl::setExitCondition(std::vector<double> endConditionWrench) {
+void compliantControl::setExitCondition(
+    std::vector<double> endConditionWrench) {
   if (endConditionWrench.size() != compliantEnum::NUM_DIMS) {
     ROS_ERROR_STREAM("Invalid vector endConditionWrench: ");
   } else {
     for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
       endConditionWrench_[i] = endConditionWrench[i];
-      //ROS_INFO_STREAM("setting condition for compliant control in direction " << i);
+      // ROS_INFO_STREAM("setting condition for compliant control in direction "
+      // << i);
     }
   }
 }
@@ -111,7 +116,8 @@ compliantControl::getVelocity(std::vector<double> vIn,
                               std::vector<double> &vOut) {
   compliantEnum::exitCondition exitCondition = compliantEnum::NOT_CONTROLLED;
   getFT(ftData);
-  //ROS_ERROR_STREAM("Internal Fitered F: " << ft_[0] << "  " << ft_[1] << "  " <<ft_[2]);
+  // ROS_ERROR_STREAM("Internal Fitered F: " << ft_[0] << "  " << ft_[1] << "  "
+  // <<ft_[2]);
 
   if ((fabs(ft_[0]) + fabs(ft_[1]) + fabs(ft_[2])) >= safeWrenchLimit_) {
     ROS_ERROR_STREAM(
@@ -121,8 +127,7 @@ compliantControl::getVelocity(std::vector<double> vIn,
   }
 
   for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
-    if ( endConditionWrench_[i]>0 )
-    {
+    if (endConditionWrench_[i] > 0) {
       if (ft_[i] > endConditionWrench_[i]) {
         ROS_INFO_STREAM("Exit condition met in direction: " << i);
         vOut[i] = 0.0;
@@ -134,8 +139,7 @@ compliantControl::getVelocity(std::vector<double> vIn,
           exitCondition = compliantEnum::CONDITION_NOT_MET;
         }
       }
-    }
-    else // endConditionWrench_[i]<=0
+    } else // endConditionWrench_[i]<=0
     {
       if (ft_[i] < endConditionWrench_[i]) {
         ROS_INFO_STREAM("Exit condition met in direction: " << i);
@@ -164,7 +168,8 @@ double lpf::filter(const double &new_msrmt) {
   double new_filtered_msrmt =
       (1 / (1 + filterCutoff_ * filterCutoff_ + 1.414 * filterCutoff_)) *
       (prev_msrmts_[2] + 2 * prev_msrmts_[1] + prev_msrmts_[0] -
-       (filterCutoff_ * filterCutoff_ - 1.414 * filterCutoff_ + 1) * prev_filtered_msrmts_[1] -
+       (filterCutoff_ * filterCutoff_ - 1.414 * filterCutoff_ + 1) *
+           prev_filtered_msrmts_[1] -
        (-2 * filterCutoff_ * filterCutoff_ + 2) * prev_filtered_msrmts_[0]);
   ;
 
@@ -179,6 +184,4 @@ void lpf::reset(double data) {
   prev_msrmts_ = {data, data, data};
   prev_filtered_msrmts_ = {data, data};
 }
-
-
 }

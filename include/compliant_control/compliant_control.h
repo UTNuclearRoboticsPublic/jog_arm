@@ -4,7 +4,8 @@
 /**
  * compliant control class. Allows you to control each dimension with a
  * compliant constant.
- * The key equation for each dimension is compliance_velocity[i] = wrench[i]/stiffness[i]
+ * The key equation for each dimension is compliance_velocity[i] =
+ * wrench[i]/stiffness[i]
  */
 
 #include <float.h>
@@ -59,7 +60,8 @@ public:
   /**
    * Constructor.
    */
-  compliantControl(std::vector<double> stiffness, std::vector<double> endConditionWrench, double c,
+  compliantControl(std::vector<double> stiffness,
+                   std::vector<double> endConditionWrench, double c,
                    geometry_msgs::WrenchStamped bias);
 
   /**
@@ -92,13 +94,13 @@ public:
 
   // Set the target FT wrench
   compliantEnum::exitCondition getVelocity(geometry_msgs::TwistStamped vIn,
-                                            geometry_msgs::WrenchStamped ftData,
-                                            geometry_msgs::TwistStamped &vOut);
+                                           geometry_msgs::WrenchStamped ftData,
+                                           geometry_msgs::TwistStamped &vOut);
 
   // Set the target FT wrench
   compliantEnum::exitCondition getVelocity(std::vector<double> vIn,
-                                            geometry_msgs::WrenchStamped ftData,
-                                            std::vector<double> &vOut);
+                                           geometry_msgs::WrenchStamped ftData,
+                                           std::vector<double> &vOut);
 
   /**
    * Set the topic that force/torque data is read from.
