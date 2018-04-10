@@ -72,7 +72,11 @@ compliance_test::compliance_class::compliance_class() :
   ros::Duration(2.).sleep();
 
   // Key equation: compliance_velocity[i] = wrench[i]/stiffness[i]
-  std::vector<double> stiffness(6, 30.);
+  std::vector<double> stiffness(6, 50.);
+  // Less stiff for rotation
+  stiffness[3] = 10.;
+  stiffness[4] = 10.;
+  stiffness[5] = 10.;
   double filterCutoff = 10.;
 
   // Stop when any force exceeds X N, or torque exceeds X Nm
