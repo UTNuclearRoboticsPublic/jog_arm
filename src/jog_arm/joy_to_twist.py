@@ -22,8 +22,6 @@ class joy_to_twist:
 
     # Convert to TwistStamped and republish
     def callback(self, joy):
-        #rospy.loginfo("Incoming joy: %s", joy)
-        #rospy.loginfo("")
 
         ts = TwistStamped()
 
@@ -39,9 +37,6 @@ class joy_to_twist:
         ts.twist.angular.y = joy.axes[4]
         # These buttons are binary
         ts.twist.angular.z = -joy.buttons[0] + joy.buttons[1]
-
-        #rospy.loginfo("Outgoing ts: %s", ts)
-        #rospy.loginfo("")
 
         self.pub.publish(ts)
         

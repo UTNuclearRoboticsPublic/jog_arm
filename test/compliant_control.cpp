@@ -13,7 +13,6 @@ TEST(CompliantControlTest, constructor) {
   std::vector<bool> endCondition(6, false);
   std::vector<double> haltF(6, 20.0);
   geometry_msgs::WrenchStamped ftData0;
-  //  ROS_ERROR_STREAM(ftData0);
   compliant_control::CompliantControl control(b, condF, haltF, endCondition,
                                               ftData0);
 }

@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(jog_arm)
 
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
+add_compile_options(-std=c++11)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   moveit_ros_manipulation
@@ -15,178 +16,52 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs
 )
 
-## System dependencies are found with CMake's conventions
 find_package(Eigen3 REQUIRED)
 
-add_compile_options(-std=c++11)
-
-## Uncomment this if the package has a setup.py. This macro ensures
-## modules and global scripts declared therein get installed
-## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
-
-################################################
-## Declare ROS messages, services and actions ##
-################################################
-
-## To declare and build messages, services or actions from within this
-## package, follow these steps:
-## * Let MSG_DEP_SET be the set of packages whose message types you use in
-##   your messages/services/actions (e.g. std_msgs, actionlib_msgs, ...).
-## * In the file package.xml:
-##   * add a build_depend tag for "message_generation"
-##   * add a build_depend and a run_depend tag for each package in MSG_DEP_SET
-##   * If MSG_DEP_SET isn't empty the following dependency has been pulled in
-##     but can be declared for certainty nonetheless:
-##     * add a run_depend tag for "message_runtime"
-## * In this file (CMakeLists.txt):
-##   * add "message_generation" and every package in MSG_DEP_SET to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * add "message_runtime" and every package in MSG_DEP_SET to
-##     catkin_package(CATKIN_DEPENDS ...)
-##   * uncomment the add_*_files sections below as needed
-##     and list every .msg/.srv/.action file to be processed
-##   * uncomment the generate_messages entry below
-##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
-
-## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
-
-## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
-
-## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
-
-## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
-
-################################################
-## Declare ROS dynamic reconfigure parameters ##
-################################################
-
-## To declare and build dynamic reconfigure parameters within this
-## package, follow these steps:
-## * In the file package.xml:
-##   * add a build_depend and a run_depend tag for "dynamic_reconfigure"
-## * In this file (CMakeLists.txt):
-##   * add "dynamic_reconfigure" to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * uncomment the "generate_dynamic_reconfigure_options" section below
-##     and list every .cfg file to be processed
-
-## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
-
-###################################
-## catkin specific configuration ##
-###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if you package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES compliant_control jog_api
-  CATKIN_DEPENDS roscpp moveit_ros_manipulation moveit_ros_move_group moveit_ros_planning_interface tf
+  INCLUDE_DIRS
+    include
+  LIBRARIES
+    compliant_control
+    jog_api
+  CATKIN_DEPENDS
+    roscpp
+    moveit_ros_manipulation
+    moveit_ros_move_group
+    moveit_ros_planning_interface
+    tf
 )
 
-###########
-## Build ##
-###########
-
-## Specify additional locations of header files
-## Your package locations should be listed before other locations
-# include_directories(include)
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
 add_library(jog_api src/jog_arm/jog_api.cpp)
 add_library(compliant_control src/compliant_control/compliant_control.cpp)
-
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(jog_arm ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/support/get_ros_params.cpp)
-add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
-target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
-
-add_executable(jog_api_example src/support/jog_api_example.cpp)
-add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})
-target_link_libraries(jog_api_example ${catkin_LIBRARIES} jog_api)
-
-add_executable(grid_test src/support/grid_test.cpp)
-add_dependencies(grid_test ${catkin_EXPORTED_TARGETS})
-target_link_libraries(grid_test ${catkin_LIBRARIES} jog_api)
 
 add_executable(compliance_test src/compliance_test/compliance_test.cpp)
 add_dependencies(compliance_test ${catkin_EXPORTED_TARGETS})
 target_link_libraries(compliance_test ${catkin_LIBRARIES} compliant_control)
 
-#############
-## Install ##
-#############
+add_executable(grid_test src/support/grid_test.cpp)
+add_dependencies(grid_test ${catkin_EXPORTED_TARGETS})
+target_link_libraries(grid_test ${catkin_LIBRARIES} jog_api)
 
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
+add_executable(jog_api_example src/support/jog_api_example.cpp)
+add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})
+target_link_libraries(jog_api_example ${catkin_LIBRARIES} jog_api)
 
-## Mark executable scripts (Python etc.) for installation
-## in contrast to setup.py, you can choose the destination
-# install(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/support/get_ros_params.cpp)
+add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
+target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
-## Mark executables and/or libraries for installation
-# install(TARGETS jog_arm jog_arm
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
-
-## Mark cpp header files for installation
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   FILES_MATCHING PATTERN "*.h"
   PATTERN ".svn" EXCLUDE
 )
-
-## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
-
-#############
-## Testing ##
-#############
 
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest)

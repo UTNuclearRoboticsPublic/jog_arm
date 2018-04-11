@@ -62,10 +62,10 @@ compliance_test::compliance_class::compliance_class()
   ft_sub_ = n_.subscribe("left_ur5_wrench", 1, &compliance_class::ft_cb, this);
 
   // Wait for first ft data to arrive
-  ROS_INFO_STREAM("[compliance_test] Waiting for first force/torque data.");
+  ROS_INFO_NAMED("compliance_test", "Waiting for first force/torque data.");
   while (ros::ok() && ft_data_.header.frame_id == "")
     ros::Duration(0.1).sleep();
-  ROS_INFO_STREAM("[compliance_test] Received initial FT data.");
+  ROS_INFO_NAMED("compliance_test", "Received initial FT data.");
 
   // Sleep to allow the publishers to be created and FT data to stabilize
   ros::Duration(2.).sleep();
@@ -80,9 +80,6 @@ compliance_test::compliance_class::compliance_class()
 
   // Stop when any force exceeds X N, or torque exceeds X Nm
   std::vector<double> endConditionWrench(6, 60.0);
-
-  ROS_INFO_STREAM("[compliance_test] The wrench used for initialization was:");
-  ROS_INFO_STREAM(ft_data_);
 
   // An object for compliant control
   compliant_control::compliantControl comp(stiffness, endConditionWrench,
@@ -127,8 +124,8 @@ compliance_test::compliance_class::compliance_class()
   }
 
   if (jog_is_halted_)
-    ROS_WARN_STREAM("[compliance_test] Jogging was halted. Singularity, jt "
-                    "limit, or collision?");
+    ROS_WARN_NAMED("compliance_test", "Jogging was halted. Singularity, jt "
+                                      "limit, or collision?");
 }
 
 // CB for halt warnings from the jog_arm nodes

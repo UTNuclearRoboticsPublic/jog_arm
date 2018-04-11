@@ -82,7 +82,8 @@ int main(int argc, char **argv) {
       }
     }
   }
-  ROS_INFO_STREAM("Checking a grid of " << poses.size() << " points.");
+  ROS_INFO_STREAM_NAMED("grid_test", "Checking a grid of " << poses.size()
+                                                           << " points.");
 
   /////////////////
   // Set up MoveIt!
@@ -106,7 +107,7 @@ int main(int argc, char **argv) {
                                       1.1586193681385275};
   mgi.setJointValueTarget(start_joints);
   if (!mgi.move()) {
-    ROS_ERROR_STREAM("Move to start pose failed. Exiting.");
+    ROS_ERROR_STREAM_NAMED("grid_test", "Move to start pose failed. Exiting.");
     return 1;
   }
 
@@ -118,18 +119,20 @@ int main(int argc, char **argv) {
   for (auto it = poses.begin(); it != poses.end(); ++it) {
     if (ros::ok()) {
       // Move to next grid pose
-      ROS_INFO_STREAM("Moving to pose " << std::distance(poses.begin(), it));
+      ROS_INFO_STREAM_NAMED(
+          "grid_test", "Moving to pose " << std::distance(poses.begin(), it));
       if (move_to_pose(jogger, *it))
         jog_arm_successes++;
       else
-        ROS_WARN_STREAM("Failed to reach this pose.");
+        ROS_WARN_STREAM_NAMED("grid_test", "Failed to reach this pose.");
     } else
       return 1;
   }
 
-  ROS_INFO_STREAM("Completed " << jog_arm_successes << " of " << poses.size()
-                               << " poses.");
-  ROS_INFO_STREAM("Trial took " << ros::Time::now() - begin << " seconds.");
+  ROS_INFO_STREAM_NAMED("grid_test", "Completed " << jog_arm_successes << " of "
+                                                  << poses.size() << " poses.");
+  ROS_INFO_STREAM_NAMED("grid_test", "Trial took " << ros::Time::now() - begin
+                                                   << " seconds.");
 
   // Move to start pose.
   // Often fails... try it a few times.
@@ -139,7 +142,8 @@ int main(int argc, char **argv) {
       // Try a PoseTarget move
       mgi.setPoseTarget(start_pose);
       if (!mgi.move())
-        ROS_ERROR_STREAM("Move to start pose failed. Attempt #" << i);
+        ROS_ERROR_STREAM_NAMED("grid_test",
+                               "Move to start pose failed. Attempt #" << i);
     }
   }
 
@@ -155,25 +159,29 @@ int main(int argc, char **argv) {
   for (auto it = poses.begin(); it != poses.end(); ++it) {
     if (ros::ok()) {
       // Move to next grid pose
-      ROS_INFO_STREAM("Moving to pose " << std::distance(poses.begin(), it));
+      ROS_INFO_STREAM_NAMED(
+          "grid_test", "Moving to pose " << std::distance(poses.begin(), it));
       waypoints.clear();
       waypoints.push_back((*it).pose);
       fraction = mgi.computeCartesianPath(waypoints, 0.005, 0., trajectory);
-      ROS_INFO_STREAM(fraction);
+      ROS_INFO_STREAM_NAMED("grid_test", "Computed " << fraction
+                                                     << " of Cartesian path.");
       if (fraction == 1.)
         moveit_successes++;
       else
-        ROS_WARN_STREAM("Failed to reach this pose.");
+        ROS_WARN_STREAM_NAMED("grid_test", "Failed to reach this pose.");
       plan.trajectory_ = trajectory;
       mgi.execute(plan);
     } else
       return 1;
   }
 
-  ROS_INFO_STREAM("MoveIt! completed " << moveit_successes << " of "
-                                       << poses.size() << " poses.");
-  ROS_INFO_STREAM("MoveIt! trial took " << ros::Time::now() - begin
-                                        << " seconds.");
+  ROS_INFO_STREAM_NAMED("grid_test", "MoveIt! completed "
+                                         << moveit_successes << " of "
+                                         << poses.size() << " poses.");
+  ROS_INFO_STREAM_NAMED("grid_test", "MoveIt! trial took "
+                                         << ros::Time::now() - begin
+                                         << " seconds.");
 
   return 0;
 }
@@ -186,7 +194,7 @@ bool move_to_pose(jog_api &jogger, geometry_msgs::PoseStamped &target_pose) {
   // Give 15s to complete the motion
   if (!jogger.jacobian_move(target_pose, 0.01, 0.05, 0.8, 0.8,
                             ros::Duration(15))) {
-    ROS_ERROR_STREAM("Jacobian move failed");
+    ROS_ERROR_STREAM_NAMED("grid_test", "Jacobian move failed");
     return false;
   }
 

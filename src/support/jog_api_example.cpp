@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
   // Timeout, i.e. stop sending commands, after 10s
   if (!jogger.jacobian_move(new_pose, 0.01, 0.01, 0.5, 1.0,
                             ros::Duration(10))) {
-    ROS_ERROR_STREAM("Jacobian move failed");
+    ROS_ERROR_STREAM_NAMED("jog_api_example", "Jacobian move failed");
     return 1;
   }
 
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
   moveit::planning_interface::MoveGroupInterface mgi(move_group_name);
   geometry_msgs::PoseStamped current_pose = mgi.getCurrentPose();
 
-  ROS_INFO_STREAM("Current pose: " << current_pose);
+  ROS_INFO_STREAM_NAMED("jog_api_example", "Current pose: " << current_pose);
 
   return 0;
 }

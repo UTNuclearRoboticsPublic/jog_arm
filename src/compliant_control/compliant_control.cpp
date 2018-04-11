@@ -1,6 +1,5 @@
 
 #include "compliant_control/compliant_control.h"
-//#include "prettyprint/prettyprint.hpp"
 
 namespace compliant_control {
 
@@ -43,13 +42,14 @@ compliantControl::~compliantControl() {}
 
 void compliantControl::setStiffness(std::vector<double> b) {
   if (b.size() != compliantEnum::NUM_DIMS) {
-    ROS_ERROR_STREAM("Invalid stiffness vector: ");
+    ROS_ERROR_NAMED("compliant_control", "Invalid stiffness vector: ");
   } else {
     for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
       if (fabs(b[i]) <= 1e-3) {
-        ROS_ERROR_STREAM("Stiffness must be non-zero.Ignoring "
-                         "Compliance in direction: "
-                         << i);
+        ROS_ERROR_STREAM_NAMED("compliant_control",
+                               "Stiffness must be non-zero.Ignoring "
+                               "Compliance in direction: "
+                                   << i);
         stiffness_[i] = DBL_MAX;
       } else {
         stiffness_[i] = b[i];
@@ -65,12 +65,10 @@ void compliantControl::setSafetyLimit(double safeWrenchLimit) {
 void compliantControl::setExitCondition(
     std::vector<double> endConditionWrench) {
   if (endConditionWrench.size() != compliantEnum::NUM_DIMS) {
-    ROS_ERROR_STREAM("Invalid vector endConditionWrench: ");
+    ROS_ERROR_NAMED("compliant_control", "Invalid vector endConditionWrench: ");
   } else {
     for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
       endConditionWrench_[i] = endConditionWrench[i];
-      // ROS_INFO_STREAM("setting condition for compliant control in direction "
-      // << i);
     }
   }
 }
@@ -116,11 +114,10 @@ compliantControl::getVelocity(std::vector<double> vIn,
                               std::vector<double> &vOut) {
   compliantEnum::exitCondition exitCondition = compliantEnum::NOT_CONTROLLED;
   getFT(ftData);
-  // ROS_ERROR_STREAM("Internal Fitered F: " << ft_[0] << "  " << ft_[1] << "  "
-  // <<ft_[2]);
 
   if ((fabs(ft_[0]) + fabs(ft_[1]) + fabs(ft_[2])) >= safeWrenchLimit_) {
-    ROS_ERROR_STREAM(
+    ROS_ERROR_NAMED(
+        "compliant_control",
         "Total force is exceeding the safety values. Stopping motion.");
     vOut = std::vector<double>(6, 0.0);
     return compliantEnum::FT_VIOLATION;
@@ -129,26 +126,26 @@ compliantControl::getVelocity(std::vector<double> vIn,
   for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
     if (endConditionWrench_[i] > 0) {
       if (ft_[i] > endConditionWrench_[i]) {
-        ROS_INFO_STREAM("Exit condition met in direction: " << i);
+        ROS_INFO_STREAM_NAMED("compliant_control",
+                              "Exit condition met in direction: " << i);
         vOut[i] = 0.0;
         exitCondition = compliantEnum::CONDITION_MET;
       } else {
         vOut[i] = vIn[i] + ft_[i] / stiffness_[i];
         if (exitCondition != compliantEnum::CONDITION_MET) {
-          // ROS_INFO_STREAM("Exit condition not met in this iteration");
           exitCondition = compliantEnum::CONDITION_NOT_MET;
         }
       }
     } else // endConditionWrench_[i]<=0
     {
       if (ft_[i] < endConditionWrench_[i]) {
-        ROS_INFO_STREAM("Exit condition met in direction: " << i);
+        ROS_INFO_STREAM_NAMED("compliant_control",
+                              "Exit condition met in direction: " << i);
         vOut[i] = 0.0;
         exitCondition = compliantEnum::CONDITION_MET;
       } else {
         vOut[i] = vIn[i] + ft_[i] / stiffness_[i];
         if (exitCondition != compliantEnum::CONDITION_MET) {
-          // ROS_INFO_STREAM("Exit condition not met in this iteration");
           exitCondition = compliantEnum::CONDITION_NOT_MET;
         }
       }

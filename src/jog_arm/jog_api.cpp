@@ -50,13 +50,13 @@ bool jog_api::jacobian_move(geometry_msgs::PoseStamped &target_pose,
                             const ros::Duration &timeout) {
   // Velocity scaling should be between 0 and 1
   if (0. > linear_vel_scale || 1. < linear_vel_scale) {
-    ROS_ERROR_STREAM("[jog_api::jacobian_move] Velocity scaling parameter "
-                     "should be between 0 and 1.");
+    ROS_ERROR_NAMED("jog_api", "Velocity scaling parameter "
+                               "should be between 0 and 1.");
     return false;
   }
   if (0. > rot_vel_scale || 1. < rot_vel_scale) {
-    ROS_ERROR_STREAM("[jog_api::jacobian_move] Velocity scaling parameter "
-                     "should be between 0 and 1.");
+    ROS_ERROR_NAMED("jog_api", "Velocity scaling parameter "
+                               "should be between 0 and 1.");
     return false;
   }
 
@@ -135,8 +135,8 @@ jog_api::calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose,
 
   // Check frames on incoming PoseStampeds
   if (current_pose.header.frame_id != target_pose.header.frame_id) {
-    ROS_ERROR_STREAM("[arm_namespace::distance_and_twist] Incoming "
-                     "PoseStampeds tf frames do not match.");
+    ROS_ERROR_NAMED("jog_api", "Incoming "
+                               "PoseStampeds tf frames do not match.");
     return result;
   }
   result.twist.header.frame_id = current_pose.header.frame_id;
@@ -197,7 +197,6 @@ jog_api::calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose,
   sos += pow(result.twist.twist.angular.z, 2.);
   result.rotational_distance = pow(sos, 0.5);
 
-  // Ignore angle for now
   result.twist.twist.angular.x =
       rot_vel_scale * result.twist.twist.angular.x / result.rotational_distance;
   result.twist.twist.angular.y =
