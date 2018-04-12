@@ -72,17 +72,20 @@ compliance_test::compliance_class::compliance_class()
 
   // Key equation: compliance_velocity[i] = wrench[i]/stiffness[i]
   std::vector<double> stiffness(6, 50.);
-  // Less stiff for rotation
-  stiffness[3] = 10.;
-  stiffness[4] = 10.;
-  stiffness[5] = 10.;
+  // Rotational components
+  stiffness[3] = 200.;
+  stiffness[4] = 200.;
+  stiffness[5] = 200.;
   double filterCutoff = 10.;
+
+  // Deadband for force/torque measurements
+	std::vector<double> deadband(6, 10.);
 
   // Stop when any force exceeds X N, or torque exceeds X Nm
   std::vector<double> endConditionWrench(6, 60.0);
 
   // An object for compliant control
-  compliant_control::compliantControl comp(stiffness, endConditionWrench,
+  compliant_control::compliantControl comp(stiffness, deadband, endConditionWrench,
                                            filterCutoff, ft_data_);
 
   // The 6 nominal velocity components.

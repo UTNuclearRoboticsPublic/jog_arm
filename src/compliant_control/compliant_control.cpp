@@ -4,17 +4,21 @@
 namespace compliant_control {
 
 compliantControl::compliantControl(std::vector<double> stiffness,
+                                   std::vector<double> deadband,
                                    std::vector<double> endConditionWrench,
                                    double filterCutoff,
                                    geometry_msgs::WrenchStamped bias)
-    : stiffness_(stiffness), endConditionWrench_(endConditionWrench) {
+    : stiffness_(stiffness), deadband_(deadband), endConditionWrench_(endConditionWrench) {
   bias_.resize(compliantEnum::NUM_DIMS);
   ft_.resize(compliantEnum::NUM_DIMS);
 
   for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
     vectorOfFilters_.push_back(lpf(filterCutoff));
   }
-  safeWrenchLimit_ = DBL_MAX; // No condition on accidental control
+
+  // Initially, no safety limit
+  safeWrenchLimit_ = DBL_MAX;
+
   bias_[0] = bias.wrench.force.x;
   bias_[1] = bias.wrench.force.y;
   bias_[2] = bias.wrench.force.z;
@@ -74,38 +78,42 @@ void compliantControl::setExitCondition(
 }
 
 void compliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
-  ft_[0] = vectorOfFilters_[0].filter(ftData.wrench.force.x - bias_[0]);
-  ft_[1] = vectorOfFilters_[1].filter(ftData.wrench.force.y - bias_[1]);
-  ft_[2] = vectorOfFilters_[2].filter(ftData.wrench.force.z - bias_[2]);
-  ft_[3] = vectorOfFilters_[3].filter(ftData.wrench.torque.x - bias_[3]);
-  ft_[4] = vectorOfFilters_[4].filter(ftData.wrench.torque.y - bias_[4]);
-  ft_[5] = vectorOfFilters_[5].filter(ftData.wrench.torque.z - bias_[5]);
-}
 
-compliantEnum::exitCondition
-compliantControl::getVelocity(geometry_msgs::TwistStamped vIn,
-                              geometry_msgs::WrenchStamped ftData,
-                              geometry_msgs::TwistStamped &vOut) {
-  compliantEnum::exitCondition exitCondition = compliantEnum::NOT_CONTROLLED;
-  std::vector<double> v1(compliantEnum::NUM_DIMS, 0.0);
-  v1[0] = vIn.twist.linear.x;
-  v1[1] = vIn.twist.linear.y;
-  v1[2] = vIn.twist.linear.z;
-  v1[3] = vIn.twist.angular.x;
-  v1[4] = vIn.twist.angular.y;
-  v1[5] = vIn.twist.angular.z;
+  std::vector<double> biasedFT(6,0.);
 
-  std::vector<double> v2 = v1;
+  // Apply the deadband
+  if (fabs( ftData.wrench.force.x - bias_[0] ) < fabs(deadband_[0]) )
+      biasedFT[0] = 0.;
+  else
+    biasedFT[0] = ftData.wrench.force.x - bias_[0];
+  if (fabs( ftData.wrench.force.y - bias_[1] ) < fabs(deadband_[1]) )
+      biasedFT[1] = 0.;
+  else
+    biasedFT[1] = ftData.wrench.force.y - bias_[1];
+  if (fabs( ftData.wrench.force.z - bias_[2] ) < fabs(deadband_[2]) )
+      biasedFT[2] = 0.;
+  else
+    biasedFT[2] = ftData.wrench.force.z - bias_[2];
 
-  exitCondition = getVelocity(v1, ftData, v2);
+  if (fabs( ftData.wrench.torque.x - bias_[3] ) < fabs(deadband_[3]) )
+      biasedFT[3] = 0.;
+  else
+    biasedFT[3] = ftData.wrench.torque.x - bias_[3];
+  if (fabs( ftData.wrench.torque.y - bias_[4] ) < fabs(deadband_[4]) )
+      biasedFT[4] = 0.;
+  else
+    biasedFT[4] = ftData.wrench.torque.y - bias_[4];
+  if (fabs( ftData.wrench.torque.z - bias_[5] ) < fabs(deadband_[5]) )
+      biasedFT[5] = 0.;
+  else
+    biasedFT[5] = ftData.wrench.torque.x - bias_[5];
 
-  vOut.twist.linear.x = v2[0];
-  vOut.twist.linear.y = v2[1];
-  vOut.twist.linear.z = v2[2];
-  vOut.twist.angular.x = v2[3];
-  vOut.twist.angular.y = v2[4];
-  vOut.twist.angular.z = v2[5];
-  return exitCondition;
+  ft_[0] = vectorOfFilters_[0].filter(biasedFT[0]);
+  ft_[1] = vectorOfFilters_[1].filter(biasedFT[1]);
+  ft_[2] = vectorOfFilters_[2].filter(biasedFT[2]);
+  ft_[3] = vectorOfFilters_[3].filter(biasedFT[3]);
+  ft_[4] = vectorOfFilters_[4].filter(biasedFT[4]);
+  ft_[5] = vectorOfFilters_[5].filter(biasedFT[5]);
 }
 
 compliantEnum::exitCondition
@@ -181,4 +189,4 @@ void lpf::reset(double data) {
   prev_msrmts_ = {data, data, data};
   prev_filtered_msrmts_ = {data, data};
 }
-}
+} // end namespace compliant_control

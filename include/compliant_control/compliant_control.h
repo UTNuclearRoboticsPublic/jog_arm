@@ -61,6 +61,7 @@ public:
    * Constructor.
    */
   compliantControl(std::vector<double> stiffness,
+                   std::vector<double> deadband,
                    std::vector<double> endConditionWrench, double c,
                    geometry_msgs::WrenchStamped bias);
 
@@ -93,11 +94,6 @@ public:
   void biasSensor(geometry_msgs::WrenchStamped bias);
 
   // Set the target FT wrench
-  compliantEnum::exitCondition getVelocity(geometry_msgs::TwistStamped vIn,
-                                           geometry_msgs::WrenchStamped ftData,
-                                           geometry_msgs::TwistStamped &vOut);
-
-  // Set the target FT wrench
   compliantEnum::exitCondition getVelocity(std::vector<double> vIn,
                                            geometry_msgs::WrenchStamped ftData,
                                            std::vector<double> &vOut);
@@ -115,6 +111,7 @@ public:
   void setVelTopic(std::string velTop);
 
   std::vector<double> stiffness_;
+  std::vector<double> deadband_;
   std::vector<double> endConditionWrench_;
   std::vector<double> ft_;
   std::vector<double> bias_; // Initial biased force
