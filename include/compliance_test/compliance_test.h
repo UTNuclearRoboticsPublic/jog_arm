@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : jog_api.h
-//      Project   : jog_arm
-//      Created   : 3/27/2018
+//      Title     : compliance_test.h
+//      Project   : compliance_test
+//      Created   : 4/2/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
 //      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
@@ -32,58 +32,58 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-// Provide a C++ interface for sending motion commands to the jog_arm server.
+// Demonstrate compliance on a stationary robot. The robot should act like a
+// spring
+// when pushed.
 
-#ifndef MOTION_API_H
-#define MOTION_API_H
+#ifndef COMPLIANCE_TEST_H
+#define COMPLIANCE_TEST_H
 
-#include <geometry_msgs/PoseStamped.h>
-#include <moveit/move_group_interface/move_group_interface.h>
+#include <compliant_control/compliant_control.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <geometry_msgs/WrenchStamped.h>
 #include <ros/ros.h>
-#include <std_msgs/Float64.h>
-#include <tf/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 
-class jog_api {
-public:
-  // Constructor
-  jog_api(const std::string &move_group_name)
-      : move_group_(move_group_name), tf2_listener_(tf_buffer_) {
-    jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>(
-        "/jog_arm_server/delta_jog_cmds", 1);
-  }
+namespace compliance_test {
 
-  // Publish cmds for a Cartesian motion to bring the robot to the target pose.
-  bool jacobian_move(geometry_msgs::PoseStamped &target_pose,
-                     const double trans_tolerance, const double rot_tolerance,
-                     const double linear_vel_scale, const double rot_vel_scale,
-                     const ros::Duration &timeout);
+class compliance_class {
+
+public:
+  compliance_class();
 
 private:
-  ros::NodeHandle nh_;
+  // CB for halt warnings from the jog_arm nodes
+  void halt_cb(const std_msgs::Bool::ConstPtr &msg);
 
-  // Used to retrieve the current robot pose, etc.
-  moveit::planning_interface::MoveGroupInterface move_group_;
+  // CB for force/torque data
+  void ft_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg);
 
-  ros::Publisher jog_vel_pub_;
+  // Transform a wrench to the EE frame
+  geometry_msgs::WrenchStamped
+  transformToEEF(const geometry_msgs::WrenchStamped wrench_in,
+                 const std::string desired_ee_frame);
+
+  ros::NodeHandle n_;
+
+  ros::AsyncSpinner spinner_;
+
+  // Publish a velocity cmd to the jog_arm node
+  ros::Publisher vel_pub_;
+
+  ros::Subscriber jog_arm_warning_sub_, ft_sub_;
+
+  geometry_msgs::WrenchStamped ft_data_;
+
+  // Did one of the jog nodes halt motion?
+  bool jog_is_halted_ = false;
 
   tf2_ros::Buffer tf_buffer_;
-  tf2_ros::TransformListener tf2_listener_;
-
-  bool transform_a_pose(geometry_msgs::PoseStamped &pose,
-                        std::string &desired_frame);
-
-  // Calculate Euclidean distance between 2 Poses
-  struct distance_and_twist {
-    double translational_distance, rotational_distance;
-    geometry_msgs::TwistStamped twist;
-  };
-  distance_and_twist
-  calc_distance_and_twist(const geometry_msgs::PoseStamped &current_pose,
-                          const geometry_msgs::PoseStamped &target_pose,
-                          const double &linear_vel_scale,
-                          const double &rot_vel_scale);
+  tf2_ros::TransformListener tf_listener_;
 };
+
+} // end namespace compliance_test
 
 #endif

@@ -15,4 +15,6 @@ jog_arm_server:
   scale:
     linear:  0.0004
     rotational:  0.0008
-
+  # Publish boolean warnings to these topics
+  in_collision_topic:  jog_arm_server/halted
+  in_singularity_topic:  jog_arm_server/halted

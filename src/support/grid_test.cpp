@@ -4,9 +4,11 @@
 //      Created   : 3/28/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
-//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
+//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
+//      rights reserved.
 //
-//          All files within this directory are subject to the following, unless an alternative
+//          All files within this directory are subject to the following, unless
+//          an alternative
 //          license is explicitly included within the text of each file.
 //
 //          This software and documentation constitute an unpublished work
@@ -22,29 +24,29 @@
 //          THE SOFTWARE OR DOCUMENTATION. Under no circumstances shall the
 //          University be liable for incidental, special, indirect, direct or
 //          consequential damages or loss of profits, interruption of business,
-//          or related expenses which may arise from use of software or documentation,
-//          including but not limited to those resulting from defects in software
+//          or related expenses which may arise from use of software or
+//          documentation,
+//          including but not limited to those resulting from defects in
+//          software
 //          and/or documentation, or loss or inaccuracy of data of any kind.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
 // Test with motions to a grid of poses.
 
-#include "jog_arm/grid_test.h"
+#include "support/grid_test.h"
 
-int main(int argc, char **argv)
-{
-	ros::init(argc, argv, "jog_api_example");
+int main(int argc, char **argv) {
+  ros::init(argc, argv, "jog_api_example");
 
-	ros::AsyncSpinner spinner(1);
-	spinner.start();
+  ros::AsyncSpinner spinner(1);
+  spinner.start();
 
-	//////////////////////////////////////////////////
+  //////////////////////////////////////////////////
   // Send motion commands with this jog_api object.
   //////////////////////////////////////////////////
   std::string move_group_name = "manipulator";
   jog_api jogger(move_group_name);
-
 
   /////////////////////////////////////////
   // A start pose with good manipulabililty
@@ -60,7 +62,6 @@ int main(int argc, char **argv)
   start_pose.pose.orientation.z = -0.497;
   start_pose.pose.orientation.w = 0.835;
 
-
   /////////////////////////
   // Set up a grid of poses
   /////////////////////////
@@ -68,12 +69,9 @@ int main(int argc, char **argv)
   geometry_msgs::PoseStamped p = start_pose;
 
   double step = 0.2;
-  for (double delta_x=-0.2; delta_x<=0.2; delta_x+=step)
-  {
-    for (double delta_y=-0.2; delta_y<=0.2; delta_y+=step)
-    {
-      for (double delta_z=-0.2; delta_z<=0.2; delta_z+=step)
-      {
+  for (double delta_x = -0.2; delta_x <= 0.2; delta_x += step) {
+    for (double delta_y = -0.2; delta_y <= 0.2; delta_y += step) {
+      for (double delta_z = -0.2; delta_z <= 0.2; delta_z += step) {
         p.pose.position.x += delta_x;
         p.pose.position.y += delta_y;
         p.pose.position.z += delta_z;
@@ -84,8 +82,8 @@ int main(int argc, char **argv)
       }
     }
   }
-  ROS_INFO_STREAM("Checking a grid of " << poses.size() <<" points.");
-
+  ROS_INFO_STREAM_NAMED("grid_test", "Checking a grid of " << poses.size()
+                                                           << " points.");
 
   /////////////////
   // Set up MoveIt!
@@ -101,52 +99,53 @@ int main(int argc, char **argv)
 
   // Move to start pose
   mgi.setPoseTarget(start_pose);
-  std::vector<double> start_joints = {-4.010, -1.5153276047168491, -1.9685252858741595, 0.1811619951451231, 1.3323315704027818, 1.1586193681385275};
+  std::vector<double> start_joints = {-4.010,
+                                      -1.5153276047168491,
+                                      -1.9685252858741595,
+                                      0.1811619951451231,
+                                      1.3323315704027818,
+                                      1.1586193681385275};
   mgi.setJointValueTarget(start_joints);
-  if ( !mgi.move() )
-  {
-    ROS_ERROR_STREAM("Move to start pose failed. Exiting.");
+  if (!mgi.move()) {
+    ROS_ERROR_STREAM_NAMED("grid_test", "Move to start pose failed. Exiting.");
     return 1;
   }
-
 
   ////////////////////////////////////////
   // Test the jog_arm Cartesian motion API
   ////////////////////////////////////////
   ros::Time begin = ros::Time::now();
   int jog_arm_successes = 0;
-  for(auto it = poses.begin(); it != poses.end(); ++it)
-  {
-    if (ros::ok())
-    {
+  for (auto it = poses.begin(); it != poses.end(); ++it) {
+    if (ros::ok()) {
       // Move to next grid pose
-      ROS_INFO_STREAM("Moving to pose " << std::distance( poses.begin(),it ));
-      if ( move_to_pose( jogger, *it ) )
+      ROS_INFO_STREAM_NAMED(
+          "grid_test", "Moving to pose " << std::distance(poses.begin(), it));
+      if (move_to_pose(jogger, *it))
         jog_arm_successes++;
       else
-        ROS_WARN_STREAM("Failed to reach this pose.");
-    }
-    else
+        ROS_WARN_STREAM_NAMED("grid_test", "Failed to reach this pose.");
+    } else
       return 1;
   }
 
-  ROS_INFO_STREAM("Completed " << jog_arm_successes << " of " << poses.size() << " poses.");
-  ROS_INFO_STREAM("Trial took " << ros::Time::now()-begin << " seconds.");
+  ROS_INFO_STREAM_NAMED("grid_test", "Completed " << jog_arm_successes << " of "
+                                                  << poses.size() << " poses.");
+  ROS_INFO_STREAM_NAMED("grid_test", "Trial took " << ros::Time::now() - begin
+                                                   << " seconds.");
 
   // Move to start pose.
   // Often fails... try it a few times.
-  for (int i=0; i<3; i++)
-  {
+  for (int i = 0; i < 3; i++) {
     mgi.setJointValueTarget(start_joints);
-    if ( !mgi.move() )
-    {
+    if (!mgi.move()) {
       // Try a PoseTarget move
       mgi.setPoseTarget(start_pose);
-      if ( !mgi.move() )
-        ROS_ERROR_STREAM("Move to start pose failed. Attempt #" << i);
+      if (!mgi.move())
+        ROS_ERROR_STREAM_NAMED("grid_test",
+                               "Move to start pose failed. Attempt #" << i);
     }
   }
-
 
   ////////////////////////////////////////////
   // Now test the MoveIt! Cartesian motion API
@@ -157,43 +156,45 @@ int main(int argc, char **argv)
   int moveit_successes = 0;
   double fraction = 0.;
 
-  for(auto it = poses.begin(); it != poses.end(); ++it)
-  {
-    if (ros::ok())
-    {
+  for (auto it = poses.begin(); it != poses.end(); ++it) {
+    if (ros::ok()) {
       // Move to next grid pose
-      ROS_INFO_STREAM("Moving to pose " << std::distance( poses.begin(),it ));
+      ROS_INFO_STREAM_NAMED(
+          "grid_test", "Moving to pose " << std::distance(poses.begin(), it));
       waypoints.clear();
-      waypoints.push_back( (*it).pose );
+      waypoints.push_back((*it).pose);
       fraction = mgi.computeCartesianPath(waypoints, 0.005, 0., trajectory);
-      ROS_INFO_STREAM(fraction);
+      ROS_INFO_STREAM_NAMED("grid_test", "Computed " << fraction
+                                                     << " of Cartesian path.");
       if (fraction == 1.)
         moveit_successes++;
       else
-        ROS_WARN_STREAM("Failed to reach this pose.");
+        ROS_WARN_STREAM_NAMED("grid_test", "Failed to reach this pose.");
       plan.trajectory_ = trajectory;
       mgi.execute(plan);
-    }
-    else
+    } else
       return 1;
   }
 
-  ROS_INFO_STREAM("MoveIt! completed " << moveit_successes << " of " << poses.size() << " poses.");
-  ROS_INFO_STREAM("MoveIt! trial took " << ros::Time::now()-begin << " seconds.");
+  ROS_INFO_STREAM_NAMED("grid_test", "MoveIt! completed "
+                                         << moveit_successes << " of "
+                                         << poses.size() << " poses.");
+  ROS_INFO_STREAM_NAMED("grid_test", "MoveIt! trial took "
+                                         << ros::Time::now() - begin
+                                         << " seconds.");
 
   return 0;
 }
 
-bool move_to_pose(jog_api& jogger, geometry_msgs::PoseStamped& target_pose)
-{
+bool move_to_pose(jog_api &jogger, geometry_msgs::PoseStamped &target_pose) {
   // 1cm tolerance on the linear motion.
   // 0.05rad tolerance on the angular
   // Scale linear velocity commands between -0.8:0.8
   // Scale angular velocity commands between -0.8 : 0.8
   // Give 15s to complete the motion
-  if ( !jogger.jacobian_move(target_pose, 0.01, 0.05, 0.8, 0.8, ros::Duration(15)) )
-  {
-    ROS_ERROR_STREAM("Jacobian move failed");
+  if (!jogger.jacobian_move(target_pose, 0.01, 0.05, 0.8, 0.8,
+                            ros::Duration(15))) {
+    ROS_ERROR_STREAM_NAMED("grid_test", "Jacobian move failed");
     return false;
   }
 

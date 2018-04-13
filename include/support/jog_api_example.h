@@ -1,12 +1,14 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : get_ros_params.h
+//      Title     : jog_api_example.h
 //      Project   : jog_arm
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
-//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
+//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
+//      rights reserved.
 //
-//          All files within this directory are subject to the following, unless an alternative
+//          All files within this directory are subject to the following, unless
+//          an alternative
 //          license is explicitly included within the text of each file.
 //
 //          This software and documentation constitute an unpublished work
@@ -22,24 +24,21 @@
 //          THE SOFTWARE OR DOCUMENTATION. Under no circumstances shall the
 //          University be liable for incidental, special, indirect, direct or
 //          consequential damages or loss of profits, interruption of business,
-//          or related expenses which may arise from use of software or documentation,
-//          including but not limited to those resulting from defects in software
+//          or related expenses which may arise from use of software or
+//          documentation,
+//          including but not limited to those resulting from defects in
+//          software
 //          and/or documentation, or loss or inaccuracy of data of any kind.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef GET_ROS_PARAMS_H
-#define GET_ROS_PARAMS_H
+// Perform a series of motions with the jog_arm API
 
+#ifndef JOG_API_EXAMPLE_H
+#define JOG_API_EXAMPLE_H
+
+#include <geometry_msgs/PoseStamped.h>
+#include <jog_arm/jog_api.h>
 #include <ros/ros.h>
-#include <string>
 
-namespace get_ros_params
-{
-  std::string getStringParam(const std::string& name, ros::NodeHandle& n);
-  double getDoubleParam(const std::string& name, ros::NodeHandle& n);
-  double getIntParam(const std::string& name, ros::NodeHandle& n);
-  bool getBoolParam(const std::string& name, ros::NodeHandle& n);
-}
-
-#endif // GET_ROS_PARAMS_H
+#endif

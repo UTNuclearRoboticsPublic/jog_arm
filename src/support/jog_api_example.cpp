@@ -4,9 +4,11 @@
 //      Created   : 3/27/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
-//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All rights reserved.
+//      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
+//      rights reserved.
 //
-//          All files within this directory are subject to the following, unless an alternative
+//          All files within this directory are subject to the following, unless
+//          an alternative
 //          license is explicitly included within the text of each file.
 //
 //          This software and documentation constitute an unpublished work
@@ -22,24 +24,25 @@
 //          THE SOFTWARE OR DOCUMENTATION. Under no circumstances shall the
 //          University be liable for incidental, special, indirect, direct or
 //          consequential damages or loss of profits, interruption of business,
-//          or related expenses which may arise from use of software or documentation,
-//          including but not limited to those resulting from defects in software
+//          or related expenses which may arise from use of software or
+//          documentation,
+//          including but not limited to those resulting from defects in
+//          software
 //          and/or documentation, or loss or inaccuracy of data of any kind.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
 // Perform a motion with the jog_arm API
 
-#include "jog_arm/jog_api_example.h"
+#include "support/jog_api_example.h"
 
-int main(int argc, char **argv)
-{
-	ros::init(argc, argv, "jog_api_example");
+int main(int argc, char **argv) {
+  ros::init(argc, argv, "jog_api_example");
 
-	ros::AsyncSpinner spinner(1);
-	spinner.start();
+  ros::AsyncSpinner spinner(1);
+  spinner.start();
 
-	//////////////////////////////////////////////////
+  //////////////////////////////////////////////////
   // Send motion commands with this jog_api object.
   // Put your robot name here -- often "manipulator"
   //////////////////////////////////////////////////
@@ -65,11 +68,11 @@ int main(int argc, char **argv)
   // Scale linear velocity commands between -0.5:0.5
   // Scale angular velocity commands between -1.0 : 1.0
   // Timeout, i.e. stop sending commands, after 10s
-  if ( !jogger.jacobian_move(new_pose, 0.01, 0.01, 0.5, 1.0, ros::Duration(10)) )
-	{
-  	ROS_ERROR_STREAM("Jacobian move failed");
-  	return 1;
-	}
+  if (!jogger.jacobian_move(new_pose, 0.01, 0.01, 0.5, 1.0,
+                            ros::Duration(10))) {
+    ROS_ERROR_STREAM_NAMED("jog_api_example", "Jacobian move failed");
+    return 1;
+  }
 
   ////////////////////////////////////////////
   // Get robot's current pose via MoveIt's api
@@ -77,7 +80,7 @@ int main(int argc, char **argv)
   moveit::planning_interface::MoveGroupInterface mgi(move_group_name);
   geometry_msgs::PoseStamped current_pose = mgi.getCurrentPose();
 
-  ROS_INFO_STREAM("Current pose: " << current_pose);
+  ROS_INFO_STREAM_NAMED("jog_api_example", "Current pose: " << current_pose);
 
   return 0;
 }
