@@ -1,5 +1,5 @@
 
-#include "compliant_control/compliant_control.h"
+#include "jog_arm/compliant_control/compliant_control.h"
 
 namespace compliant_control {
 
@@ -7,8 +7,10 @@ compliantControl::compliantControl(std::vector<double> stiffness,
                                    std::vector<double> deadband,
                                    std::vector<double> endConditionWrench,
                                    double filterCutoff,
-                                   geometry_msgs::WrenchStamped bias)
+                                   geometry_msgs::WrenchStamped bias,
+                                   double highestAllowableFT)
     : stiffness_(stiffness), deadband_(deadband), endConditionWrench_(endConditionWrench) {
+  setSafetyLimit(highestAllowableFT);
   bias_.resize(compliantEnum::NUM_DIMS);
   ft_.resize(compliantEnum::NUM_DIMS);
 
@@ -66,7 +68,7 @@ void compliantControl::setSafetyLimit(double safeWrenchLimit) {
   safeWrenchLimit_ = safeWrenchLimit;
 }
 
-void compliantControl::setExitCondition(
+void compliantControl::setEndCondition(
     std::vector<double> endConditionWrench) {
   if (endConditionWrench.size() != compliantEnum::NUM_DIMS) {
     ROS_ERROR_NAMED("compliant_control", "Invalid vector endConditionWrench: ");
@@ -126,7 +128,7 @@ compliantControl::getVelocity(std::vector<double> vIn,
   if ((fabs(ft_[0]) + fabs(ft_[1]) + fabs(ft_[2])) >= safeWrenchLimit_) {
     ROS_ERROR_NAMED(
         "compliant_control",
-        "Total force is exceeding the safety values. Stopping motion.");
+        "Total force is exceeding the safety limits. Stopping motion.");
     vOut = std::vector<double>(6, 0.0);
     return compliantEnum::FT_VIOLATION;
   }

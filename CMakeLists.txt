@@ -39,21 +39,17 @@ include_directories(
 )
 
 add_library(jog_api src/jog_arm/jog_api.cpp)
-add_library(compliant_control src/compliant_control/compliant_control.cpp)
+add_library(compliant_control src/jog_arm/compliant_control/compliant_control.cpp)
 
-add_executable(compliance_test src/compliance_test/compliance_test.cpp)
+add_executable(compliance_test src/jog_arm/compliance_test/compliance_test.cpp)
 add_dependencies(compliance_test ${catkin_EXPORTED_TARGETS})
 target_link_libraries(compliance_test ${catkin_LIBRARIES} compliant_control)
 
-add_executable(grid_test src/support/grid_test.cpp)
+add_executable(grid_test src/jog_arm/support/grid_test.cpp)
 add_dependencies(grid_test ${catkin_EXPORTED_TARGETS})
 target_link_libraries(grid_test ${catkin_LIBRARIES} jog_api)
 
-add_executable(jog_api_example src/support/jog_api_example.cpp)
-add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})
-target_link_libraries(jog_api_example ${catkin_LIBRARIES} jog_api)
-
-add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/support/get_ros_params.cpp)
+add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/jog_arm/support/get_ros_params.cpp)
 add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
@@ -63,11 +59,16 @@ install(DIRECTORY include/${PROJECT_NAME}/
   PATTERN ".svn" EXCLUDE
 )
 
+install(TARGETS compliant_control jog_api
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION})
+
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest)
   set(UTEST_SRC_FILES test/utest.cpp
       test/compliant_control.cpp)
 
   add_rostest_gtest(${PROJECT_NAME}_utest test/launch/utest.launch ${UTEST_SRC_FILES})
-  target_link_libraries(${PROJECT_NAME}_utest ${PROJECT_NAME} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+  target_link_libraries(${PROJECT_NAME}_utest ${catkin_LIBRARIES} ${Boost_LIBRARIES} compliant_control)
 endif()

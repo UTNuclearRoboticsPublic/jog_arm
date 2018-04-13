@@ -51,7 +51,7 @@
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
 #include <string>
-#include <support/get_ros_params.h>
+#include <jog_arm/support/get_ros_params.h>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
 

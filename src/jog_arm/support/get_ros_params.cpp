@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
-//      Title     : compliance_test.h
-//      Project   : compliance_test
-//      Created   : 4/2/2018
+//      Title     : get_ros_params.cpp
+//      Project   : jog_arm
+//      Created   : 3/27/2018
 //      Author    : Andy Zelenak
 //      Platforms : Ubuntu 64-bit
 //      Copyright : Copyright© The University of Texas at Austin, 2014-2017. All
@@ -32,58 +32,42 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-// Demonstrate compliance on a stationary robot. The robot should act like a
-// spring
-// when pushed.
+#include "jog_arm/support/get_ros_params.h"
 
-#ifndef COMPLIANCE_TEST_H
-#define COMPLIANCE_TEST_H
+std::string get_ros_params::getStringParam(const std::string &name,
+                                           ros::NodeHandle &n) {
+  std::string s;
+  if (!n.getParam(name, s))
+    ROS_ERROR_STREAM_NAMED("getStringParam", "YAML config file does not "
+                                             "contain parameter "
+                                                 << name);
+  return s;
+}
 
-#include <compliant_control/compliant_control.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <geometry_msgs/TwistStamped.h>
-#include <geometry_msgs/WrenchStamped.h>
-#include <ros/ros.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <tf2_ros/transform_listener.h>
+double get_ros_params::getDoubleParam(const std::string &name,
+                                      ros::NodeHandle &n) {
+  double value;
+  if (!n.getParam(name, value))
+    ROS_ERROR_STREAM_NAMED("getDoubleParam", "YAML config file does not "
+                                             "contain parameter "
+                                                 << name);
+  return value;
+}
 
-namespace compliance_test {
+double get_ros_params::getIntParam(const std::string &name,
+                                   ros::NodeHandle &n) {
+  int value;
+  if (!n.getParam(name, value))
+    ROS_ERROR_STREAM_NAMED("getIntParam", "YAML config file does not "
+                                          "contain parameter "
+                                              << name);
+  return value;
+}
 
-class compliance_class {
-
-public:
-  compliance_class();
-
-private:
-  // CB for halt warnings from the jog_arm nodes
-  void halt_cb(const std_msgs::Bool::ConstPtr &msg);
-
-  // CB for force/torque data
-  void ft_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg);
-
-  // Transform a wrench to the EE frame
-  geometry_msgs::WrenchStamped
-  transformToEEF(const geometry_msgs::WrenchStamped wrench_in,
-                 const std::string desired_ee_frame);
-
-  ros::NodeHandle n_;
-
-  ros::AsyncSpinner spinner_;
-
-  // Publish a velocity cmd to the jog_arm node
-  ros::Publisher vel_pub_;
-
-  ros::Subscriber jog_arm_warning_sub_, ft_sub_;
-
-  geometry_msgs::WrenchStamped ft_data_;
-
-  // Did one of the jog nodes halt motion?
-  bool jog_is_halted_ = false;
-
-  tf2_ros::Buffer tf_buffer_;
-  tf2_ros::TransformListener tf_listener_;
-};
-
-} // end namespace compliance_test
-
-#endif
+bool get_ros_params::getBoolParam(const std::string &name, ros::NodeHandle &n) {
+  bool value;
+  if (!n.getParam(name, value))
+    ROS_ERROR_STREAM_NAMED(
+        "getBoolParam", "YAML config file does not contain parameter " << name);
+  return value;
+}
