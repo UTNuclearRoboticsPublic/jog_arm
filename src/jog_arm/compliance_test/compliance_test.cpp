@@ -36,7 +36,7 @@
 // spring
 // when pushed.
 
-#include "compliance_test/compliance_test.h"
+#include "jog_arm/compliance_test/compliance_test.h"
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "compliance_test");
@@ -86,7 +86,7 @@ compliance_test::compliance_class::compliance_class()
 
   // An object for compliant control
   compliant_control::compliantControl comp(stiffness, deadband, endConditionWrench,
-                                           filterCutoff, ft_data_);
+                                           filterCutoff, ft_data_, 100.);
 
   // The 6 nominal velocity components.
   // For this demo, the robot should be stationary unless a force/torque is

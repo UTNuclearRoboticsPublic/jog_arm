@@ -41,9 +41,9 @@ enum dimension {
  */
 enum exitCondition {
   NOT_CONTROLLED = 0, /**< None of the dimension is set to be controlled. */
-  FT_VIOLATION = 1,   /**< Force or torque was read as maximum allowed. */
+  FT_VIOLATION = 1,   /**< Force or torque was read as maximum allowable. */
   VMAX_VIOLATION = 2, /**< Calculated Velocity is more than maximum allowed. */
-  CONDITION_MET = 3,  /**< One of the compliant condition is met. */
+  CONDITION_MET = 3,  /**< One of the compliant conditions is met. */
   CONDITION_NOT_MET = 4, /**< No violation or condition. */
   NUM_CONDITIONS = 5
 }; /**< The number of return conditions. */
@@ -63,7 +63,8 @@ public:
   compliantControl(std::vector<double> stiffness,
                    std::vector<double> deadband,
                    std::vector<double> endConditionWrench, double c,
-                   geometry_msgs::WrenchStamped bias);
+                   geometry_msgs::WrenchStamped bias,
+                   double highestAllowableFT);
 
   /**
    * Destructor.
@@ -76,7 +77,7 @@ public:
   void setStiffness(std::vector<double> stiffness);
 
   // Exit when the given force/torque wrench is achieved in any direction
-  void setExitCondition(std::vector<double> endConditionWrench);
+  void setEndCondition(std::vector<double> endConditionWrench);
 
   // Quit if these forces/torques are exceeded
   void setSafetyLimit(double safeWrenchLimit);
