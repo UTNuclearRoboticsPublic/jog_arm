@@ -49,17 +49,17 @@
 
 namespace compliance_test {
 
-class compliance_class {
+class ComplianceClass {
 
 public:
-  compliance_class();
+  ComplianceClass();
 
 private:
   // CB for halt warnings from the jog_arm nodes
-  void halt_cb(const std_msgs::Bool::ConstPtr &msg);
+  void haltCB(const std_msgs::Bool::ConstPtr &msg);
 
   // CB for force/torque data
-  void ft_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg);
+  void ftCB(const geometry_msgs::WrenchStamped::ConstPtr &msg);
 
   // Transform a wrench to the EE frame
   geometry_msgs::WrenchStamped

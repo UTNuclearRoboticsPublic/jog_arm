@@ -41,12 +41,12 @@
 int main(int argc, char **argv) {
   ros::init(argc, argv, "compliance_test");
 
-  compliance_test::compliance_class test;
+  compliance_test::ComplianceClass test;
 
   return 0;
 }
 
-compliance_test::compliance_class::compliance_class()
+compliance_test::ComplianceClass::ComplianceClass()
     : spinner_(1), tf_listener_(tf_buffer_) {
 
   spinner_.start();
@@ -57,10 +57,10 @@ compliance_test::compliance_class::compliance_class()
 
   // Listen to the jog_arm warning topic. Exit if the jogger stops
   jog_arm_warning_sub_ = n_.subscribe("jog_arm_server/halted", 1,
-                                      &compliance_class::halt_cb, this);
+                                      &ComplianceClass::haltCB, this);
 
   // Listen to wrench data from a force/torque sensor
-  ft_sub_ = n_.subscribe("left_ur5_wrench", 1, &compliance_class::ft_cb, this);
+  ft_sub_ = n_.subscribe("left_ur5_wrench", 1, &ComplianceClass::ftCB, this);
 
   // Wait for first ft data to arrive
   ROS_INFO_NAMED("compliance_test", "Waiting for first force/torque data.");
@@ -86,7 +86,7 @@ compliance_test::compliance_class::compliance_class()
   std::vector<double> endConditionWrench(6, 60.0);
 
   // An object for compliant control
-  compliant_control::compliantControl comp(stiffness, deadband,
+  compliant_control::CompliantControl comp(stiffness, deadband,
                                            endConditionWrench, filterCutoff,
                                            ft_data_, 100., 50.);
 
@@ -134,20 +134,20 @@ compliance_test::compliance_class::compliance_class()
 }
 
 // CB for halt warnings from the jog_arm nodes
-void compliance_test::compliance_class::halt_cb(
+void compliance_test::ComplianceClass::haltCB(
     const std_msgs::Bool::ConstPtr &msg) {
   jog_is_halted_ = msg->data;
 }
 
 // CB for force/torque data
-void compliance_test::compliance_class::ft_cb(
+void compliance_test::ComplianceClass::ftCB(
     const geometry_msgs::WrenchStamped::ConstPtr &msg) {
   ft_data_ = *msg;
   ft_data_.header.frame_id = "left_ur5_base";
 }
 
 // Transform a wrench to the EE frame
-geometry_msgs::WrenchStamped compliance_test::compliance_class::transformToEEF(
+geometry_msgs::WrenchStamped compliance_test::ComplianceClass::transformToEEF(
     const geometry_msgs::WrenchStamped wrench_in,
     const std::string desired_ee_frame) {
   geometry_msgs::TransformStamped prev_frame_to_new;

@@ -22,8 +22,6 @@
 namespace compliantEnum {
 /**
  * dimension enum.
- * The dimension enum is used to determine the dimension that is being
- * controlled or requested.
  */
 enum dimension {
   NUM_DIMS = 6 /**< 3 translational, 3 rotational dimensions. */
@@ -43,14 +41,14 @@ enum exitCondition {
 };                       /**< The number of return conditions. */
 }
 namespace compliant_control {
-class compliantControl;
-class lpf;
+class CompliantControl;
+class LowPassFilter;
 
-class compliantControl {
+class CompliantControl {
 
 public:
   // Constructor.
-  compliantControl(std::vector<double> stiffness, std::vector<double> deadband,
+  CompliantControl(std::vector<double> stiffness, std::vector<double> deadband,
                    std::vector<double> endConditionWrench, double filterParam,
                    geometry_msgs::WrenchStamped bias,
                    double highestAllowableForce, double highestAllowableTorque);
@@ -92,19 +90,19 @@ public:
 
   std::vector<double> stiffness_;
   std::vector<double> deadband_;
-  std::vector<double> endConditionWrench_;
+  std::vector<double> end_condition_wrench_;
   std::vector<double> ft_;
   std::vector<double> bias_; // Initial biased force
   double safeForceLimit_,
       safeTorqueLimit_; // Quit if these forces/torques are exceeded
-  std::vector<compliant_control::lpf> vectorOfFilters_;
+  std::vector<compliant_control::LowPassFilter> vectorOfFilters_;
 
 private:
 };
 
-class lpf {
+class LowPassFilter {
 public:
-  lpf(double filterParam);
+  LowPassFilter(double filterParam);
   double filter(const double &new_msrmt);
 
   // Related to the cutoff frequency of the filter.

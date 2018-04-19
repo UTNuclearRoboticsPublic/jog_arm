@@ -64,39 +64,39 @@ void *joggingPipeline(void *threadid);
 void *collisionCheck(void *threadid);
 
 // Shared variables
-geometry_msgs::TwistStamped cmd_deltas;
-pthread_mutex_t cmd_deltas_mutex;
+geometry_msgs::TwistStamped g_cmd_deltas;
+pthread_mutex_t g_cmd_deltas_mutex;
 
-sensor_msgs::JointState joints;
-pthread_mutex_t joints_mutex;
+sensor_msgs::JointState g_joints;
+pthread_mutex_t g_joints_mutex;
 
-trajectory_msgs::JointTrajectory new_traj;
-pthread_mutex_t new_traj_mutex;
+trajectory_msgs::JointTrajectory g_new_traj;
+pthread_mutex_t g_new_traj_mutex;
 
-bool imminent_collision(false);
-pthread_mutex_t imminent_collision_mutex;
+bool g_imminent_collision(false);
+pthread_mutex_t g_imminent_collision_mutex;
 
-bool zero_trajectory_flag_(false);
-pthread_mutex_t zero_trajectory_flag_mutex;
+bool g_zero_trajectory_flag(false);
+pthread_mutex_t g_zero_trajectory_flagmutex;
 
 // ROS subscriber callbacks
-void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr &msg);
-void joints_cb(const sensor_msgs::JointStateConstPtr &msg);
+void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr &msg);
+void jointsCB(const sensor_msgs::JointStateConstPtr &msg);
 
 // ROS params to be read
 int readParams(ros::NodeHandle &n);
-std::string move_group_name, joint_topic, cmd_in_topic, cmd_frame,
-    cmd_out_topic, planning_frame, in_collision_topic, in_singularity_topic;
-double linear_scale, rot_scale, singularity_threshold, hard_stop_sing_thresh,
-    low_pass_filter_coeff, pub_period, incoming_cmd_timeout;
-bool simu, coll_check;
+std::string g_move_group_name, g_joint_topic, g_cmd_in_topic, g_cmd_frame,
+    g_cmd_out_topic, g_planning_frame, g_collision_warn_topic, g_singularity_warn_topic;
+double g_linear_scale, g_rot_scale, g_singularity_threshold, g_hard_stop_sing_thresh,
+    g_low_pass_filter_coeff, g_pub_period, g_incoming_cmd_timeout;
+bool g_simu, g_coll_check;
 
 /**
- * Class lpf - Filter the joint velocities to avoid jerky motion.
+ * Class LowPassFilter - Filter the joint velocities to avoid jerky motion.
  */
-class lpf {
+class LowPassFilter {
 public:
-  lpf(double low_pass_filter_coeff);
+  LowPassFilter(double low_pass_filter_coeff);
   double filter(const double &new_msrmt);
   void reset(double data);
   double filter_coeff_ = 10.;
@@ -106,11 +106,11 @@ private:
   double prev_filtered_msrmts_[2] = {0., 0.};
 };
 
-lpf::lpf(double low_pass_filter_coeff) {
+LowPassFilter::LowPassFilter(double low_pass_filter_coeff) {
   filter_coeff_ = low_pass_filter_coeff;
 }
 
-void lpf::reset(double data) {
+void LowPassFilter::reset(double data) {
   prev_msrmts_[0] = data;
   prev_msrmts_[1] = data;
   prev_msrmts_[2] = data;
@@ -119,7 +119,7 @@ void lpf::reset(double data) {
   prev_filtered_msrmts_[1] = data;
 }
 
-double lpf::filter(const double &new_msrmt) {
+double LowPassFilter::filter(const double &new_msrmt) {
   // Push in the new measurement
   prev_msrmts_[2] = prev_msrmts_[1];
   prev_msrmts_[1] = prev_msrmts_[0];
@@ -176,7 +176,7 @@ protected:
 
   // Reset the data stored in low-pass filters so the trajectory won't jump when
   // jogging is resumed.
-  void reset_velocity_filters();
+  void resetVelocityFilters();
 
   // Halt the robot
   void halt(trajectory_msgs::JointTrajectory &jt_traj);
@@ -193,13 +193,13 @@ protected:
 
   double delta_t_;
 
-  std::vector<jog_arm::lpf> velocity_filters_;
-  std::vector<jog_arm::lpf> position_filters_;
+  std::vector<jog_arm::LowPassFilter> velocity_filters_;
+  std::vector<jog_arm::LowPassFilter> position_filters_;
 
   // Check whether incoming cmds are stale. Pause if so
   ros::Duration time_of_incoming_cmd_;
 
-  ros::Publisher in_singularity_pub_;
+  ros::Publisher singularity_warn_pub_;
 };
 
 class CollisionCheck {
@@ -209,7 +209,7 @@ public:
 private:
   ros::NodeHandle nh_;
 
-  ros::Publisher in_collision_pub_;
+  ros::Publisher collision_warn_pub_;
 };
 
 } // namespace jog_arm

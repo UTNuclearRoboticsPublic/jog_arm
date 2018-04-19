@@ -3,7 +3,7 @@
 
 namespace compliant_control {
 
-compliantControl::compliantControl(std::vector<double> stiffness,
+CompliantControl::CompliantControl(std::vector<double> stiffness,
                                    std::vector<double> deadband,
                                    std::vector<double> endConditionWrench,
                                    double filterParam,
@@ -11,14 +11,14 @@ compliantControl::compliantControl(std::vector<double> stiffness,
                                    double highestAllowableForce,
                                    double highestAllowableTorque)
     : stiffness_(stiffness), deadband_(deadband),
-      endConditionWrench_(endConditionWrench),
+      end_condition_wrench_(endConditionWrench),
       safeForceLimit_(highestAllowableForce),
       safeTorqueLimit_(highestAllowableTorque) {
   bias_.resize(compliantEnum::NUM_DIMS);
   ft_.resize(compliantEnum::NUM_DIMS);
 
   for (int i = 0; i < compliantEnum::NUM_DIMS; i++)
-    vectorOfFilters_.push_back(lpf(filterParam));
+    vectorOfFilters_.push_back(LowPassFilter(filterParam));
 
   bias_[0] = bias.wrench.force.x;
   bias_[1] = bias.wrench.force.y;
@@ -30,7 +30,7 @@ compliantControl::compliantControl(std::vector<double> stiffness,
 }
 
 // Tare or bias the wrench readings -- i.e. reset its ground truth
-void compliantControl::biasSensor(geometry_msgs::WrenchStamped bias) {
+void CompliantControl::biasSensor(geometry_msgs::WrenchStamped bias) {
   bias_[0] = bias.wrench.force.x;
   bias_[1] = bias.wrench.force.y;
   bias_[2] = bias.wrench.force.z;
@@ -43,7 +43,7 @@ void compliantControl::biasSensor(geometry_msgs::WrenchStamped bias) {
   }
 }
 
-void compliantControl::setStiffness(std::vector<double> b) {
+void CompliantControl::setStiffness(std::vector<double> b) {
   if (b.size() != compliantEnum::NUM_DIMS) {
     ROS_ERROR_NAMED("compliant_control", "Invalid stiffness vector: ");
   } else {
@@ -61,17 +61,17 @@ void compliantControl::setStiffness(std::vector<double> b) {
   }
 }
 
-void compliantControl::setEndCondition(std::vector<double> endConditionWrench) {
+void CompliantControl::setEndCondition(std::vector<double> endConditionWrench) {
   if (endConditionWrench.size() != compliantEnum::NUM_DIMS) {
     ROS_ERROR_NAMED("compliant_control", "Invalid vector endConditionWrench: ");
   } else {
     for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
-      endConditionWrench_[i] = endConditionWrench[i];
+      end_condition_wrench_[i] = endConditionWrench[i];
     }
   }
 }
 
-void compliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
+void CompliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
 
   std::vector<double> biasedFT(6, 0.);
 
@@ -111,7 +111,7 @@ void compliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
 }
 
 compliantEnum::exitCondition
-compliantControl::getVelocity(std::vector<double> vIn,
+CompliantControl::getVelocity(std::vector<double> vIn,
                               geometry_msgs::WrenchStamped ftData,
                               std::vector<double> &vOut) {
   compliantEnum::exitCondition exitCondition = compliantEnum::NOT_CONTROLLED;
@@ -127,8 +127,8 @@ compliantControl::getVelocity(std::vector<double> vIn,
   }
 
   for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
-    if (endConditionWrench_[i] > 0) {
-      if (ft_[i] > endConditionWrench_[i]) {
+    if (end_condition_wrench_[i] > 0) {
+      if (ft_[i] > end_condition_wrench_[i]) {
         ROS_INFO_STREAM_NAMED("compliant_control",
                               "Exit condition met in direction: " << i);
         vOut[i] = 0.0;
@@ -139,9 +139,9 @@ compliantControl::getVelocity(std::vector<double> vIn,
           exitCondition = compliantEnum::CONDITION_NOT_MET;
         }
       }
-    } else // endConditionWrench_[i]<=0
+    } else // end_condition_wrench_[i]<=0
     {
-      if (ft_[i] < endConditionWrench_[i]) {
+      if (ft_[i] < end_condition_wrench_[i]) {
         ROS_INFO_STREAM_NAMED("compliant_control",
                               "Exit condition met in direction: " << i);
         vOut[i] = 0.0;
@@ -157,9 +157,9 @@ compliantControl::getVelocity(std::vector<double> vIn,
   return exitCondition;
 }
 
-lpf::lpf(double filterParam) : filterParam_(filterParam) {}
+LowPassFilter::LowPassFilter(double filterParam) : filterParam_(filterParam) {}
 
-double lpf::filter(const double &new_msrmt) {
+double LowPassFilter::filter(const double &new_msrmt) {
   // Push in the new measurement
   prev_msrmts_[2] = prev_msrmts_[1];
   prev_msrmts_[1] = prev_msrmts_[0];
@@ -180,7 +180,7 @@ double lpf::filter(const double &new_msrmt) {
   return new_filtered_msrmt;
 }
 
-void lpf::reset(double data) {
+void LowPassFilter::reset(double data) {
   prev_msrmts_ = {data, data, data};
   prev_filtered_msrmts_ = {data, data};
 }
