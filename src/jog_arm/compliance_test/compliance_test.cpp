@@ -48,6 +48,7 @@ int main(int argc, char **argv) {
 
 compliance_test::compliance_class::compliance_class()
     : spinner_(1), tf_listener_(tf_buffer_) {
+
   spinner_.start();
 
   // To publish commands to robots
@@ -79,14 +80,15 @@ compliance_test::compliance_class::compliance_class()
   double filterCutoff = 10.;
 
   // Deadband for force/torque measurements
-	std::vector<double> deadband(6, 10.);
+  std::vector<double> deadband(6, 10.);
 
   // Stop when any force exceeds X N, or torque exceeds X Nm
   std::vector<double> endConditionWrench(6, 60.0);
 
   // An object for compliant control
-  compliant_control::compliantControl comp(stiffness, deadband, endConditionWrench,
-                                           filterCutoff, ft_data_, 100.);
+  compliant_control::compliantControl comp(stiffness, deadband,
+                                           endConditionWrench, filterCutoff,
+                                           ft_data_, 100., 50.);
 
   // The 6 nominal velocity components.
   // For this demo, the robot should be stationary unless a force/torque is

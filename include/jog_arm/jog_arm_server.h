@@ -39,6 +39,7 @@
 
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
+#include <jog_arm/support/get_ros_params.h>
 #include <math.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -51,7 +52,6 @@
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
 #include <string>
-#include <jog_arm/support/get_ros_params.h>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
 
@@ -99,14 +99,16 @@ public:
   lpf(double low_pass_filter_coeff);
   double filter(const double &new_msrmt);
   void reset(double data);
-  double c_ = 10.;
+  double filter_coeff_ = 10.;
 
 private:
   double prev_msrmts_[3] = {0., 0., 0.};
   double prev_filtered_msrmts_[2] = {0., 0.};
 };
 
-lpf::lpf(double low_pass_filter_coeff) { c_ = low_pass_filter_coeff; }
+lpf::lpf(double low_pass_filter_coeff) {
+  filter_coeff_ = low_pass_filter_coeff;
+}
 
 void lpf::reset(double data) {
   prev_msrmts_[0] = data;
@@ -124,10 +126,11 @@ double lpf::filter(const double &new_msrmt) {
   prev_msrmts_[0] = new_msrmt;
 
   double new_filtered_msrmt =
-      (1 / (1 + c_ * c_ + 1.414 * c_)) *
+      (1 / (1 + filter_coeff_ * filter_coeff_ + 1.414 * filter_coeff_)) *
       (prev_msrmts_[2] + 2 * prev_msrmts_[1] + prev_msrmts_[0] -
-       (c_ * c_ - 1.414 * c_ + 1) * prev_filtered_msrmts_[1] -
-       (-2 * c_ * c_ + 2) * prev_filtered_msrmts_[0]);
+       (filter_coeff_ * filter_coeff_ - 1.414 * filter_coeff_ + 1) *
+           prev_filtered_msrmts_[1] -
+       (-2 * filter_coeff_ * filter_coeff_ + 2) * prev_filtered_msrmts_[0]);
 
   // Store the new filtered measurement
   prev_filtered_msrmts_[1] = prev_filtered_msrmts_[0];

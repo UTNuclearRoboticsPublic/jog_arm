@@ -10,11 +10,11 @@ jog_arm_server:
   hard_stop_singularity_threshold: 12. # Stop when the condition number hits this
   cmd_out_topic:  right_ur5_controller/right_ur5_joint_speed
   planning_frame:  right_ur5_base_link
-  low_pass_filter_coeff:  2.  # Larger c --> trust the filtered data more, trust the measurements less.
+  low_pass_filter_coeff:  2.  # Larger --> trust the filtered data more, trust the measurements less.
   pub_period:  0.01  # 1/Nominal publish rate [seconds]
   scale:
-    linear:  0.0004
-    rotational:  0.0008
+    linear:  0.0004  # Max linear velocity. Meters per pub_period. Units is [m/s]
+    rotational:  0.0008  # Max angular velocity. Rads per pub_period. Units is [rad/s]
   # Publish boolean warnings to these topics
   in_collision_topic:  jog_arm_server/halted
   in_singularity_topic:  jog_arm_server/halted

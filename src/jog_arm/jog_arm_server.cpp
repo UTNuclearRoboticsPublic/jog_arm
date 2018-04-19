@@ -199,7 +199,9 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name) {
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
+JogCalcs::JogCalcs(const std::string &move_group_name)
+    : arm_(move_group_name), prev_time_(ros::Time::now()) {
+
   // Publish collision status
   in_singularity_pub_ =
       nh_.advertise<std_msgs::Bool>(jog_arm::in_singularity_topic, 1);
@@ -280,8 +282,8 @@ JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
 
     jogCalcs(cmd_deltas_);
 
-    // Generally want to do these calcs very quickly. Add a small sleep to avoid
-    // 100% CPU usage, if unneeded.
+    // Generally want to run these calculations fast.
+    // Add a small sleep to avoid 100% CPU usage
     ros::Duration(0.001).sleep();
   }
 }
@@ -297,7 +299,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org
-  // Q#199376 (Annoying! Maybe do a PR.)
+  // Q#199376
   // Transform the linear component of the cmd message
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = cmd.twist.linear;
@@ -326,7 +328,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
 
-  // Apply scaling
+  // Apply user-defined scaling
   const Vector6d delta_x = scaleCommand(twist_cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
@@ -334,7 +336,20 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  const Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+
+  // This inner loop may execute slower or faster than the desired rate. Scale
+  // these joint
+  // commands to match the desired rate. Then the velocity will match the user's
+  // expectations.
+  delta_t_ = (ros::Time::now() - prev_time_).toSec();
+  prev_time_ = ros::Time::now();
+  delta_theta(0) *= jog_arm::pub_period / delta_t_;
+  delta_theta(1) *= jog_arm::pub_period / delta_t_;
+  delta_theta(2) *= jog_arm::pub_period / delta_t_;
+  delta_theta(3) *= jog_arm::pub_period / delta_t_;
+  delta_theta(4) *= jog_arm::pub_period / delta_t_;
+  delta_theta(5) *= jog_arm::pub_period / delta_t_;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return;
@@ -345,9 +360,6 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   // Include a velocity estimate for velocity-controller robots
-  auto current_time = ros::Time::now();
-  delta_t_ = (current_time - prev_time_).toSec();
-  prev_time_ = current_time;
   Eigen::VectorXd joint_vel(delta_theta / delta_t_);
 
   // Low-pass filter the velocities

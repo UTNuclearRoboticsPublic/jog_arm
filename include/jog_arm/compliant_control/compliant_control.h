@@ -9,6 +9,7 @@
  */
 
 #include <float.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/WrenchStamped.h>
 #include <math.h>
@@ -25,14 +26,8 @@ namespace compliantEnum {
  * controlled or requested.
  */
 enum dimension {
-  DIM_X = 0,  /**< The X dimension. */
-  DIM_Y = 1,  /**< The Y dimension. */
-  DIM_Z = 2,  /**< The Z dimension. */
-  DIM_RX = 3, /**< The rotational X dimension. */
-  DIM_RY = 4, /**< The rotational Y dimension. */
-  DIM_RZ = 5, /**< The rotational Z dimension. */
-  NUM_DIMS = 6
-}; /**< The number of dimensions. */
+  NUM_DIMS = 6 /**< 3 translational, 3 rotational dimensions. */
+};
 
 /**
  * exitCondition enum.
@@ -40,13 +35,12 @@ enum dimension {
  * the end.
  */
 enum exitCondition {
-  NOT_CONTROLLED = 0, /**< None of the dimension is set to be controlled. */
-  FT_VIOLATION = 1,   /**< Force or torque was read as maximum allowable. */
-  VMAX_VIOLATION = 2, /**< Calculated Velocity is more than maximum allowed. */
-  CONDITION_MET = 3,  /**< One of the compliant conditions is met. */
-  CONDITION_NOT_MET = 4, /**< No violation or condition. */
-  NUM_CONDITIONS = 5
-}; /**< The number of return conditions. */
+  NOT_CONTROLLED = 0,    /**< None of the dimension is set to be controlled. */
+  FT_VIOLATION = 1,      /**< Force or torque was read as maximum allowable. */
+  CONDITION_MET = 2,     /**< One of the compliant conditions is met. */
+  CONDITION_NOT_MET = 3, /**< No violation or condition. */
+  POSE_ACHIEVED = 4      /**< The target pose was reached within tolerances. */
+};                       /**< The number of return conditions. */
 }
 namespace compliant_control {
 class compliantControl;
@@ -54,33 +48,18 @@ class lpf;
 
 class compliantControl {
 
-  // TODO: Update the tests (10/06/2017)
-
 public:
-  /**
-   * Constructor.
-   */
-  compliantControl(std::vector<double> stiffness,
-                   std::vector<double> deadband,
-                   std::vector<double> endConditionWrench, double c,
+  // Constructor.
+  compliantControl(std::vector<double> stiffness, std::vector<double> deadband,
+                   std::vector<double> endConditionWrench, double filterParam,
                    geometry_msgs::WrenchStamped bias,
-                   double highestAllowableFT);
+                   double highestAllowableForce, double highestAllowableTorque);
 
-  /**
-   * Destructor.
-   */
-  ~compliantControl();
-
-  void initialize();
-
-  // Set the "springiness" of compliance in each direction
+  // Set the "springiness" of compliance in each direction.
   void setStiffness(std::vector<double> stiffness);
 
   // Exit when the given force/torque wrench is achieved in any direction
   void setEndCondition(std::vector<double> endConditionWrench);
-
-  // Quit if these forces/torques are exceeded
-  void setSafetyLimit(double safeWrenchLimit);
 
   // Update member variables with current, filtered forces/torques
   void getFT(geometry_msgs::WrenchStamped ftData);
@@ -116,7 +95,8 @@ public:
   std::vector<double> endConditionWrench_;
   std::vector<double> ft_;
   std::vector<double> bias_; // Initial biased force
-  double safeWrenchLimit_;
+  double safeForceLimit_,
+      safeTorqueLimit_; // Quit if these forces/torques are exceeded
   std::vector<compliant_control::lpf> vectorOfFilters_;
 
 private:
@@ -124,14 +104,15 @@ private:
 
 class lpf {
 public:
-  lpf(double filterCutoff);
+  lpf(double filterParam);
   double filter(const double &new_msrmt);
 
   // Related to the cutoff frequency of the filter.
-  // c=1 results in a cutoff at 1/4 of the sampling rate.
-  // See bitbucket.org/AndyZe/pid if you want to get more sophisticated.
-  // Larger c --> trust the filtered data more, trust the measurements less.
-  double filterCutoff_ = 4.;
+  // filterParam=1 results in a cutoff at 1/4 of the sampling rate.
+  // See bitbucket.org/AndyZe/pid for slightly more sophistication.
+  // Larger filterParam --> trust the filtered data more, trust the measurements
+  // less.
+  double filterParam_ = 4.;
 
   void reset(double data);
 

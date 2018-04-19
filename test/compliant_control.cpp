@@ -1,5 +1,5 @@
-#include <jog_arm/compliant_control/compliant_control.h>
 #include <gtest/gtest.h>
+#include <jog_arm/compliant_control/compliant_control.h>
 
 using testing::Types;
 
@@ -13,9 +13,9 @@ TEST(compliantControlTest, constructor) {
   std::vector<double> haltF(6, 20.0);
   geometry_msgs::WrenchStamped ftData0;
   double highestAllowableFT = 100.;
-  compliant_control::compliantControl control(stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
+  compliant_control::compliantControl control(
+      stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
 }
-
 
 TEST(compliantControlTest, setStiffness) {
   std::vector<double> stiffness(6, 1.);
@@ -25,7 +25,8 @@ TEST(compliantControlTest, setStiffness) {
   std::vector<double> haltF(6, 20.0);
   geometry_msgs::WrenchStamped ftData0;
   double highestAllowableFT = 100.;
-  compliant_control::compliantControl control(stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
+  compliant_control::compliantControl control(
+      stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
 
   std::vector<double> bin(6, DBL_MAX);
   bin[0] = 12.0;
@@ -43,7 +44,6 @@ TEST(compliantControlTest, setStiffness) {
   EXPECT_NEAR(control.stiffness_[5], DBL_MAX, 1e-4);
 }
 
-
 TEST(compliantControlTest, setEndCondition) {
   std::vector<double> stiffness(6, 1.);
   std::vector<double> deadband(6, 10.);
@@ -52,7 +52,8 @@ TEST(compliantControlTest, setEndCondition) {
   std::vector<bool> endCondition(6, false);
   geometry_msgs::WrenchStamped ftData0;
   double highestAllowableFT = 100.;
-  compliant_control::compliantControl control(stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
+  compliant_control::compliantControl control(
+      stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
 
   std::vector<double> fCond(6, 0.0);
   fCond[0] = 12.0;
@@ -70,7 +71,6 @@ TEST(compliantControlTest, setEndCondition) {
   EXPECT_NEAR(control.endConditionWrench_[5], 0.0, 1e-4);
 }
 
-
 TEST(compliantControlTest, getVelocity) {
   std::vector<double> stiffness(6, 1.);
 
@@ -84,7 +84,8 @@ TEST(compliantControlTest, getVelocity) {
 
   geometry_msgs::WrenchStamped ftData0;
   double highestAllowableFT = 100.;
-  compliant_control::compliantControl control(stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
+  compliant_control::compliantControl control(
+      stiffness, deadband, condF, filterCutoff, ftData0, highestAllowableFT);
 
   std::vector<double> vIn(6, 0.), vOut(6, 0.);
   vIn[0] = 1.0;
@@ -105,7 +106,8 @@ TEST(compliantControlTest, getVelocity) {
   compliantEnum::exitCondition endcondition =
       control.getVelocity(vIn, ftData, vOut);
 
-  // Output will not be exactly equal to input/stiffness because of the low-pass filtering
+  // Output will not be exactly equal to input/stiffness because of the low-pass
+  // filtering
   // and the compliant behavior. Should be close, though.
   EXPECT_TRUE(endcondition == compliantEnum::CONDITION_NOT_MET);
   EXPECT_NEAR(vOut[0], vIn[0], 0.2);
@@ -115,12 +117,10 @@ TEST(compliantControlTest, getVelocity) {
   EXPECT_NEAR(vOut[4], vIn[4], 0.2);
   EXPECT_NEAR(vOut[5], vIn[5], 0.2);
 
-
   //  To test std_msgs::String length
   char cmd[74];
   sprintf(cmd, "speedl([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], 0.2, 0.1)\n",
-          vOut[0], vOut[1], vOut[2],
-          vOut[3], vOut[4], vOut[5]);
+          vOut[0], vOut[1], vOut[2], vOut[3], vOut[4], vOut[5]);
 
   //  One of the controlled element has met the end condition so velocity in
   //  that direction should be zero.
@@ -135,9 +135,8 @@ TEST(compliantControlTest, getVelocity) {
   ftData.wrench.torque.z = 0.;
 
   // Spam this several times to allow the filter to settle
-  for (int i=0; i<20; i++)
-    endcondition =
-        control.getVelocity(vIn, ftData, vOut);
+  for (int i = 0; i < 20; i++)
+    endcondition = control.getVelocity(vIn, ftData, vOut);
 
   EXPECT_TRUE(endcondition == compliantEnum::CONDITION_MET);
   EXPECT_NEAR(vOut[0], vIn[0], 0.2);
