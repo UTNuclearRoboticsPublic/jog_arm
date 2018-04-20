@@ -3,23 +3,22 @@
 
 namespace compliant_control {
 
-compliantControl::compliantControl(std::vector<double> stiffness,
+CompliantControl::CompliantControl(std::vector<double> stiffness,
                                    std::vector<double> deadband,
                                    std::vector<double> endConditionWrench,
-                                   double filterCutoff,
+                                   double filterParam,
                                    geometry_msgs::WrenchStamped bias,
-                                   double highestAllowableFT)
-    : stiffness_(stiffness), deadband_(deadband), endConditionWrench_(endConditionWrench) {
-  setSafetyLimit(highestAllowableFT);
+                                   double highestAllowableForce,
+                                   double highestAllowableTorque)
+    : stiffness_(stiffness), deadband_(deadband),
+      end_condition_wrench_(endConditionWrench),
+      safeForceLimit_(highestAllowableForce),
+      safeTorqueLimit_(highestAllowableTorque) {
   bias_.resize(compliantEnum::NUM_DIMS);
   ft_.resize(compliantEnum::NUM_DIMS);
 
-  for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
-    vectorOfFilters_.push_back(lpf(filterCutoff));
-  }
-
-  // Initially, no safety limit
-  safeWrenchLimit_ = DBL_MAX;
+  for (int i = 0; i < compliantEnum::NUM_DIMS; i++)
+    vectorOfFilters_.push_back(LowPassFilter(filterParam));
 
   bias_[0] = bias.wrench.force.x;
   bias_[1] = bias.wrench.force.y;
@@ -30,8 +29,8 @@ compliantControl::compliantControl(std::vector<double> stiffness,
   ft_ = bias_;
 }
 
-// Tare or bias the sensor -- i.e. reset its ground truth
-void compliantControl::biasSensor(geometry_msgs::WrenchStamped bias) {
+// Tare or bias the wrench readings -- i.e. reset its ground truth
+void CompliantControl::biasSensor(geometry_msgs::WrenchStamped bias) {
   bias_[0] = bias.wrench.force.x;
   bias_[1] = bias.wrench.force.y;
   bias_[2] = bias.wrench.force.z;
@@ -44,9 +43,7 @@ void compliantControl::biasSensor(geometry_msgs::WrenchStamped bias) {
   }
 }
 
-compliantControl::~compliantControl() {}
-
-void compliantControl::setStiffness(std::vector<double> b) {
+void CompliantControl::setStiffness(std::vector<double> b) {
   if (b.size() != compliantEnum::NUM_DIMS) {
     ROS_ERROR_NAMED("compliant_control", "Invalid stiffness vector: ");
   } else {
@@ -64,49 +61,44 @@ void compliantControl::setStiffness(std::vector<double> b) {
   }
 }
 
-void compliantControl::setSafetyLimit(double safeWrenchLimit) {
-  safeWrenchLimit_ = safeWrenchLimit;
-}
-
-void compliantControl::setEndCondition(
-    std::vector<double> endConditionWrench) {
+void CompliantControl::setEndCondition(std::vector<double> endConditionWrench) {
   if (endConditionWrench.size() != compliantEnum::NUM_DIMS) {
     ROS_ERROR_NAMED("compliant_control", "Invalid vector endConditionWrench: ");
   } else {
     for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
-      endConditionWrench_[i] = endConditionWrench[i];
+      end_condition_wrench_[i] = endConditionWrench[i];
     }
   }
 }
 
-void compliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
+void CompliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
 
-  std::vector<double> biasedFT(6,0.);
+  std::vector<double> biasedFT(6, 0.);
 
   // Apply the deadband
-  if (fabs( ftData.wrench.force.x - bias_[0] ) < fabs(deadband_[0]) )
-      biasedFT[0] = 0.;
+  if (fabs(ftData.wrench.force.x - bias_[0]) < fabs(deadband_[0]))
+    biasedFT[0] = 0.;
   else
     biasedFT[0] = ftData.wrench.force.x - bias_[0];
-  if (fabs( ftData.wrench.force.y - bias_[1] ) < fabs(deadband_[1]) )
-      biasedFT[1] = 0.;
+  if (fabs(ftData.wrench.force.y - bias_[1]) < fabs(deadband_[1]))
+    biasedFT[1] = 0.;
   else
     biasedFT[1] = ftData.wrench.force.y - bias_[1];
-  if (fabs( ftData.wrench.force.z - bias_[2] ) < fabs(deadband_[2]) )
-      biasedFT[2] = 0.;
+  if (fabs(ftData.wrench.force.z - bias_[2]) < fabs(deadband_[2]))
+    biasedFT[2] = 0.;
   else
     biasedFT[2] = ftData.wrench.force.z - bias_[2];
 
-  if (fabs( ftData.wrench.torque.x - bias_[3] ) < fabs(deadband_[3]) )
-      biasedFT[3] = 0.;
+  if (fabs(ftData.wrench.torque.x - bias_[3]) < fabs(deadband_[3]))
+    biasedFT[3] = 0.;
   else
     biasedFT[3] = ftData.wrench.torque.x - bias_[3];
-  if (fabs( ftData.wrench.torque.y - bias_[4] ) < fabs(deadband_[4]) )
-      biasedFT[4] = 0.;
+  if (fabs(ftData.wrench.torque.y - bias_[4]) < fabs(deadband_[4]))
+    biasedFT[4] = 0.;
   else
     biasedFT[4] = ftData.wrench.torque.y - bias_[4];
-  if (fabs( ftData.wrench.torque.z - bias_[5] ) < fabs(deadband_[5]) )
-      biasedFT[5] = 0.;
+  if (fabs(ftData.wrench.torque.z - bias_[5]) < fabs(deadband_[5]))
+    biasedFT[5] = 0.;
   else
     biasedFT[5] = ftData.wrench.torque.x - bias_[5];
 
@@ -119,23 +111,24 @@ void compliantControl::getFT(geometry_msgs::WrenchStamped ftData) {
 }
 
 compliantEnum::exitCondition
-compliantControl::getVelocity(std::vector<double> vIn,
+CompliantControl::getVelocity(std::vector<double> vIn,
                               geometry_msgs::WrenchStamped ftData,
                               std::vector<double> &vOut) {
   compliantEnum::exitCondition exitCondition = compliantEnum::NOT_CONTROLLED;
   getFT(ftData);
 
-  if ((fabs(ft_[0]) + fabs(ft_[1]) + fabs(ft_[2])) >= safeWrenchLimit_) {
+  if (((fabs(ft_[0]) + fabs(ft_[1]) + fabs(ft_[2])) >= safeForceLimit_) ||
+      ((fabs(ft_[3]) + fabs(ft_[4]) + fabs(ft_[5])))) {
     ROS_ERROR_NAMED(
         "compliant_control",
-        "Total force is exceeding the safety limits. Stopping motion.");
+        "Total force or torque exceeds safety limits. Stopping motion.");
     vOut = std::vector<double>(6, 0.0);
     return compliantEnum::FT_VIOLATION;
   }
 
   for (int i = 0; i < compliantEnum::NUM_DIMS; i++) {
-    if (endConditionWrench_[i] > 0) {
-      if (ft_[i] > endConditionWrench_[i]) {
+    if (end_condition_wrench_[i] > 0) {
+      if (ft_[i] > end_condition_wrench_[i]) {
         ROS_INFO_STREAM_NAMED("compliant_control",
                               "Exit condition met in direction: " << i);
         vOut[i] = 0.0;
@@ -146,9 +139,9 @@ compliantControl::getVelocity(std::vector<double> vIn,
           exitCondition = compliantEnum::CONDITION_NOT_MET;
         }
       }
-    } else // endConditionWrench_[i]<=0
+    } else // end_condition_wrench_[i]<=0
     {
-      if (ft_[i] < endConditionWrench_[i]) {
+      if (ft_[i] < end_condition_wrench_[i]) {
         ROS_INFO_STREAM_NAMED("compliant_control",
                               "Exit condition met in direction: " << i);
         vOut[i] = 0.0;
@@ -164,20 +157,20 @@ compliantControl::getVelocity(std::vector<double> vIn,
   return exitCondition;
 }
 
-lpf::lpf(double filterCutoff) : filterCutoff_(filterCutoff) {}
+LowPassFilter::LowPassFilter(double filterParam) : filterParam_(filterParam) {}
 
-double lpf::filter(const double &new_msrmt) {
+double LowPassFilter::filter(const double &new_msrmt) {
   // Push in the new measurement
   prev_msrmts_[2] = prev_msrmts_[1];
   prev_msrmts_[1] = prev_msrmts_[0];
   prev_msrmts_[0] = new_msrmt;
 
   double new_filtered_msrmt =
-      (1 / (1 + filterCutoff_ * filterCutoff_ + 1.414 * filterCutoff_)) *
+      (1 / (1 + filterParam_ * filterParam_ + 1.414 * filterParam_)) *
       (prev_msrmts_[2] + 2 * prev_msrmts_[1] + prev_msrmts_[0] -
-       (filterCutoff_ * filterCutoff_ - 1.414 * filterCutoff_ + 1) *
+       (filterParam_ * filterParam_ - 1.414 * filterParam_ + 1) *
            prev_filtered_msrmts_[1] -
-       (-2 * filterCutoff_ * filterCutoff_ + 2) * prev_filtered_msrmts_[0]);
+       (-2 * filterParam_ * filterParam_ + 2) * prev_filtered_msrmts_[0]);
   ;
 
   // Store the new filtered measurement
@@ -187,7 +180,7 @@ double lpf::filter(const double &new_msrmt) {
   return new_filtered_msrmt;
 }
 
-void lpf::reset(double data) {
+void LowPassFilter::reset(double data) {
   prev_msrmts_ = {data, data, data};
   prev_filtered_msrmts_ = {data, data};
 }

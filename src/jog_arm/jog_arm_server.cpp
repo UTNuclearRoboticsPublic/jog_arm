@@ -61,39 +61,40 @@ int main(int argc, char **argv) {
 
   // ROS subscriptions. Share the data with the worker thread
   ros::Subscriber cmd_sub =
-      n.subscribe(jog_arm::cmd_in_topic, 1, jog_arm::delta_cmd_cb);
+      n.subscribe(jog_arm::g_cmd_in_topic, 1, jog_arm::deltaCmdCB);
   ros::Subscriber joints_sub =
-      n.subscribe(jog_arm::joint_topic, 1, jog_arm::joints_cb);
+      n.subscribe(jog_arm::g_joint_topic, 1, jog_arm::jointsCB);
 
   // Publish freshly-calculated joints to the robot
   ros::Publisher joint_trajectory_pub =
-      n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::cmd_out_topic, 1);
+      n.advertise<trajectory_msgs::JointTrajectory>(jog_arm::g_cmd_out_topic,
+                                                    1);
 
-  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::g_joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
-      jog_arm::cmd_in_topic);
+      jog_arm::g_cmd_in_topic);
 
   // Wait for jog filters to stablize
-  ros::Duration(10 * jog_arm::pub_period).sleep();
+  ros::Duration(10 * jog_arm::g_pub_period).sleep();
 
-  ros::Rate main_rate(1. / jog_arm::pub_period);
+  ros::Rate main_rate(1. / jog_arm::g_pub_period);
 
   while (ros::ok()) {
     ros::spinOnce();
 
     // Send the newest target joints
-    pthread_mutex_lock(&jog_arm::new_traj_mutex);
-    if (jog_arm::new_traj.joint_names.size() != 0) {
+    pthread_mutex_lock(&jog_arm::g_new_traj_mutex);
+    if (jog_arm::g_new_traj.joint_names.size() != 0) {
       // Check for stale cmds
-      if (ros::Time::now() - jog_arm::new_traj.header.stamp <
-          ros::Duration(jog_arm::incoming_cmd_timeout)) {
+      if (ros::Time::now() - jog_arm::g_new_traj.header.stamp <
+          ros::Duration(jog_arm::g_incoming_cmd_timeout)) {
         // Skip the jogging publication if all inputs are 0.
-        pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
-        if (!jog_arm::zero_trajectory_flag_) {
-          jog_arm::new_traj.header.stamp = ros::Time::now();
-          joint_trajectory_pub.publish(jog_arm::new_traj);
+        pthread_mutex_lock(&jog_arm::g_zero_trajectory_flagmutex);
+        if (!jog_arm::g_zero_trajectory_flag) {
+          jog_arm::g_new_traj.header.stamp = ros::Time::now();
+          joint_trajectory_pub.publish(jog_arm::g_new_traj);
         }
-        pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
+        pthread_mutex_unlock(&jog_arm::g_zero_trajectory_flagmutex);
       } else {
         ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
                                        "Stale joint "
@@ -105,7 +106,7 @@ int main(int argc, char **argv) {
                                        "calculations taking too long?");
       }
     }
-    pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+    pthread_mutex_unlock(&jog_arm::g_new_traj_mutex);
 
     main_rate.sleep();
   }
@@ -117,23 +118,22 @@ namespace jog_arm {
 
 // A separate thread for the heavy jogging calculations.
 void *joggingPipeline(void *) {
-  jog_arm::JogCalcs ja(jog_arm::move_group_name);
+  jog_arm::JogCalcs ja(jog_arm::g_move_group_name);
   return nullptr;
 }
 
 // A separate thread for collision checking.
 void *collisionCheck(void *) {
-  jog_arm::CollisionCheck cc(jog_arm::move_group_name);
+  jog_arm::CollisionCheck cc(jog_arm::g_move_group_name);
   return nullptr;
 }
 
 // Constructor for the class that handles collision checking
 CollisionCheck::CollisionCheck(const std::string &move_group_name) {
   // If user specified true in yaml file
-  if (jog_arm::coll_check) {
+  if (jog_arm::g_coll_check) {
     // Publish collision status
-    in_collision_pub_ =
-        nh_.advertise<std_msgs::Bool>(jog_arm::in_collision_topic, 1);
+    warning_pub_ = nh_.advertise<std_msgs::Bool>(jog_arm::g_warning_topic, 1);
     std_msgs::Bool collision_status;
 
     robot_model_loader::RobotModelLoader robot_model_loader(
@@ -150,14 +150,14 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name) {
 
     // Wait for initial joint message
     ROS_INFO_NAMED("jog_arm_server", "Waiting for first joint msg.");
-    ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+    ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::g_joint_topic);
     ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
-        jog_arm::cmd_in_topic);
+        jog_arm::g_cmd_in_topic);
     ROS_INFO_NAMED("jog_arm_server", "Received first joint msg.");
 
-    pthread_mutex_lock(&joints_mutex);
-    sensor_msgs::JointState jts = jog_arm::joints;
-    pthread_mutex_unlock(&joints_mutex);
+    pthread_mutex_lock(&g_joints_mutex);
+    sensor_msgs::JointState jts = jog_arm::g_joints;
+    pthread_mutex_unlock(&g_joints_mutex);
 
     ros::Rate collision_rate(100);
 
@@ -180,16 +180,16 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name) {
 
       // If collision, signal the jogging to stop
       if (collision_result.collision) {
-        pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-        jog_arm::imminent_collision = true;
-        pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+        pthread_mutex_lock(&jog_arm::g_imminent_collision_mutex);
+        jog_arm::g_imminent_collision = true;
+        pthread_mutex_unlock(&jog_arm::g_imminent_collision_mutex);
 
         collision_status.data = true;
-        in_collision_pub_.publish(collision_status);
+        warning_pub_.publish(collision_status);
       } else {
-        pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-        jog_arm::imminent_collision = false;
-        pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+        pthread_mutex_lock(&jog_arm::g_imminent_collision_mutex);
+        jog_arm::g_imminent_collision = false;
+        pthread_mutex_unlock(&jog_arm::g_imminent_collision_mutex);
       }
 
       ros::spinOnce();
@@ -199,10 +199,11 @@ CollisionCheck::CollisionCheck(const std::string &move_group_name) {
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
+JogCalcs::JogCalcs(const std::string &move_group_name)
+    : arm_(move_group_name), prev_time_(ros::Time::now()) {
+
   // Publish collision status
-  in_singularity_pub_ =
-      nh_.advertise<std_msgs::Bool>(jog_arm::in_singularity_topic, 1);
+  warning_pub_ = nh_.advertise<std_msgs::Bool>(jog_arm::g_warning_topic, 1);
 
   // MoveIt Setup
   robot_model_loader::RobotModelLoader model_loader("robot_description");
@@ -222,9 +223,9 @@ JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
 
   // Wait for initial messages
   ROS_INFO_NAMED("jog_arm_server", "Waiting for first joint msg.");
-  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::joint_topic);
+  ros::topic::waitForMessage<sensor_msgs::JointState>(jog_arm::g_joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
-      jog_arm::cmd_in_topic);
+      jog_arm::g_cmd_in_topic);
   ROS_INFO_NAMED("jog_arm_server", "Received first joint msg.");
 
   jt_state_.name = arm_.getJointNames();
@@ -234,14 +235,16 @@ JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
 
   // Low-pass filters for the joint positions & velocities
   for (std::size_t i = 0; i < joint_names.size(); i++) {
-    velocity_filters_.push_back(jog_arm::lpf(jog_arm::low_pass_filter_coeff));
-    position_filters_.push_back(jog_arm::lpf(jog_arm::low_pass_filter_coeff));
+    velocity_filters_.push_back(
+        jog_arm::LowPassFilter(jog_arm::g_low_pass_filter_coeff));
+    position_filters_.push_back(
+        jog_arm::LowPassFilter(jog_arm::g_low_pass_filter_coeff));
   }
 
   // Initialize the position filters to initial robot joints
-  pthread_mutex_lock(&joints_mutex);
-  incoming_jts_ = jog_arm::joints;
-  pthread_mutex_unlock(&joints_mutex);
+  pthread_mutex_lock(&g_joints_mutex);
+  incoming_jts_ = jog_arm::g_joints;
+  pthread_mutex_unlock(&g_joints_mutex);
   updateJoints();
   for (std::size_t i = 0; i < jt_state_.name.size(); i++)
     position_filters_[i].reset(jt_state_.position[i]);
@@ -249,39 +252,39 @@ JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
   // Wait for the first jogging cmd.
   // Store it in a class member for further calcs.
   // Then free up the shared variable again.
-  while (cmd_deltas.header.stamp == ros::Time(0.)) {
+  while (cmd_deltas_.header.stamp == ros::Time(0.)) {
     ros::Duration(0.05).sleep();
-    pthread_mutex_lock(&cmd_deltas_mutex);
-    cmd_deltas_ = jog_arm::cmd_deltas;
-    pthread_mutex_unlock(&cmd_deltas_mutex);
+    pthread_mutex_lock(&g_cmd_deltas_mutex);
+    cmd_deltas_ = jog_arm::g_cmd_deltas;
+    pthread_mutex_unlock(&g_cmd_deltas_mutex);
   }
 
   // Now do jogging calcs
   while (ros::ok()) {
     // If user commands are all zero, reset the low-pass filters
     // when commands resume
-    pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
-    bool flag = jog_arm::zero_trajectory_flag_;
-    pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
+    pthread_mutex_lock(&jog_arm::g_zero_trajectory_flagmutex);
+    bool flag = jog_arm::g_zero_trajectory_flag;
+    pthread_mutex_unlock(&jog_arm::g_zero_trajectory_flagmutex);
     if (flag)
       // Reset low-pass filters
-      reset_velocity_filters();
+      resetVelocityFilters();
 
     // Pull data from the shared variables.
-    pthread_mutex_lock(&cmd_deltas_mutex);
-    cmd_deltas_ = jog_arm::cmd_deltas;
-    pthread_mutex_unlock(&cmd_deltas_mutex);
+    pthread_mutex_lock(&g_cmd_deltas_mutex);
+    cmd_deltas_ = jog_arm::g_cmd_deltas;
+    pthread_mutex_unlock(&g_cmd_deltas_mutex);
 
-    pthread_mutex_lock(&joints_mutex);
-    incoming_jts_ = jog_arm::joints;
-    pthread_mutex_unlock(&joints_mutex);
+    pthread_mutex_lock(&g_joints_mutex);
+    incoming_jts_ = jog_arm::g_joints;
+    pthread_mutex_unlock(&g_joints_mutex);
 
     updateJoints();
 
     jogCalcs(cmd_deltas_);
 
-    // Generally want to do these calcs very quickly. Add a small sleep to avoid
-    // 100% CPU usage, if unneeded.
+    // Generally want to run these calculations fast.
+    // Add a small sleep to avoid 100% CPU usage
     ros::Duration(0.001).sleep();
   }
 }
@@ -290,20 +293,21 @@ JogCalcs::JogCalcs(const std::string &move_group_name) : arm_(move_group_name) {
 void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   // Convert the cmd to the MoveGroup planning frame.
   try {
-    listener_.waitForTransform(cmd.header.frame_id, jog_arm::planning_frame,
+    listener_.waitForTransform(cmd.header.frame_id, jog_arm::g_planning_frame,
                                ros::Time::now(), ros::Duration(0.2));
   } catch (tf::TransformException ex) {
     ROS_ERROR_STREAM_NAMED("jog_arm_server", "jogCalcs: " << ex.what());
     return;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org
-  // Q#199376 (Annoying! Maybe do a PR.)
+  // Q#199376
   // Transform the linear component of the cmd message
   geometry_msgs::Vector3Stamped lin_vector;
   lin_vector.vector = cmd.twist.linear;
   lin_vector.header.frame_id = cmd.header.frame_id;
   try {
-    listener_.transformVector(jog_arm::planning_frame, lin_vector, lin_vector);
+    listener_.transformVector(jog_arm::g_planning_frame, lin_vector,
+                              lin_vector);
   } catch (tf::TransformException ex) {
     ROS_ERROR_STREAM_NAMED("jog_arm_server", ex.what());
     return;
@@ -313,7 +317,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   rot_vector.vector = cmd.twist.angular;
   rot_vector.header.frame_id = cmd.header.frame_id;
   try {
-    listener_.transformVector(jog_arm::planning_frame, rot_vector, rot_vector);
+    listener_.transformVector(jog_arm::g_planning_frame, rot_vector,
+                              rot_vector);
   } catch (tf::TransformException ex) {
     ROS_ERROR_STREAM_NAMED("jog_arm_server", ex.what());
     return;
@@ -322,11 +327,11 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   // Put these components back into a TwistStamped
   geometry_msgs::TwistStamped twist_cmd;
   twist_cmd.header.stamp = cmd.header.stamp;
-  twist_cmd.header.frame_id = jog_arm::planning_frame;
+  twist_cmd.header.frame_id = jog_arm::g_planning_frame;
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
 
-  // Apply scaling
+  // Apply user-defined scaling
   const Vector6d delta_x = scaleCommand(twist_cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
@@ -334,20 +339,29 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  const Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+
+  // This inner loop may execute slower or faster than the desired rate. Scale
+  // these joint
+  // commands to match the desired rate. Then the velocity will match the user's
+  // expectations.
+  delta_t_ = (ros::Time::now() - prev_time_).toSec();
+  prev_time_ = ros::Time::now();
+  delta_theta(0) *= jog_arm::g_pub_period / delta_t_;
+  delta_theta(1) *= jog_arm::g_pub_period / delta_t_;
+  delta_theta(2) *= jog_arm::g_pub_period / delta_t_;
+  delta_theta(3) *= jog_arm::g_pub_period / delta_t_;
+  delta_theta(4) *= jog_arm::g_pub_period / delta_t_;
+  delta_theta(5) *= jog_arm::g_pub_period / delta_t_;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return;
 
-  // Check the Jacobian with these new joints. Halt before approaching a
-  // singularity.
+  // Check the Jacobian with these new joints.
   kinematic_state_->setVariableValues(jt_state_);
   jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   // Include a velocity estimate for velocity-controller robots
-  auto current_time = ros::Time::now();
-  delta_t_ = (current_time - prev_time_).toSec();
-  prev_time_ = current_time;
   Eigen::VectorXd joint_vel(delta_theta / delta_t_);
 
   // Low-pass filter the velocities
@@ -372,23 +386,23 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
 
   // Compose the outgoing msg
   trajectory_msgs::JointTrajectory new_jt_traj;
-  new_jt_traj.header.frame_id = jog_arm::planning_frame;
+  new_jt_traj.header.frame_id = jog_arm::g_planning_frame;
   new_jt_traj.header.stamp = cmd.header.stamp;
   new_jt_traj.joint_names = jt_state_.name;
   trajectory_msgs::JointTrajectoryPoint point;
   point.positions = jt_state_.position;
-  point.time_from_start = ros::Duration(jog_arm::pub_period);
+  point.time_from_start = ros::Duration(jog_arm::g_pub_period);
   point.velocities = jt_state_.velocity;
 
   new_jt_traj.points.push_back(point);
 
   // Stop if imminent collision
-  pthread_mutex_lock(&jog_arm::imminent_collision_mutex);
-  bool collision = jog_arm::imminent_collision;
-  pthread_mutex_unlock(&jog_arm::imminent_collision_mutex);
+  pthread_mutex_lock(&jog_arm::g_imminent_collision_mutex);
+  bool collision = jog_arm::g_imminent_collision;
+  pthread_mutex_unlock(&jog_arm::g_imminent_collision_mutex);
   if (collision) {
     ROS_ERROR_THROTTLE_NAMED(2, "jog_arm_server",
-                             "Dangerously close to a collision. Halting.");
+                             "Close to a collision. Halting.");
 
     halt(new_jt_traj);
   }
@@ -396,19 +410,19 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   // Verify that the future Jacobian is well-conditioned before moving.
   // Slow down if very close to a singularity.
   // Stop if extremely close.
-  double currentCN = checkConditionNumber(jacobian);
-  if (currentCN > jog_arm::singularity_threshold) {
-    if (currentCN > jog_arm::hard_stop_sing_thresh) {
+  double current_condition_number = checkConditionNumber(jacobian);
+  if (current_condition_number > jog_arm::g_singularity_threshold) {
+    if (current_condition_number > jog_arm::g_hard_stop_sing_thresh) {
       ROS_ERROR_THROTTLE_NAMED(2, "jog_arm_server",
-                               "Dangerously close to a "
+                               "Close to a "
                                "singularity (%f). Halting.",
-                               currentCN);
+                               current_condition_number);
 
       halt(new_jt_traj);
 
       std_msgs::Bool singularity_status;
       singularity_status.data = true;
-      in_singularity_pub_.publish(singularity_status);
+      warning_pub_.publish(singularity_status);
     }
     // Only somewhat close to singularity. Just slow down.
     else {
@@ -421,23 +435,36 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
     }
   }
 
-  if (jog_arm::simu)
+  // Check if new joints would be within bounds
+  if (!kinematic_state_->satisfiesBounds(joint_model_group_)) {
+    ROS_ERROR_THROTTLE_NAMED(2, "jog_arm_server",
+                             "Close to a "
+                             "position or velocity limit. Halting.");
+
+    halt(new_jt_traj);
+
+    std_msgs::Bool limit_status;
+    limit_status.data = true;
+    warning_pub_.publish(limit_status);
+  }
+
+  if (jog_arm::g_simu)
     // Spam several redundant points into the trajectory. The first few may be
     // skipped if the
     // time stamp is in the past when it reaches the client. Needed for gazebo
     // simulation.
     // Start from 2 because the first point's timestamp is already
-    // 1*jog_arm::pub_period
+    // 1*jog_arm::g_pub_period
     point = new_jt_traj.points[0];
   for (int i = 2; i < 30; i++) {
-    point.time_from_start = ros::Duration(i * jog_arm::pub_period);
+    point.time_from_start = ros::Duration(i * jog_arm::g_pub_period);
     new_jt_traj.points.push_back(point);
   }
 
   // Share with main to be published
-  pthread_mutex_lock(&jog_arm::new_traj_mutex);
-  jog_arm::new_traj = new_jt_traj;
-  pthread_mutex_unlock(&jog_arm::new_traj_mutex);
+  pthread_mutex_lock(&jog_arm::g_new_traj_mutex);
+  jog_arm::g_new_traj = new_jt_traj;
+  pthread_mutex_unlock(&jog_arm::g_new_traj_mutex);
 }
 
 // Halt the robot
@@ -447,12 +474,12 @@ void JogCalcs::halt(trajectory_msgs::JointTrajectory &jt_traj) {
     jt_traj.points[0].velocities[i] = 0.;
   }
   // Store all zeros in the velocity filter
-  reset_velocity_filters();
+  resetVelocityFilters();
 }
 
 // Reset the data stored in filters so the trajectory won't jump when jogging is
 // resumed.
-void JogCalcs::reset_velocity_filters() {
+void JogCalcs::resetVelocityFilters() {
   for (std::size_t i = 0; i < jt_state_.name.size(); i++)
     velocity_filters_[i].reset(0); // Zero velocity
 }
@@ -499,12 +526,12 @@ JogCalcs::Vector6d
 JogCalcs::scaleCommand(const geometry_msgs::TwistStamped &command) const {
   Vector6d result;
 
-  result(0) = jog_arm::linear_scale * command.twist.linear.x;
-  result(1) = jog_arm::linear_scale * command.twist.linear.y;
-  result(2) = jog_arm::linear_scale * command.twist.linear.z;
-  result(3) = jog_arm::rot_scale * command.twist.angular.x;
-  result(4) = jog_arm::rot_scale * command.twist.angular.y;
-  result(5) = jog_arm::rot_scale * command.twist.angular.z;
+  result(0) = jog_arm::g_linear_scale * command.twist.linear.x;
+  result(1) = jog_arm::g_linear_scale * command.twist.linear.y;
+  result(2) = jog_arm::g_linear_scale * command.twist.linear.z;
+  result(3) = jog_arm::g_rot_scale * command.twist.angular.x;
+  result(4) = jog_arm::g_rot_scale * command.twist.angular.y;
+  result(5) = jog_arm::g_rot_scale * command.twist.angular.z;
 
   return result;
 }
@@ -549,33 +576,33 @@ double JogCalcs::checkConditionNumber(const Eigen::MatrixXd &matrix) const {
 
 // Listen to cartesian delta commands.
 // Store them in a shared variable.
-void delta_cmd_cb(const geometry_msgs::TwistStampedConstPtr &msg) {
-  pthread_mutex_lock(&cmd_deltas_mutex);
-  jog_arm::cmd_deltas = *msg;
+void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr &msg) {
+  pthread_mutex_lock(&g_cmd_deltas_mutex);
+  jog_arm::g_cmd_deltas = *msg;
   // Input frame determined by YAML file:
-  jog_arm::cmd_deltas.header.frame_id = jog_arm::cmd_frame;
-  pthread_mutex_unlock(&cmd_deltas_mutex);
+  jog_arm::g_cmd_deltas.header.frame_id = jog_arm::g_cmd_frame;
+  pthread_mutex_unlock(&g_cmd_deltas_mutex);
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
-  pthread_mutex_lock(&jog_arm::zero_trajectory_flag_mutex);
-  if (jog_arm::cmd_deltas.twist.linear.x == 0 &&
-      jog_arm::cmd_deltas.twist.linear.y == 0 &&
-      jog_arm::cmd_deltas.twist.linear.z == 0 &&
-      jog_arm::cmd_deltas.twist.angular.x == 0 &&
-      jog_arm::cmd_deltas.twist.linear.y == 0 &&
-      jog_arm::cmd_deltas.twist.linear.z == 0)
-    jog_arm::zero_trajectory_flag_ = true;
+  pthread_mutex_lock(&jog_arm::g_zero_trajectory_flagmutex);
+  if (jog_arm::g_cmd_deltas.twist.linear.x == 0 &&
+      jog_arm::g_cmd_deltas.twist.linear.y == 0 &&
+      jog_arm::g_cmd_deltas.twist.linear.z == 0 &&
+      jog_arm::g_cmd_deltas.twist.angular.x == 0 &&
+      jog_arm::g_cmd_deltas.twist.linear.y == 0 &&
+      jog_arm::g_cmd_deltas.twist.linear.z == 0)
+    jog_arm::g_zero_trajectory_flag = true;
   else
-    jog_arm::zero_trajectory_flag_ = false;
-  pthread_mutex_unlock(&jog_arm::zero_trajectory_flag_mutex);
+    jog_arm::g_zero_trajectory_flag = false;
+  pthread_mutex_unlock(&jog_arm::g_zero_trajectory_flagmutex);
 }
 
 // Listen to joint angles.
 // Store them in a shared variable.
-void joints_cb(const sensor_msgs::JointStateConstPtr &msg) {
-  pthread_mutex_lock(&joints_mutex);
-  jog_arm::joints = *msg;
-  pthread_mutex_unlock(&joints_mutex);
+void jointsCB(const sensor_msgs::JointStateConstPtr &msg) {
+  pthread_mutex_lock(&g_joints_mutex);
+  jog_arm::g_joints = *msg;
+  pthread_mutex_unlock(&g_joints_mutex);
 }
 
 // Read ROS parameters, typically from YAML file
@@ -591,86 +618,85 @@ int readParams(ros::NodeHandle &n) {
   ROS_INFO_STREAM_NAMED("jog_arm_server",
                         "Parameter namespace: " << parameter_ns);
 
-  jog_arm::move_group_name = get_ros_params::getStringParam(
+  jog_arm::g_move_group_name = get_ros_params::getStringParam(
       parameter_ns + "/jog_arm_server/move_group_name", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "move_group_name: " << jog_arm::move_group_name);
-  jog_arm::linear_scale = get_ros_params::getDoubleParam(
+                        "move_group_name: " << jog_arm::g_move_group_name);
+  jog_arm::g_linear_scale = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/scale/linear", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "linear_scale: " << jog_arm::linear_scale);
-  jog_arm::rot_scale = get_ros_params::getDoubleParam(
+                        "linear_scale: " << jog_arm::g_linear_scale);
+  jog_arm::g_rot_scale = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/scale/rotational", n);
-  ROS_INFO_STREAM_NAMED("jog_arm_server", "rot_scale: " << jog_arm::rot_scale);
-  jog_arm::low_pass_filter_coeff = get_ros_params::getDoubleParam(
+  ROS_INFO_STREAM_NAMED("jog_arm_server",
+                        "rot_scale: " << jog_arm::g_rot_scale);
+  jog_arm::g_low_pass_filter_coeff = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/low_pass_filter_coeff", n);
   ROS_INFO_STREAM_NAMED(
       "jog_arm_server",
-      "low_pass_filter_coeff: " << jog_arm::low_pass_filter_coeff);
-  jog_arm::joint_topic = get_ros_params::getStringParam(
+      "low_pass_filter_coeff: " << jog_arm::g_low_pass_filter_coeff);
+  jog_arm::g_joint_topic = get_ros_params::getStringParam(
       parameter_ns + "/jog_arm_server/joint_topic", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "joint_topic: " << jog_arm::joint_topic);
-  jog_arm::cmd_in_topic = get_ros_params::getStringParam(
+                        "joint_topic: " << jog_arm::g_joint_topic);
+  jog_arm::g_cmd_in_topic = get_ros_params::getStringParam(
       parameter_ns + "/jog_arm_server/cmd_in_topic", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "cmd_in_topic: " << jog_arm::cmd_in_topic);
-  jog_arm::cmd_frame = get_ros_params::getStringParam(
+                        "cmd_in_topic: " << jog_arm::g_cmd_in_topic);
+  jog_arm::g_cmd_frame = get_ros_params::getStringParam(
       parameter_ns + "/jog_arm_server/cmd_frame", n);
-  ROS_INFO_STREAM_NAMED("jog_arm_server", "cmd_frame: " << jog_arm::cmd_frame);
-  jog_arm::incoming_cmd_timeout = get_ros_params::getDoubleParam(
+  ROS_INFO_STREAM_NAMED("jog_arm_server",
+                        "cmd_frame: " << jog_arm::g_cmd_frame);
+  jog_arm::g_incoming_cmd_timeout = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/incoming_cmd_timeout", n);
-  ROS_INFO_STREAM_NAMED("jog_arm_server", "incoming_cmd_timeout: "
-                                              << jog_arm::incoming_cmd_timeout);
-  jog_arm::cmd_out_topic = get_ros_params::getStringParam(
+  ROS_INFO_STREAM_NAMED(
+      "jog_arm_server",
+      "incoming_cmd_timeout: " << jog_arm::g_incoming_cmd_timeout);
+  jog_arm::g_cmd_out_topic = get_ros_params::getStringParam(
       parameter_ns + "/jog_arm_server/cmd_out_topic", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "cmd_out_topic: " << jog_arm::cmd_out_topic);
-  jog_arm::singularity_threshold = get_ros_params::getDoubleParam(
+                        "cmd_out_topic: " << jog_arm::g_cmd_out_topic);
+  jog_arm::g_singularity_threshold = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/singularity_threshold", n);
   ROS_INFO_STREAM_NAMED(
       "jog_arm_server",
-      "singularity_threshold: " << jog_arm::singularity_threshold);
-  jog_arm::hard_stop_sing_thresh = get_ros_params::getDoubleParam(
+      "singularity_threshold: " << jog_arm::g_singularity_threshold);
+  jog_arm::g_hard_stop_sing_thresh = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/hard_stop_singularity_threshold", n);
   ROS_INFO_STREAM_NAMED(
       "jog_arm_server",
-      "hard_stop_singularity_threshold: " << jog_arm::hard_stop_sing_thresh);
-  jog_arm::planning_frame = get_ros_params::getStringParam(
+      "hard_stop_singularity_threshold: " << jog_arm::g_hard_stop_sing_thresh);
+  jog_arm::g_planning_frame = get_ros_params::getStringParam(
       parameter_ns + "/jog_arm_server/planning_frame", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "planning_frame: " << jog_arm::planning_frame);
-  jog_arm::pub_period = get_ros_params::getDoubleParam(
+                        "planning_frame: " << jog_arm::g_planning_frame);
+  jog_arm::g_pub_period = get_ros_params::getDoubleParam(
       parameter_ns + "/jog_arm_server/pub_period", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "pub_period: " << jog_arm::pub_period);
-  jog_arm::simu =
+                        "pub_period: " << jog_arm::g_pub_period);
+  jog_arm::g_simu =
       get_ros_params::getBoolParam(parameter_ns + "/jog_arm_server/simu", n);
-  ROS_INFO_STREAM_NAMED("jog_arm_server", "simu: " << jog_arm::simu);
-  jog_arm::coll_check = get_ros_params::getBoolParam(
+  ROS_INFO_STREAM_NAMED("jog_arm_server", "simu: " << jog_arm::g_simu);
+  jog_arm::g_coll_check = get_ros_params::getBoolParam(
       parameter_ns + "/jog_arm_server/coll_check", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "coll_check: " << jog_arm::coll_check);
-  jog_arm::in_collision_topic = get_ros_params::getStringParam(
-      parameter_ns + "/jog_arm_server/in_collision_topic", n);
+                        "coll_check: " << jog_arm::g_coll_check);
+  jog_arm::g_warning_topic = get_ros_params::getStringParam(
+      parameter_ns + "/jog_arm_server/warning_topic", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "in_collision_topic: " << jog_arm::in_collision_topic);
-  jog_arm::in_singularity_topic = get_ros_params::getStringParam(
-      parameter_ns + "/jog_arm_server/in_singularity_topic", n);
-  ROS_INFO_STREAM_NAMED("jog_arm_server", "in_singularity_topic: "
-                                              << jog_arm::in_singularity_topic);
+                        "warning_topic: " << jog_arm::g_warning_topic);
   ROS_INFO_NAMED("jog_arm_server", "---------------------------------------");
   ROS_INFO_NAMED("jog_arm_server", "---------------------------------------");
 
   // Input checking
-  if (jog_arm::hard_stop_sing_thresh < jog_arm::singularity_threshold) {
+  if (jog_arm::g_hard_stop_sing_thresh < jog_arm::g_singularity_threshold) {
     ROS_WARN_NAMED("jog_arm_server",
                    "Parameter 'hard_stop_sing_thresh' "
                    "should be greater than 'singularity_threshold.'");
     return 1;
   }
-  if ((jog_arm::hard_stop_sing_thresh < 0.) ||
-      (jog_arm::singularity_threshold < 0.)) {
+  if ((jog_arm::g_hard_stop_sing_thresh < 0.) ||
+      (jog_arm::g_singularity_threshold < 0.)) {
     ROS_WARN_NAMED("jog_arm_server",
                    "Parameters 'hard_stop_sing_thresh' "
                    "and 'singularity_threshold' should be greater than zero.");

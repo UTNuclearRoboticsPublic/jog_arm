@@ -39,27 +39,27 @@
 #ifndef COMPLIANCE_TEST_H
 #define COMPLIANCE_TEST_H
 
-#include <jog_arm/compliant_control/compliant_control.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/WrenchStamped.h>
+#include <jog_arm/compliant_control/compliant_control.h>
 #include <ros/ros.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 
 namespace compliance_test {
 
-class compliance_class {
+class ComplianceClass {
 
 public:
-  compliance_class();
+  ComplianceClass();
 
 private:
   // CB for halt warnings from the jog_arm nodes
-  void halt_cb(const std_msgs::Bool::ConstPtr &msg);
+  void haltCB(const std_msgs::Bool::ConstPtr &msg);
 
   // CB for force/torque data
-  void ft_cb(const geometry_msgs::WrenchStamped::ConstPtr &msg);
+  void ftCB(const geometry_msgs::WrenchStamped::ConstPtr &msg);
 
   // Transform a wrench to the EE frame
   geometry_msgs::WrenchStamped
