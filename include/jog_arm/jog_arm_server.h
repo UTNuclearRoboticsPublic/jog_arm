@@ -86,9 +86,10 @@ void jointsCB(const sensor_msgs::JointStateConstPtr &msg);
 // ROS params to be read
 int readParams(ros::NodeHandle &n);
 std::string g_move_group_name, g_joint_topic, g_cmd_in_topic, g_cmd_frame,
-    g_cmd_out_topic, g_planning_frame, g_collision_warn_topic, g_singularity_warn_topic;
-double g_linear_scale, g_rot_scale, g_singularity_threshold, g_hard_stop_sing_thresh,
-    g_low_pass_filter_coeff, g_pub_period, g_incoming_cmd_timeout;
+    g_cmd_out_topic, g_planning_frame, g_warning_topic;
+double g_linear_scale, g_rot_scale, g_singularity_threshold,
+    g_hard_stop_sing_thresh, g_low_pass_filter_coeff, g_pub_period,
+    g_incoming_cmd_timeout;
 bool g_simu, g_coll_check;
 
 /**
@@ -199,7 +200,7 @@ protected:
   // Check whether incoming cmds are stale. Pause if so
   ros::Duration time_of_incoming_cmd_;
 
-  ros::Publisher singularity_warn_pub_;
+  ros::Publisher warning_pub_;
 };
 
 class CollisionCheck {
@@ -209,7 +210,7 @@ public:
 private:
   ros::NodeHandle nh_;
 
-  ros::Publisher collision_warn_pub_;
+  ros::Publisher warning_pub_;
 };
 
 } // namespace jog_arm

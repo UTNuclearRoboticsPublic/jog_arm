@@ -56,8 +56,8 @@ compliance_test::ComplianceClass::ComplianceClass()
       "left_arm/jog_arm_server/delta_jog_cmds", 1);
 
   // Listen to the jog_arm warning topic. Exit if the jogger stops
-  jog_arm_warning_sub_ = n_.subscribe("jog_arm_server/halted", 1,
-                                      &ComplianceClass::haltCB, this);
+  jog_arm_warning_sub_ =
+      n_.subscribe("jog_arm_server/halted", 1, &ComplianceClass::haltCB, this);
 
   // Listen to wrench data from a force/torque sensor
   ft_sub_ = n_.subscribe("left_ur5_wrench", 1, &ComplianceClass::ftCB, this);
