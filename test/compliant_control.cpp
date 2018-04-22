@@ -15,7 +15,8 @@ TEST(compliantControlTest, constructor) {
   double highestAllowableForce = 100.;
   double highestAllowableTorque = 100.;
   compliant_control::CompliantControl control(
-      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0, highestAllowableForce, highestAllowableTorque);
+      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0,
+      highestAllowableForce, highestAllowableTorque);
 }
 
 TEST(compliantControlTest, setStiffness) {
@@ -28,7 +29,8 @@ TEST(compliantControlTest, setStiffness) {
   double highestAllowableForce = 100.;
   double highestAllowableTorque = 100.;
   compliant_control::CompliantControl control(
-      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0, highestAllowableForce, highestAllowableTorque);
+      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0,
+      highestAllowableForce, highestAllowableTorque);
 
   std::vector<double> bin(6, DBL_MAX);
   bin[0] = 12.0;
@@ -56,7 +58,8 @@ TEST(compliantControlTest, setEndCondition) {
   double highestAllowableForce = 100.;
   double highestAllowableTorque = 100.;
   compliant_control::CompliantControl control(
-      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0, highestAllowableForce, highestAllowableTorque);
+      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0,
+      highestAllowableForce, highestAllowableTorque);
 
   std::vector<double> fCond(6, 0.0);
   fCond[0] = 12.0;
@@ -89,7 +92,8 @@ TEST(compliantControlTest, getVelocity) {
   double highestAllowableForce = 100.;
   double highestAllowableTorque = 100.;
   compliant_control::CompliantControl control(
-      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0, highestAllowableForce, highestAllowableTorque);
+      stiffness, deadband, end_condition_wrench, filterCutoff, ftData0,
+      highestAllowableForce, highestAllowableTorque);
 
   std::vector<double> vIn(6, 0.), vOut(6, 0.);
   vIn[0] = 1.0;
@@ -126,7 +130,8 @@ TEST(compliantControlTest, getVelocity) {
   sprintf(cmd, "speedl([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], 0.2, 0.1)\n",
           vOut[0], vOut[1], vOut[2], vOut[3], vOut[4], vOut[5]);
 
-  //  One of the controlled velocities has met the force/torque end condition so velocity in
+  //  One of the controlled velocities has met the force/torque end condition so
+  //  velocity in
   //  that direction should be zero.
   ftData.wrench.force.y = 50.0;
 
