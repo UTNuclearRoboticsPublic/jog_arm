@@ -32,7 +32,7 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "jog_arm/support/get_ros_params.h"
+#include "jog_arm/get_ros_params.h"
 
 std::string get_ros_params::getStringParam(const std::string& name, ros::NodeHandle& n)
 {
