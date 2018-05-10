@@ -1,5 +1,5 @@
 
-#include "jog_arm/compliant_control/compliant_control.h"
+#include "jog_arm/compliant_control.h"
 
 namespace compliant_control
 {

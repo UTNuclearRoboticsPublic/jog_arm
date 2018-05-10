@@ -39,7 +39,7 @@
 
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <jog_arm/support/get_ros_params.h>
+#include <jog_arm/get_ros_params.h>
 #include <math.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
