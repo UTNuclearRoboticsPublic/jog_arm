@@ -10,7 +10,6 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_manipulation
   moveit_ros_move_group
   moveit_ros_planning_interface
-  cmake_modules
   std_msgs
   tf
   tf2_geometry_msgs
@@ -33,13 +32,13 @@ catkin_package(
 
 include_directories(
   include
-  include/jog_arm
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
 )
 
 add_library(compliant_control src/jog_arm/compliant_control/compliant_control.cpp)
 
+# Test compliance on a manipulator. It should act like a spring. Requires force & torque data.
 add_executable(compliance_test src/jog_arm/compliance_test/compliance_test.cpp)
 add_dependencies(compliance_test ${catkin_EXPORTED_TARGETS})
 target_link_libraries(compliance_test ${catkin_LIBRARIES} compliant_control)
@@ -48,17 +47,16 @@ add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp src/jog_arm/support
 add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
 target_link_libraries(jog_arm_server ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
-install(TARGETS compliant_control
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION})
-
-install(
-  DIRECTORY include/${PROJECT_NAME}/
+install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   FILES_MATCHING PATTERN "*.h"
   PATTERN ".svn" EXCLUDE
 )
+
+install(TARGETS compliant_control
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION})
 
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest)
