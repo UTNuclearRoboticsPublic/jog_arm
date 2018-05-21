@@ -158,10 +158,6 @@ CollisionCheck::CollisionCheck(const std::string& move_group_name)
     ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jog_arm::g_command_in_topic);
     ROS_INFO_NAMED("jog_arm_server", "Received first joint msg.");
 
-    pthread_mutex_lock(&g_joints_mutex);
-    sensor_msgs::JointState jts = jog_arm::g_joints;
-    pthread_mutex_unlock(&g_joints_mutex);
-
     ros::Rate collision_rate(100);
 
     /////////////////////////////////////////////////
@@ -169,6 +165,10 @@ CollisionCheck::CollisionCheck(const std::string& move_group_name)
     /////////////////////////////////////////////////
     while (ros::ok())
     {
+      pthread_mutex_lock(&g_joints_mutex);
+      sensor_msgs::JointState jts = jog_arm::g_joints;
+      pthread_mutex_unlock(&g_joints_mutex);
+      
       for (std::size_t i = 0; i < jts.position.size(); i++)
         current_state.setJointPositions(jts.name[i], &jts.position[i]);
 
