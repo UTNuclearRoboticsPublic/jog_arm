@@ -25,7 +25,8 @@
 //
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 // AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE
 // DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
 // FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 // DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
@@ -51,23 +52,22 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 
-namespace compliance_test
-{
-class ComplianceClass
-{
+namespace compliance_test {
+class ComplianceClass {
 public:
   ComplianceClass();
 
 private:
   // CB for halt warnings from the jog_arm nodes
-  void haltCB(const std_msgs::Bool::ConstPtr& msg);
+  void haltCB(const std_msgs::Bool::ConstPtr &msg);
 
   // CB for force/torque data
-  void ftCB(const geometry_msgs::WrenchStamped::ConstPtr& msg);
+  void ftCB(const geometry_msgs::WrenchStamped::ConstPtr &msg);
 
   // Transform a wrench to the EE frame
-  geometry_msgs::WrenchStamped transformToEEF(const geometry_msgs::WrenchStamped wrench_in,
-                                              const std::string desired_ee_frame);
+  geometry_msgs::WrenchStamped
+  transformToEEF(const geometry_msgs::WrenchStamped wrench_in,
+                 const std::string desired_ee_frame);
 
   ros::NodeHandle n_;
 
@@ -87,6 +87,6 @@ private:
   tf2_ros::TransformListener tf_listener_;
 };
 
-}  // end namespace compliance_test
+} // end namespace compliance_test
 
 #endif
