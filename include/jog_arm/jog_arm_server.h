@@ -94,7 +94,7 @@ std::string g_move_group_name, g_joint_topic, g_command_in_topic,
 double g_linear_scale, g_rot_scale, g_singularity_threshold,
     g_hard_stop_sing_thresh, g_low_pass_filter_coeff, g_publish_period,
     g_incoming_command_timeout;
-bool g_simulation, g_collision_check;
+bool g_gazebo, g_collision_check;
 
 /**
  * Class LowPassFilter - Filter the joint velocities to avoid jerky motion.

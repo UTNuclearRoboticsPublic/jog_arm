@@ -116,6 +116,10 @@ int main(int argc, char **argv) {
     main_rate.sleep();
   }
 
+
+  (void) pthread_join(joggingThread, NULL);
+  (void) pthread_join(collisionThread, NULL);
+
   return 0;
 }
 
@@ -458,7 +462,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
     warning_pub_.publish(limit_status);
   }
 
-  if (jog_arm::g_simulation)
+  if (jog_arm::g_gazebo)
     // Spam several redundant points into the trajectory. The first few may be
     // skipped if the
     // time stamp is in the past when it reaches the client. Needed for gazebo
@@ -688,10 +692,10 @@ int readParams(ros::NodeHandle &n) {
       parameter_ns + "/jog_arm_server/publish_period", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
                         "publish_period: " << jog_arm::g_publish_period);
-  jog_arm::g_simulation = get_ros_params::getBoolParam(
-      parameter_ns + "/jog_arm_server/simulation", n);
+  jog_arm::g_gazebo = get_ros_params::getBoolParam(
+      parameter_ns + "/jog_arm_server/gazebo", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
-                        "simulation: " << jog_arm::g_simulation);
+                        "gazebo: " << jog_arm::g_gazebo);
   jog_arm::g_collision_check = get_ros_params::getBoolParam(
       parameter_ns + "/jog_arm_server/collision_check", n);
   ROS_INFO_STREAM_NAMED("jog_arm_server",
