@@ -242,7 +242,7 @@ JogCalcs::JogCalcs(const std::string& move_group_name) : arm_(move_group_name), 
   pthread_mutex_lock(&g_joints_mutex);
   incoming_jts_ = jog_arm::g_joints;
   pthread_mutex_unlock(&g_joints_mutex);
-  updateJoints();
+  forceUpdateJoints();
   for (std::size_t i = 0; i < jt_state_.name.size(); i++)
     position_filters_[i].reset(jt_state_.position[i]);
 
@@ -518,6 +518,25 @@ bool JogCalcs::updateJointVels(sensor_msgs::JointState& output, const Eigen::Vec
 
 // Parse the incoming joint msg for the joints of our MoveGroup
 void JogCalcs::updateJoints()
+{
+
+  // Check for stale cmds - only update if we arent active (aka we are stale)
+  // If the robot controller is perfect, jnt_state_ will track the robot position perfectly during jogging
+  // as jnt_state_ gets modified by user input (during jogCalcs::jogcalcs) and the robot follows.
+  // If the controller lags a litte bit, this if statement will cause the jogging to ignore the errors accumulating
+  // between the jnt_state_ (in jogCalcs::jogcalcs) and the robot
+  if (!(ros::Time::now() - jog_arm::g_new_traj.header.stamp < ros::Duration(jog_arm::g_incoming_cmd_timeout)))
+  {
+    return;
+  }
+  else
+  {
+    forceUpdateJoints();
+  }
+}
+
+// Update Joints even with stale commands
+void JogCalcs::forceUpdateJoints()
 {
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size())

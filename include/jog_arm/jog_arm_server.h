@@ -165,6 +165,9 @@ protected:
   // Parse the incoming joint msg for the joints of our MoveGroup
   void updateJoints();
 
+  // Update Joints even with stale commands
+  void forceUpdateJoints();
+
   Vector6d scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
