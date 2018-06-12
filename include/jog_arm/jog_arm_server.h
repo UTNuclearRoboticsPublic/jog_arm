@@ -196,6 +196,8 @@ protected:
 
   ros::Time prev_time_;
 
+  double previous_condition_number_;
+
   double delta_t_;
 
   std::vector<jog_arm::LowPassFilter> velocity_filters_;

@@ -423,7 +423,11 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
   // Stop if extremely close.
   double current_condition_number = checkConditionNumber(jacobian);
   if (current_condition_number > jog_arm::g_parameters.singularity_threshold) {
-    if (current_condition_number > jog_arm::g_parameters.hard_stop_singularity_threshold) {
+
+    // if < previous_condition_number, allow the robot to back out of singularity.
+    if (current_condition_number > jog_arm::g_parameters.hard_stop_singularity_threshold &&
+      current_condition_number > previous_condition_number_)
+    {
       ROS_ERROR_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
                                       ros::this_node::getName()
                                           << " Close to a "
@@ -474,6 +478,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd) {
     point.time_from_start = ros::Duration(i * jog_arm::g_parameters.publish_period);
     new_jt_traj.points.push_back(point);
   }
+
+  previous_condition_number_ = current_condition_number;
 
   // Share with main to be published
   pthread_mutex_lock(&jog_arm::g_new_traj_mutex);
@@ -577,19 +583,13 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output,
   return true;
 }
 
-/// Calculate the condition number of the jacobian, to check for singularities
-double JogCalcs::checkConditionNumber(const Eigen::MatrixXd &matrix) const {
-  // Get Eigenvalues
-  Eigen::MatrixXd::EigenvaluesReturnType eigs = matrix.eigenvalues();
-  Eigen::VectorXd eig_vector = eigs.cwiseAbs();
+// Calculate the condition number of the jacobian, to check for singularities
+double JogCalcs::checkConditionNumber(const Eigen::MatrixXd& matrix) const
+{
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
 
-  // CN = max(eigs)/min(eigs)
-  double min = eig_vector.minCoeff();
-  double max = eig_vector.maxCoeff();
-
-  double condition_number = max / min;
-
-  return condition_number;
+  return svd.singularValues()(0) 
+    / svd.singularValues()(svd.singularValues().size()-1);;
 }
 
 // Listen to cartesian delta commands.
