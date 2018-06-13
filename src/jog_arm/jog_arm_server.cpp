@@ -278,7 +278,8 @@ JogCalcs::JogCalcs(const std::string& move_group_name) : arm_(move_group_name), 
     incoming_jts_ = jog_arm::g_joints;
     pthread_mutex_unlock(&g_joints_mutex);
 
-    updateJoints();
+    //updateJoints();
+    forceUpdateJoints();
 
     jogCalcs(cmd_deltas_);
 
