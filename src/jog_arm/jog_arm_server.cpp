@@ -616,7 +616,6 @@ double JogCalcs::checkConditionNumber(const Eigen::MatrixXd &matrix) const {
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
     return svd.singularValues()(0) /
            svd.singularValues()(svd.singularValues().size() - 1);
-    ;
   }
 }
 
