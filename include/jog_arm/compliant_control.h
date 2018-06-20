@@ -58,13 +58,11 @@
 #include <string>
 #include <vector>
 
-namespace compliant_control
-{
+namespace compliant_control {
 /**
  * dimension enum.
  */
-enum dimension
-{
+enum dimension {
   NUM_DIMS = 6 // 3 translational, 3 rotational dimensions
 };
 
@@ -73,8 +71,7 @@ enum dimension
  * The exitCondition enum is used to know the condition of the controller in
  * the end.
  */
-enum exitCondition
-{
+enum exitCondition {
   NOT_CONTROLLED = 0,    // None of the dimension is set to be controlled.
   FT_VIOLATION = 1,      // Force or torque was read as maximum allowable.
   CONDITION_MET = 2,     // One of the compliant conditions is met.
@@ -85,12 +82,14 @@ enum exitCondition
 class CompliantControl;
 class LowPassFilter;
 
-class CompliantControl
-{
+class CompliantControl {
 public:
   // Constructor.
-  CompliantControl(const std::vector<double> &stiffness, const std::vector<double> &deadband, const std::vector<double> &endConditionWrench,
-                   double filter_param, geometry_msgs::WrenchStamped bias, double highest_allowable_force,
+  CompliantControl(const std::vector<double> &stiffness,
+                   const std::vector<double> &deadband,
+                   const std::vector<double> &endConditionWrench,
+                   double filter_param, geometry_msgs::WrenchStamped bias,
+                   double highest_allowable_force,
                    double highest_allowable_torque);
 
   // Set the "springiness" of compliance in each direction.
@@ -106,14 +105,16 @@ public:
   void adjustStiffness(compliant_control::dimension dim, double stiffness);
 
   // Update Force/Torque values
-  void dataCallback(const geometry_msgs::WrenchStamped::ConstPtr& msg);
+  void dataCallback(const geometry_msgs::WrenchStamped::ConstPtr &msg);
 
   // Bias the FT values
   void biasSensor(const geometry_msgs::WrenchStamped &bias);
 
   // Set the target FT wrench
-  compliant_control::exitCondition getVelocity(std::vector<double> v_in, geometry_msgs::WrenchStamped force_torque_data,
-                                           std::vector<double>& vOut);
+  compliant_control::exitCondition
+  getVelocity(std::vector<double> v_in,
+              geometry_msgs::WrenchStamped force_torque_data,
+              std::vector<double> &vOut);
 
   /**
    * Set the topic to output velocity commands to.
@@ -134,8 +135,7 @@ public:
 private:
 };
 
-class LowPassFilter
-{
+class LowPassFilter {
 public:
   LowPassFilter(double filter_param);
   double filter(const double new_msrmt);
@@ -143,15 +143,16 @@ public:
   // Related to the cutoff frequency of the filter.
   // filter_param=1 results in a cutoff at 1/4 of the sampling rate.
   // See bitbucket.org/AndyZe/pid for slightly more sophistication.
-  // Larger filter_param --> trust the filtered data more, trust the measurements
+  // Larger filter_param --> trust the filtered data more, trust the
+  // measurements
   // less --> higher cutoff frequency.
   double filter_param_ = 4.;
 
   void reset(double data);
 
 private:
-  std::vector<double> prev_msrmts_ = { 0., 0., 0. };
-  std::vector<double> prev_filtered_msrmts_ = { 0., 0. };
+  std::vector<double> prev_msrmts_ = {0., 0., 0.};
+  std::vector<double> prev_filtered_msrmts_ = {0., 0.};
 };
 }
 #endif
