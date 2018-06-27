@@ -416,7 +416,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
 
     // Check for nan's
     if (std::isnan(jt_state_.position[i]))
-      jt_state_.position[i] = 0.;
+      jt_state_.position[i] = orig_jts_.position[i];
   }
 
   // Compose the outgoing msg
