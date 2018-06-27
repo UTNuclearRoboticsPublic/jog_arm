@@ -382,8 +382,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   orig_jts_ = jt_state_;
 
   // Convert from cartesian commands to joint commands
-  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::MatrixXd old_jacobian = kinematic_state_->getJacobian(joint_model_group_);
+  Eigen::VectorXd delta_theta = pseudoInverse(old_jacobian) * delta_x;
 
   // This inner loop may execute slower or faster than the desired rate. Scale
   // these joint
@@ -403,7 +403,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
 
   // Check the Jacobian with these new joints.
   kinematic_state_->setVariableValues(jt_state_);
-  jacobian = kinematic_state_->getJacobian(joint_model_group_);
+  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   // Include a velocity estimate for velocity-controller robots
   Eigen::VectorXd joint_vel(delta_theta / delta_t_);
@@ -457,7 +457,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   // Slow down if very close to a singularity.
   // Stop if extremely close.
   double current_condition_number = checkConditionNumber(jacobian);
-  if (current_condition_number > parameters_.singularity_threshold) {
+  double old_condition_number = checkConditionNumber(old_jacobian);
+  if ((current_condition_number > parameters_.singularity_threshold)
+    && (current_condition_number > old_condition_number)) {
     if (current_condition_number >
         parameters_.hard_stop_singularity_threshold) {
       ROS_ERROR_STREAM_THROTTLE_NAMED(1, "jog_arm_server",
