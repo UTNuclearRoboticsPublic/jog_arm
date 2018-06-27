@@ -42,7 +42,7 @@ private:
 } // end to_twist namespace
 
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "spacenav_to_twist");
+  ros::init(argc, argv, "xbox_to_twist");
 
   to_twist::xboxToTwist to_twist;
 
