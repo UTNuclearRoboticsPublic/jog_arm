@@ -40,6 +40,7 @@
 // Server node for arm jogging with MoveIt.
 
 #include <jog_arm/jog_arm_server.h>
+#include <memory>
 
 // Initialize these static struct to hold ROS parameters
 jog_arm::jog_arm_parameters jog_arm::jogROSInterface::ros_parameters_;
@@ -71,11 +72,15 @@ jogROSInterface::jogROSInterface() {
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
-  int rc = pthread_create(&joggingThread, NULL, this->joggingPipeline, this);
+  int rc = pthread_create(
+    &joggingThread, nullptr, jog_arm::jogROSInterface::joggingPipeline, this
+  );
 
   // Check collisions in this thread
   pthread_t collisionThread;
-  rc = pthread_create(&collisionThread, NULL, this->collisionCheck, this);
+  rc = pthread_create(
+    &collisionThread, nullptr, jog_arm::jogROSInterface::collisionCheck, this
+  );
 
   // ROS subscriptions. Share the data with the worker threads
   ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1,
@@ -93,7 +98,7 @@ jogROSInterface::jogROSInterface() {
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
       ros_parameters_.command_in_topic);
 
-  // Wait for jog filters to stablize
+  // Wait for jog filters to stabilize
   ros::Duration(10 * ros_parameters_.publish_period).sleep();
 
   ros::Rate main_rate(1. / ros_parameters_.publish_period);
@@ -130,8 +135,8 @@ jogROSInterface::jogROSInterface() {
     main_rate.sleep();
   }
 
-  (void)pthread_join(joggingThread, NULL);
-  (void)pthread_join(collisionThread, NULL);
+  (void)pthread_join(joggingThread, nullptr);
+  (void)pthread_join(collisionThread, nullptr);
 }
 
 // A separate thread for the heavy jogging calculations.
@@ -233,8 +238,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
   robot_model_loader::RobotModelLoader model_loader("robot_description");
   const robot_model::RobotModelPtr &kinematic_model = model_loader.getModel();
 
-  kinematic_state_ = std::shared_ptr<robot_state::RobotState>(
-      new robot_state::RobotState(kinematic_model));
+  kinematic_state_ = std::make_shared<robot_state::RobotState>(kinematic_model);
   kinematic_state_->setToDefaultValues();
 
   joint_model_group_ =
@@ -264,10 +268,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
 
   // Low-pass filters for the joint positions & velocities
   for (std::size_t i = 0; i < joint_names.size(); ++i) {
-    velocity_filters_.push_back(
-        jog_arm::LowPassFilter(parameters_.low_pass_filter_coeff));
-    position_filters_.push_back(
-        jog_arm::LowPassFilter(parameters_.low_pass_filter_coeff));
+    velocity_filters_.emplace_back(parameters_.low_pass_filter_coeff);
+    position_filters_.emplace_back(parameters_.low_pass_filter_coeff);
   }
 
   // Initialize the position filters to initial robot joints
@@ -325,7 +327,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   try {
     listener_.waitForTransform(cmd.header.frame_id, parameters_.planning_frame,
                                ros::Time::now(), ros::Duration(0.2));
-  } catch (tf::TransformException ex) {
+  } catch (const tf::TransformException &ex) {
     ROS_ERROR_STREAM_NAMED("jog_arm_server", ros::this_node::getName()
                                                  << ": " << ex.what());
     return;
@@ -339,7 +341,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   try {
     listener_.transformVector(parameters_.planning_frame, lin_vector,
                               lin_vector);
-  } catch (tf::TransformException ex) {
+  } catch (const tf::TransformException &ex) {
     ROS_ERROR_STREAM_NAMED("jog_arm_server", ros::this_node::getName()
                                                  << ": " << ex.what());
     return;
@@ -351,7 +353,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   try {
     listener_.transformVector(parameters_.planning_frame, rot_vector,
                               rot_vector);
-  } catch (tf::TransformException ex) {
+  } catch (const tf::TransformException &ex) {
     ROS_ERROR_STREAM_NAMED("jog_arm_server", ros::this_node::getName()
                                                  << ": " << ex.what());
     return;
@@ -380,12 +382,12 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   // expectations.
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
-  delta_theta(0) *= parameters_.publish_period / delta_t_;
-  delta_theta(1) *= parameters_.publish_period / delta_t_;
-  delta_theta(2) *= parameters_.publish_period / delta_t_;
-  delta_theta(3) *= parameters_.publish_period / delta_t_;
-  delta_theta(4) *= parameters_.publish_period / delta_t_;
-  delta_theta(5) *= parameters_.publish_period / delta_t_;
+  delta_theta[0] *= parameters_.publish_period / delta_t_;
+  delta_theta[1] *= parameters_.publish_period / delta_t_;
+  delta_theta[2] *= parameters_.publish_period / delta_t_;
+  delta_theta[3] *= parameters_.publish_period / delta_t_;
+  delta_theta[4] *= parameters_.publish_period / delta_t_;
+  delta_theta[5] *= parameters_.publish_period / delta_t_;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return;
@@ -531,7 +533,7 @@ bool JogCalcs::updateJointVels(sensor_msgs::JointState &output,
        i < size; ++i) {
     try {
       output.velocity[i] = joint_vels(static_cast<long>(i));
-    } catch (std::out_of_range e) {
+    } catch (const std::out_of_range &e) {
       ROS_ERROR_STREAM_NAMED("jog_arm_server",
                              ros::this_node::getName()
                                  << " Vector lengths do not match.");
@@ -568,12 +570,12 @@ Eigen::VectorXd
 JogCalcs::scaleCommand(const geometry_msgs::TwistStamped &command) const {
   Eigen::VectorXd result(6);
 
-  result(0) = parameters_.linear_scale * command.twist.linear.x;
-  result(1) = parameters_.linear_scale * command.twist.linear.y;
-  result(2) = parameters_.linear_scale * command.twist.linear.z;
-  result(3) = parameters_.rotational_scale * command.twist.angular.x;
-  result(4) = parameters_.rotational_scale * command.twist.angular.y;
-  result(5) = parameters_.rotational_scale * command.twist.angular.z;
+  result[0] = parameters_.linear_scale * command.twist.linear.x;
+  result[1] = parameters_.linear_scale * command.twist.linear.y;
+  result[2] = parameters_.linear_scale * command.twist.linear.z;
+  result[3] = parameters_.rotational_scale * command.twist.angular.x;
+  result[4] = parameters_.rotational_scale * command.twist.angular.y;
+  result[5] = parameters_.rotational_scale * command.twist.angular.z;
 
   return result;
 }
@@ -590,7 +592,7 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output,
        i < size; ++i) {
     try {
       output.position[i] += increments(static_cast<long>(i));
-    } catch (std::out_of_range e) {
+    } catch (const std::out_of_range &e) {
       ROS_ERROR_STREAM_NAMED("jog_arm_server",
                              ros::this_node::getName()
                                  << " Lengths of output and "
@@ -632,15 +634,13 @@ void jogROSInterface::deltaCmdCB(
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
-  if (shared_variables_.command_deltas.twist.linear.x == 0 &&
-      shared_variables_.command_deltas.twist.linear.y == 0 &&
-      shared_variables_.command_deltas.twist.linear.z == 0 &&
-      shared_variables_.command_deltas.twist.angular.x == 0 &&
-      shared_variables_.command_deltas.twist.linear.y == 0 &&
-      shared_variables_.command_deltas.twist.linear.z == 0)
-    shared_variables_.zero_trajectory_flag = true;
-  else
-    shared_variables_.zero_trajectory_flag = false;
+    shared_variables_.zero_trajectory_flag =
+      shared_variables_.command_deltas.twist.linear.x == 0.0 &&
+      shared_variables_.command_deltas.twist.linear.y == 0.0 &&
+      shared_variables_.command_deltas.twist.linear.z == 0.0 &&
+      shared_variables_.command_deltas.twist.angular.x == 0.0 &&
+      shared_variables_.command_deltas.twist.linear.y == 0.0 &&
+      shared_variables_.command_deltas.twist.linear.z == 0.0;
   pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
 }
 
