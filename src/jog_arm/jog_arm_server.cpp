@@ -103,23 +103,28 @@ jogROSInterface::jogROSInterface() {
 
   ros::Rate main_rate(1. / ros_parameters_.publish_period);
 
+  bool last_was_zero_traj = false;
   while (ros::ok()) {
     ros::spinOnce();
 
     // Send the newest target joints
     pthread_mutex_lock(&shared_variables_.new_traj_mutex);
-    if (shared_variables_.new_traj.joint_names.size() != 0) {
+    if (!shared_variables_.new_traj.joint_names.empty()) {
+      pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
+      bool zero_traj_flag = shared_variables_.zero_trajectory_flag;
+      pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
+
       // Check for stale cmds
       if (ros::Time::now() - shared_variables_.new_traj.header.stamp <
           ros::Duration(ros_parameters_.incoming_command_timeout)) {
+
         // Skip the jogging publication if all inputs are 0.
-        pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
-        if (!shared_variables_.zero_trajectory_flag) {
+        if (!zero_traj_flag) {
           shared_variables_.new_traj.header.stamp = ros::Time::now();
           joint_trajectory_pub.publish(shared_variables_.new_traj);
         }
-        pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
-      } else {
+
+      } else if (!last_was_zero_traj) {
         ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
                                        "Stale joint "
                                        "trajectory msg. Try a larger "
@@ -129,6 +134,9 @@ jogROSInterface::jogROSInterface() {
                                        "controller get interrupted? Are "
                                        "calculations taking too long?");
       }
+
+      // Store last traj message flag to prevent superflous warnings
+      last_was_zero_traj = zero_traj_flag;
     }
     pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
 
@@ -295,9 +303,9 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
     // If user commands are all zero, reset the low-pass filters
     // when commands resume
     pthread_mutex_lock(&shared_variables.zero_trajectory_flag_mutex);
-    bool flag = shared_variables.zero_trajectory_flag;
+    bool zero_traj_flag = shared_variables.zero_trajectory_flag;
     pthread_mutex_unlock(&shared_variables.zero_trajectory_flag_mutex);
-    if (flag)
+    if (zero_traj_flag)
       // Reset low-pass filters
       resetVelocityFilters();
 
@@ -312,7 +320,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
 
     updateJoints();
 
-    jogCalcs(cmd_deltas_, shared_variables);
+    if (!zero_traj_flag)
+      jogCalcs(cmd_deltas_, shared_variables);
 
     // Generally want to run these calculations fast.
     // Add a small sleep to avoid 100% CPU usage
