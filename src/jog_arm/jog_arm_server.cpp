@@ -404,10 +404,6 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   if (!addJointIncrements(jt_state_, delta_theta))
     return;
 
-  // Check the Jacobian with these new joints.
-  kinematic_state_->setVariableValues(jt_state_);
-  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-
   // Include a velocity estimate for velocity-controller robots
   Eigen::VectorXd joint_vel(delta_theta / delta_t_);
 
@@ -430,6 +426,10 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     if (std::isnan(jt_state_.position[i]))
       jt_state_.position[i] = orig_jts_.position[i];
   }
+
+   // Check the Jacobian with these new joints.
+  kinematic_state_->setVariableValues(jt_state_);
+  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   // Compose the outgoing msg
   trajectory_msgs::JointTrajectory new_jt_traj;
