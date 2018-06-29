@@ -225,17 +225,34 @@ protected:
   ros::Publisher warning_pub_;
 
   jog_arm_parameters parameters_;
+
+  void publishWarning(const bool active) const;
+
+  bool checkIfJointsWithinBounds(
+    trajectory_msgs::JointTrajectory_ <std::allocator<void>> &new_jt_traj
+  );
+
+  /**
+   *  Verify that the future Jacobian is well-conditioned before moving.
+   *  Slow down if very close to a singularity.
+   *  Stop if extremely close.
+   * @return true of Jacobian is well conditioned, false if not
+   */
+  bool verifyJacobianIsWellConditioned(
+    const Eigen::MatrixXd &old_jacobian, const Eigen::VectorXd &delta_theta,
+    const Eigen::MatrixXd &new_jacobian, trajectory_msgs::JointTrajectory &new_jt_traj
+  );
+
+  bool checkIfImminentCollision(
+    jog_arm_shared &shared_variables,
+    trajectory_msgs::JointTrajectory &new_jt_traj
+  );
 };
 
 class CollisionCheck {
 public:
   CollisionCheck(const jog_arm_parameters &parameters,
                  jog_arm_shared &shared_variables);
-
-private:
-  ros::NodeHandle nh_;
-
-  ros::Publisher warning_pub_;
 };
 
 } // namespace jog_arm

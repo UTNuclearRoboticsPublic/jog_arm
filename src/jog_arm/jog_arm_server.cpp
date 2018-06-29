@@ -172,9 +172,6 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters &parameters,
                                jog_arm_shared &shared_variables) {
   // If user specified true in yaml file
   if (parameters.collision_check) {
-    // Publish collision status
-    warning_pub_ = nh_.advertise<std_msgs::Bool>(parameters.warning_topic, 1);
-    std_msgs::Bool collision_status;
 
     robot_model_loader::RobotModelLoader robot_model_loader(
         "robot_description");
@@ -222,18 +219,9 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters &parameters,
       planning_scene.checkCollision(collision_request, collision_result);
 
       // If collision, signal the jogging to stop
-      if (collision_result.collision) {
-        pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
-        shared_variables.imminent_collision = true;
-        pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
-
-        collision_status.data = static_cast<std_msgs::Bool::_data_type >(true);
-        warning_pub_.publish(collision_status);
-      } else {
-        pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
-        shared_variables.imminent_collision = false;
-        pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
-      }
+      pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
+      shared_variables.imminent_collision = collision_result.collision;
+      pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
       ros::spinOnce();
       collision_rate.sleep();
@@ -443,66 +431,27 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
 
   new_jt_traj.points.push_back(point);
 
-  // Stop if imminent collision
-  pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
-  bool collision = shared_variables.imminent_collision;
-  pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
-  if (collision) {
-    ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
-                                    ros::this_node::getName()
-                                        << " Close to a collision. "
-                                           "Halting.");
-
+  // apply several checks if new joint state is valid
+  if (!checkIfImminentCollision(shared_variables, new_jt_traj)) {
     halt(new_jt_traj);
+    publishWarning(true);
   }
 
-  // Verify that the future Jacobian is well-conditioned before moving.
-  // Slow down if very close to a singularity.
-  // Stop if extremely close.
-  double current_condition_number = checkConditionNumber(jacobian);
-  double old_condition_number = checkConditionNumber(old_jacobian);
-  if ((current_condition_number > parameters_.singularity_threshold)
-    && (current_condition_number > old_condition_number)) {
-    if (current_condition_number >
-        parameters_.hard_stop_singularity_threshold) {
-      ROS_WARN_STREAM_THROTTLE_NAMED(1, "jog_arm_server",
-                                      ros::this_node::getName()
-                                          << " Close to a "
-                                             "singularity ("
-                                          << current_condition_number
-                                          << "). Halting.");
-
-      halt(new_jt_traj);
-
-      std_msgs::Bool singularity_status;
-      singularity_status.data = static_cast<std_msgs::Bool::_data_type >(true);
-      warning_pub_.publish(singularity_status);
-    }
-    // Only somewhat close to singularity. Just slow down.
-    else {
-      for (std::size_t i = 0; i < jt_state_.velocity.size(); ++i) {
-        new_jt_traj.points[0].positions[i] =
-            new_jt_traj.points[0].positions[i] -
-            0.7 * delta_theta[static_cast<long>(i)];
-        new_jt_traj.points[0].velocities[i] *= 0.3;
-      }
-    }
-  }
-
-  // Check if new joints would be within bounds
-  if (!kinematic_state_->satisfiesBounds(joint_model_group_)) {
-    ROS_WARN_STREAM_THROTTLE_NAMED(
-        2, "jog_arm_server", ros::this_node::getName()
-                                 << " Close to a "
-                                    "position or velocity limit. Halting.");
-
+  else if (!verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_jt_traj)) {
     halt(new_jt_traj);
-
-    std_msgs::Bool limit_status;
-    limit_status.data = static_cast<std_msgs::Bool::_data_type >(true);
-    warning_pub_.publish(limit_status);
+    publishWarning(true);
   }
 
+  else if (!checkIfJointsWithinBounds(new_jt_traj)) {
+    halt(new_jt_traj);
+    publishWarning(true);
+  }
+
+  else {
+    publishWarning(false);
+  }
+
+  // done with calculations
   if (parameters_.gazebo) {
     // Spam several redundant points into the trajectory. The first few may be
     // skipped if the
@@ -521,6 +470,83 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   pthread_mutex_lock(&shared_variables.new_traj_mutex);
   shared_variables.new_traj = new_jt_traj;
   pthread_mutex_unlock(&shared_variables.new_traj_mutex);
+}
+
+bool JogCalcs::checkIfImminentCollision(jog_arm_shared &shared_variables,
+                                        trajectory_msgs::JointTrajectory &new_jt_traj) {
+  pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
+  bool collision = shared_variables.imminent_collision;
+  pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
+  if (collision) {
+    ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
+                                    ros::this_node::getName()
+                                        << " Close to a collision. "
+                                           "Halting.");
+    return false;
+  }
+  return true;
+}
+
+bool JogCalcs::verifyJacobianIsWellConditioned(
+  const Eigen::MatrixXd &old_jacobian, const Eigen::VectorXd &delta_theta,
+  const Eigen::MatrixXd &new_jacobian, trajectory_msgs::JointTrajectory &new_jt_traj)
+{
+  double current_condition_number = checkConditionNumber(new_jacobian);
+  double old_condition_number = checkConditionNumber(old_jacobian);
+  if ((current_condition_number > parameters_.singularity_threshold)
+    && (current_condition_number > old_condition_number)) {
+    if (current_condition_number >
+        parameters_.hard_stop_singularity_threshold) {
+      ROS_WARN_STREAM_THROTTLE_NAMED(1, "jog_arm_server",
+                                      ros::this_node::getName()
+                                          << " Close to a "
+                                             "singularity ("
+                                          << current_condition_number
+                                          << "). Halting.");
+
+      return false;
+    }
+    // Only somewhat close to singularity. Just slow down.
+    else {
+      for (size_t i = 0; i < jt_state_.velocity.size(); ++i) {
+        new_jt_traj.points[0].positions[i] =
+            new_jt_traj.points[0].positions[i] -
+            0.7 * delta_theta[static_cast<long>(i)];
+        new_jt_traj.points[0].velocities[i] *= 0.3;
+      }
+    }
+  }
+  return true;
+}
+
+bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory &new_jt_traj)
+{
+  bool halting = false;
+  for (auto joint: joint_model_group_->getJointModels()) {
+    if (!kinematic_state_->satisfiesVelocityBounds(joint)) {
+      ROS_WARN_STREAM_THROTTLE_NAMED(
+        2, "jog_arm_server", ros::this_node::getName()
+        << " " << joint->getName() << " " << joint->getFirstVariableIndex()
+        << " close to a "
+           " velocity limit. Enforcing limit.");
+      kinematic_state_->enforceVelocityBounds(joint);
+      new_jt_traj.points[0].velocities[joint->getFirstVariableIndex()] = kinematic_state_->getJointVelocities(joint)[0];
+    }
+    if (!kinematic_state_->satisfiesPositionBounds(joint)) {
+      ROS_WARN_STREAM_THROTTLE_NAMED(
+        2, "jog_arm_server", ros::this_node::getName() << " " << joint->getName()
+                                                       << " close to a "
+                                    " position limit. Halting.");
+      halting = true;
+    }
+  }
+  return !halting;
+}
+
+void JogCalcs::publishWarning(const bool active) const {
+  std_msgs::Bool status;
+  status.data = static_cast<std_msgs::Bool::_data_type >(active);
+  warning_pub_.publish(status);
 }
 
 // Halt the robot
