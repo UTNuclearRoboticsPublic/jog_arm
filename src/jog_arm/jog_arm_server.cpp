@@ -653,8 +653,8 @@ void jogROSInterface::deltaCmdCB(
       shared_variables_.command_deltas.twist.linear.y == 0.0 &&
       shared_variables_.command_deltas.twist.linear.z == 0.0 &&
       shared_variables_.command_deltas.twist.angular.x == 0.0 &&
-      shared_variables_.command_deltas.twist.linear.y == 0.0 &&
-      shared_variables_.command_deltas.twist.linear.z == 0.0;
+      shared_variables_.command_deltas.twist.angular.y == 0.0 &&
+      shared_variables_.command_deltas.twist.angular.z == 0.0;
   pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
 }
 
