@@ -137,8 +137,8 @@ private:
 
 class LowPassFilter {
 public:
-  LowPassFilter(double filter_param);
-  double filter(const double new_msrmt);
+  explicit LowPassFilter(double filter_param);
+  double filter(double new_msrmt);
 
   // Related to the cutoff frequency of the filter.
   // filter_param=1 results in a cutoff at 1/4 of the sampling rate.

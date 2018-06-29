@@ -44,7 +44,7 @@
 
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <math.h>
+#include <cmath>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
@@ -121,8 +121,8 @@ private:
  */
 class LowPassFilter {
 public:
-  LowPassFilter(double low_pass_filter_coeff);
-  double filter(const double new_msrmt);
+  explicit LowPassFilter(double low_pass_filter_coeff);
+  double filter(double new_msrmt);
   void reset(double data);
   double filter_coeff_ = 10.;
 
@@ -131,11 +131,11 @@ private:
   double prev_filtered_msrmts_[2] = {0., 0.};
 };
 
-LowPassFilter::LowPassFilter(double low_pass_filter_coeff) {
+LowPassFilter::LowPassFilter(const double low_pass_filter_coeff) {
   filter_coeff_ = low_pass_filter_coeff;
 }
 
-void LowPassFilter::reset(double data) {
+void LowPassFilter::reset(const double data) {
   prev_msrmts_[0] = data;
   prev_msrmts_[1] = data;
   prev_msrmts_[2] = data;
@@ -221,9 +221,6 @@ protected:
 
   std::vector<jog_arm::LowPassFilter> velocity_filters_;
   std::vector<jog_arm::LowPassFilter> position_filters_;
-
-  // Check whether incoming cmds are stale. Pause if so
-  ros::Duration time_of_incoming_cmd_;
 
   ros::Publisher warning_pub_;
 

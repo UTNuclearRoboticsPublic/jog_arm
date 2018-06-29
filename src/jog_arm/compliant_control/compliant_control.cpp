@@ -195,7 +195,7 @@ CompliantControl::getVelocity(std::vector<double> v_in,
   return exitCondition;
 }
 
-LowPassFilter::LowPassFilter(double filter_param)
+LowPassFilter::LowPassFilter(const double filter_param)
     : filter_param_(filter_param) {}
 
 double LowPassFilter::filter(const double new_msrmt) {
