@@ -722,10 +722,10 @@ int jogROSInterface::readParameters(ros::NodeHandle &n) {
   error += !rosparam_shortcuts::get(
       "", n, parameter_ns + "/jog_arm_server/gazebo", ros_parameters_.gazebo);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/gazebo",
+      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/collision_check",
                                ros_parameters_.collision_check);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/gazebo",
+      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/warning_topic",
                                ros_parameters_.warning_topic);
 
   ROS_INFO_STREAM_NAMED("jog_arm_server",
