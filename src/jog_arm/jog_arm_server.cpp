@@ -605,7 +605,7 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output,
   for (std::size_t i = 0, size = static_cast<std::size_t>(increments.size());
        i < size; ++i) {
     try {
-      output.position[i] += increments(static_cast<long>(i));
+      output.position[i] += increments[static_cast<long>(i)];
     } catch (const std::out_of_range &e) {
       ROS_ERROR_STREAM_NAMED("jog_arm_server",
                              ros::this_node::getName()
