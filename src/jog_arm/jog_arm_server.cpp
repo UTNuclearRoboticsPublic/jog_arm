@@ -75,12 +75,20 @@ jogROSInterface::jogROSInterface() {
   int rc = pthread_create(
     &joggingThread, nullptr, jog_arm::jogROSInterface::joggingPipeline, this
   );
+  if (rc) {
+    ROS_FATAL_NAMED("jog_arm_server", "Creating pipeline thread failed", rc);
+    return;
+  }
 
   // Check collisions in this thread
   pthread_t collisionThread;
   rc = pthread_create(
     &collisionThread, nullptr, jog_arm::jogROSInterface::collisionCheck, this
   );
+  if (rc) {
+    ROS_FATAL_NAMED("jog_arm_server", "Creating collision check failed", rc);
+    return;
+  }
 
   // ROS subscriptions. Share the data with the worker threads
   ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1,
