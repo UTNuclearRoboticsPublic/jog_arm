@@ -526,9 +526,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
 // Halt the robot
 void JogCalcs::halt(trajectory_msgs::JointTrajectory &jt_traj) {
   for (std::size_t i = 0; i < jt_state_.velocity.size(); ++i) {
-    jt_traj.points[0].positions[i] = orig_jts_.position[i];
     jt_traj.points[0].velocities[i] = 0.;
   }
+  jt_traj.points[0].positions.clear();
   // Store all zeros in the velocity filter
   resetVelocityFilters();
 }
