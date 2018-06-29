@@ -227,7 +227,7 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters &parameters,
         shared_variables.imminent_collision = true;
         pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
-        collision_status.data = true;
+        collision_status.data = static_cast<std_msgs::Bool::_data_type >(true);
         warning_pub_.publish(collision_status);
       } else {
         pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
@@ -480,7 +480,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
       halt(new_jt_traj);
 
       std_msgs::Bool singularity_status;
-      singularity_status.data = true;
+      singularity_status.data = static_cast<std_msgs::Bool::_data_type >(true);
       warning_pub_.publish(singularity_status);
     }
     // Only somewhat close to singularity. Just slow down.
@@ -504,7 +504,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     halt(new_jt_traj);
 
     std_msgs::Bool limit_status;
-    limit_status.data = true;
+    limit_status.data = static_cast<std_msgs::Bool::_data_type >(true);
     warning_pub_.publish(limit_status);
   }
 
