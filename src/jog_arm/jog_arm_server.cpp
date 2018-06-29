@@ -399,12 +399,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   // expectations.
   delta_t_ = (ros::Time::now() - prev_time_).toSec();
   prev_time_ = ros::Time::now();
-  delta_theta[0] *= parameters_.publish_period / delta_t_;
-  delta_theta[1] *= parameters_.publish_period / delta_t_;
-  delta_theta[2] *= parameters_.publish_period / delta_t_;
-  delta_theta[3] *= parameters_.publish_period / delta_t_;
-  delta_theta[4] *= parameters_.publish_period / delta_t_;
-  delta_theta[5] *= parameters_.publish_period / delta_t_;
+  delta_theta *= parameters_.publish_period / delta_t_;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return;
