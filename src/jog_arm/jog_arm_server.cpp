@@ -448,7 +448,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   bool collision = shared_variables.imminent_collision;
   pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
   if (collision) {
-    ROS_ERROR_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
+    ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
                                     ros::this_node::getName()
                                         << " Close to a collision. "
                                            "Halting.");
@@ -465,7 +465,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     && (current_condition_number > old_condition_number)) {
     if (current_condition_number >
         parameters_.hard_stop_singularity_threshold) {
-      ROS_ERROR_STREAM_THROTTLE_NAMED(1, "jog_arm_server",
+      ROS_WARN_STREAM_THROTTLE_NAMED(1, "jog_arm_server",
                                       ros::this_node::getName()
                                           << " Close to a "
                                              "singularity ("
@@ -491,7 +491,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
 
   // Check if new joints would be within bounds
   if (!kinematic_state_->satisfiesBounds(joint_model_group_)) {
-    ROS_ERROR_STREAM_THROTTLE_NAMED(
+    ROS_WARN_STREAM_THROTTLE_NAMED(
         2, "jog_arm_server", ros::this_node::getName()
                                  << " Close to a "
                                     "position or velocity limit. Halting.");
