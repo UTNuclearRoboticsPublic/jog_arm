@@ -195,9 +195,6 @@ protected:
   bool addJointIncrements(sensor_msgs::JointState &output,
                           const Eigen::VectorXd &increments) const;
 
-  bool updateJointVels(sensor_msgs::JointState &output,
-                       const Eigen::VectorXd &joint_vels) const;
-
   double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
 
   // Reset the data stored in low-pass filters so the trajectory won't jump when

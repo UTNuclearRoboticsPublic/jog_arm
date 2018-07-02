@@ -400,22 +400,25 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
 
   // Low-pass filter the velocities
   for (std::size_t i = 0; i < jt_state_.name.size(); ++i) {
-    joint_vel[static_cast<long>(i)] =
+    jt_state_.velocity[i] =
         velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
 
     // Check for nan's
-    if (std::isnan(joint_vel[static_cast<long>(i)]))
-      joint_vel[static_cast<long>(i)] = 0.;
+    if (std::isnan(joint_vel[static_cast<long>(i)])) {
+      jt_state_.position[i] = orig_jts_.position[i];
+      jt_state_.velocity[i] = 0.;
+    }
   }
-  updateJointVels(jt_state_, joint_vel);
 
   // Low-pass filter the positions
   for (std::size_t i = 0; i < jt_state_.name.size(); ++i) {
     jt_state_.position[i] = position_filters_[i].filter(jt_state_.position[i]);
 
     // Check for nan's
-    if (std::isnan(jt_state_.position[i]))
+    if (std::isnan(jt_state_.position[i])) {
       jt_state_.position[i] = orig_jts_.position[i];
+      jt_state_.velocity[i] = 0.;
+    }
   }
 
    // Check the Jacobian with these new joints.
@@ -576,24 +579,6 @@ void JogCalcs::halt(trajectory_msgs::JointTrajectory &jt_traj) {
 void JogCalcs::resetVelocityFilters() {
   for (std::size_t i = 0; i < jt_state_.name.size(); ++i)
     velocity_filters_[i].reset(0); // Zero velocity
-}
-
-// Update joint velocities
-bool JogCalcs::updateJointVels(sensor_msgs::JointState &output,
-                               const Eigen::VectorXd &joint_vels) const {
-  for (std::size_t i = 0, size = static_cast<std::size_t>(joint_vels.size());
-       i < size; ++i) {
-    try {
-      output.velocity[i] = joint_vels(static_cast<long>(i));
-    } catch (const std::out_of_range &e) {
-      ROS_ERROR_STREAM_NAMED(NODE_NAME,
-                             ros::this_node::getName()
-                                 << " Vector lengths do not match.");
-      return false;
-    }
-  }
-
-  return true;
 }
 
 // Parse the incoming joint msg for the joints of our MoveGroup
