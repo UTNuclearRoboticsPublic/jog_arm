@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   rosparam_shortcuts
   std_msgs
+  jog_msgs
   tf
   tf2_geometry_msgs
 )
