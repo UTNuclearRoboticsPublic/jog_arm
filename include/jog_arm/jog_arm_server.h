@@ -212,14 +212,11 @@ protected:
 
   tf::TransformListener listener_;
 
-  ros::Time prev_time_;
-
-  double delta_t_;
-
   std::vector<jog_arm::LowPassFilter> velocity_filters_;
   std::vector<jog_arm::LowPassFilter> position_filters_;
 
   ros::Publisher warning_pub_;
+  ros::Publisher joint_trajectory_pub_;
 
   jog_arm_parameters parameters_;
 

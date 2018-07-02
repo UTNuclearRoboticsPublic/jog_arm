@@ -99,11 +99,6 @@ jogROSInterface::jogROSInterface() {
   ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1,
                                            &jogROSInterface::jointsCB, this);
 
-  // Publish freshly-calculated joints to the robot
-  ros::Publisher joint_trajectory_pub =
-      n.advertise<trajectory_msgs::JointTrajectory>(
-          ros_parameters_.command_out_topic, 1);
-
   ros::topic::waitForMessage<sensor_msgs::JointState>(
       ros_parameters_.joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
@@ -112,47 +107,7 @@ jogROSInterface::jogROSInterface() {
   // Wait for jog filters to stabilize
   ros::Duration(10 * ros_parameters_.publish_period).sleep();
 
-  ros::Rate main_rate(1. / ros_parameters_.publish_period);
-
-  bool last_was_zero_traj = false;
-  while (ros::ok()) {
-    ros::spinOnce();
-
-    // Send the newest target joints
-    pthread_mutex_lock(&shared_variables_.new_traj_mutex);
-    if (!shared_variables_.new_traj.joint_names.empty()) {
-      pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
-      bool zero_traj_flag = shared_variables_.zero_trajectory_flag;
-      pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
-
-      // Check for stale cmds
-      if (ros::Time::now() - shared_variables_.new_traj.header.stamp <
-          ros::Duration(ros_parameters_.incoming_command_timeout)) {
-
-        // Skip the jogging publication if all inputs are 0.
-        if (!zero_traj_flag) {
-          shared_variables_.new_traj.header.stamp = ros::Time::now();
-          joint_trajectory_pub.publish(shared_variables_.new_traj);
-        }
-
-      } else if (!last_was_zero_traj) {
-        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
-                                       "Stale joint "
-                                       "trajectory msg. Try a larger "
-                                       "'incoming_command_timeout' parameter.");
-        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
-                                       "Did input from the "
-                                       "controller get interrupted? Are "
-                                       "calculations taking too long?");
-      }
-
-      // Store last traj message flag to prevent superflous warnings
-      last_was_zero_traj = zero_traj_flag;
-    }
-    pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
-
-    main_rate.sleep();
-  }
+  ros::spin();
 
   (void)pthread_join(joggingThread, nullptr);
   (void)pthread_join(collisionThread, nullptr);
@@ -235,11 +190,16 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters &parameters,
 // Constructor for the class that handles jogging calculations
 JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
                    jog_arm_shared &shared_variables)
-    : move_group_(parameters.move_group_name), prev_time_(ros::Time::now()) {
+    : move_group_(parameters.move_group_name)
+{
   parameters_ = parameters;
 
   // Publish collision status
   warning_pub_ = nh_.advertise<std_msgs::Bool>(parameters_.warning_topic, 1);
+
+  // Publish freshly-calculated joints to the robot
+  joint_trajectory_pub_ = nh_.advertise<trajectory_msgs::JointTrajectory>(
+          parameters.command_out_topic, 1);
 
   // MoveIt Setup
   robot_model_loader::RobotModelLoader model_loader("robot_description");
@@ -298,6 +258,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
   }
 
   // Now do jogging calcs
+  ros::Rate main_rate(1. / parameters_.publish_period);
+  bool last_was_zero_traj = false;
   while (ros::ok()) {
     // If user commands are all zero, reset the low-pass filters
     // when commands resume
@@ -322,9 +284,35 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
     if (!zero_traj_flag)
       jogCalcs(cmd_deltas_, shared_variables);
 
-    // Generally want to run these calculations fast.
-    // Add a small sleep to avoid 100% CPU usage
-    ros::Duration(0.001).sleep();
+    // Send the newest target joints
+    pthread_mutex_lock(&shared_variables.new_traj_mutex);
+    if (!shared_variables.new_traj.joint_names.empty()) {
+      // Check for stale cmds
+      if (ros::Time::now() - shared_variables.new_traj.header.stamp <
+          ros::Duration(parameters.incoming_command_timeout)) {
+
+        // Skip the jogging publication if all inputs are 0.
+        if (!zero_traj_flag) {
+          joint_trajectory_pub_.publish(shared_variables.new_traj);
+        }
+
+      } else if (!last_was_zero_traj) {
+        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
+                                       "Stale joint "
+                                       "trajectory msg. Try a larger "
+                                       "'incoming_command_timeout' parameter.");
+        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
+                                       "Did input from the "
+                                       "controller get interrupted? Are "
+                                       "calculations taking too long?");
+      }
+
+      // Store last traj message flag to prevent superflous warnings
+      last_was_zero_traj = zero_traj_flag;
+    }
+    pthread_mutex_unlock(&shared_variables.new_traj_mutex);
+
+    main_rate.sleep();
   }
 }
 
@@ -384,19 +372,11 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   Eigen::MatrixXd old_jacobian = kinematic_state_->getJacobian(joint_model_group_);
   Eigen::VectorXd delta_theta = pseudoInverse(old_jacobian) * delta_x;
 
-  // This inner loop may execute slower or faster than the desired rate. Scale
-  // these joint
-  // commands to match the desired rate. Then the velocity will match the user's
-  // expectations.
-  delta_t_ = (ros::Time::now() - prev_time_).toSec();
-  prev_time_ = ros::Time::now();
-  delta_theta *= parameters_.publish_period / delta_t_;
-
   if (!addJointIncrements(jt_state_, delta_theta))
     return;
 
   // Include a velocity estimate for velocity-controller robots
-  Eigen::VectorXd joint_vel(delta_theta / delta_t_);
+  Eigen::VectorXd joint_vel(delta_theta / parameters_.publish_period);
 
   // Low-pass filter the velocities
   for (std::size_t i = 0; i < jt_state_.name.size(); ++i) {
@@ -425,8 +405,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   kinematic_state_->setVariableValues(jt_state_);
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
+  const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   trajectory_msgs::JointTrajectory new_jt_traj =
-    composeOutgoingMessage(jt_state_, cmd.header.stamp);
+    composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
   if (!checkIfImminentCollision(shared_variables, new_jt_traj)) {
