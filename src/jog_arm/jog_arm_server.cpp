@@ -306,8 +306,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       if (ros::Time::now() - new_traj_.header.stamp < ros::Duration(parameters.incoming_command_timeout))
       {
         // Skip the jogging publication if all inputs are 0.
-        if (!zero_traj_flag)
-        {
+        if (!(zero_traj_flag && zero_joint_traj_flag)) {
           joint_trajectory_pub_.publish(new_traj_);
         }
       }
@@ -477,6 +476,9 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
 
   lowPassFilterVelocities(joint_vel);
   lowPassFilterPositions();
+
+  // update joint state with new values
+  kinematic_state_->setVariableValues(jt_state_);
 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   trajectory_msgs::JointTrajectory new_jt_traj =
