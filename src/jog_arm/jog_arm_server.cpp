@@ -422,17 +422,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   kinematic_state_->setVariableValues(jt_state_);
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
-  // Compose the outgoing msg
-  trajectory_msgs::JointTrajectory new_jt_traj;
-  new_jt_traj.header.frame_id = parameters_.planning_frame;
-  new_jt_traj.header.stamp = cmd.header.stamp;
-  new_jt_traj.joint_names = jt_state_.name;
-  trajectory_msgs::JointTrajectoryPoint point;
-  point.positions = jt_state_.position;
-  point.time_from_start = ros::Duration(parameters_.publish_period);
-  point.velocities = jt_state_.velocity;
-
-  new_jt_traj.points.push_back(point);
+  trajectory_msgs::JointTrajectory new_jt_traj =
+    composeOutgoingMessage(jt_state_, cmd.header.stamp);
 
   // apply several checks if new joint state is valid
   if (!checkIfImminentCollision(shared_variables, new_jt_traj)) {
@@ -462,7 +453,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     // simulation.
     // Start from 2 because the first point's timestamp is already
     // 1*parameters_.publish_period
-    point = new_jt_traj.points[0];
+    auto point = new_jt_traj.points[0];
     for (int i = 2; i < 30; ++i) {
       point.time_from_start = ros::Duration(i * parameters_.publish_period);
       new_jt_traj.points.push_back(point);
@@ -473,6 +464,24 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   pthread_mutex_lock(&shared_variables.new_traj_mutex);
   shared_variables.new_traj = new_jt_traj;
   pthread_mutex_unlock(&shared_variables.new_traj_mutex);
+}
+
+trajectory_msgs::JointTrajectory
+JogCalcs::composeOutgoingMessage(sensor_msgs::JointState &joint_state,
+                                 const ros::Time &stamp) const
+{
+  trajectory_msgs::JointTrajectory new_jt_traj;
+  new_jt_traj.header.frame_id = parameters_.planning_frame;
+  new_jt_traj.header.stamp = stamp;
+  new_jt_traj.joint_names = joint_state.name;
+
+  trajectory_msgs::JointTrajectoryPoint point;
+  point.positions = joint_state.position;
+  point.time_from_start = ros::Duration(parameters_.publish_period);
+  point.velocities = joint_state.velocity;
+  new_jt_traj.points.push_back(point);
+
+  return new_jt_traj;
 }
 
 bool JogCalcs::checkIfImminentCollision(jog_arm_shared &shared_variables,

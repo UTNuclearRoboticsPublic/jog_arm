@@ -226,7 +226,7 @@ protected:
 
   jog_arm_parameters parameters_;
 
-  void publishWarning(const bool active) const;
+  void publishWarning(bool active) const;
 
   bool checkIfJointsWithinBounds(
     trajectory_msgs::JointTrajectory_ <std::allocator<void>> &new_jt_traj
@@ -247,6 +247,10 @@ protected:
     jog_arm_shared &shared_variables,
     trajectory_msgs::JointTrajectory &new_jt_traj
   );
+
+  trajectory_msgs::JointTrajectory
+  composeOutgoingMessage(sensor_msgs::JointState &joint_state,
+                         const ros::Time &stamp) const;
 };
 
 class CollisionCheck {
