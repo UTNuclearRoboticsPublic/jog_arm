@@ -52,10 +52,12 @@ jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 // Another worker thread does collision checking.
 /////////////////////////////////////////////////
 
+static const char *const NODE_NAME = "jog_arm_server";
+
 // MAIN: create the worker threads and subscribe to jogging cmds and joint
 // angles
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "jog_arm_server");
+  ros::init(argc, argv, NODE_NAME);
 
   jog_arm::jogROSInterface ros_interface;
 
@@ -63,7 +65,8 @@ int main(int argc, char **argv) {
 }
 
 namespace jog_arm {
-// Constructor for the main ROS interface node
+
+  // Constructor for the main ROS interface node
 jogROSInterface::jogROSInterface() {
   ros::NodeHandle n;
 
@@ -76,7 +79,7 @@ jogROSInterface::jogROSInterface() {
     &joggingThread, nullptr, jog_arm::jogROSInterface::joggingPipeline, this
   );
   if (rc) {
-    ROS_FATAL_NAMED("jog_arm_server", "Creating pipeline thread failed", rc);
+    ROS_FATAL_NAMED(NODE_NAME, "Creating pipeline thread failed", rc);
     return;
   }
 
@@ -86,7 +89,7 @@ jogROSInterface::jogROSInterface() {
     &collisionThread, nullptr, jog_arm::jogROSInterface::collisionCheck, this
   );
   if (rc) {
-    ROS_FATAL_NAMED("jog_arm_server", "Creating collision check failed", rc);
+    ROS_FATAL_NAMED(NODE_NAME, "Creating collision check failed", rc);
     return;
   }
 
@@ -133,11 +136,11 @@ jogROSInterface::jogROSInterface() {
         }
 
       } else if (!last_was_zero_traj) {
-        ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
+        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
                                        "Stale joint "
                                        "trajectory msg. Try a larger "
                                        "'incoming_command_timeout' parameter.");
-        ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
+        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
                                        "Did input from the "
                                        "controller get interrupted? Are "
                                        "calculations taking too long?");
@@ -186,14 +189,14 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters &parameters,
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 
     // Wait for initial messages
-    ROS_INFO_NAMED("jog_arm_server", "Waiting for first joint msg.");
+    ROS_INFO_NAMED(NODE_NAME, "Waiting for first joint msg.");
     ros::topic::waitForMessage<sensor_msgs::JointState>(parameters.joint_topic);
-    ROS_INFO_NAMED("jog_arm_server", "Received first joint msg.");
+    ROS_INFO_NAMED(NODE_NAME, "Received first joint msg.");
 
-    ROS_INFO_NAMED("jog_arm_server", "Waiting for first command msg.");
+    ROS_INFO_NAMED(NODE_NAME, "Waiting for first command msg.");
     ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
         parameters.command_in_topic);
-    ROS_INFO_NAMED("jog_arm_server", "Received first command msg.");
+    ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
     ros::Rate collision_rate(100);
 
@@ -255,14 +258,14 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
                                             dummy_joint_values);
 
   // Wait for initial messages
-  ROS_INFO_NAMED("jog_arm_server", "Waiting for first joint msg.");
+  ROS_INFO_NAMED(NODE_NAME, "Waiting for first joint msg.");
   ros::topic::waitForMessage<sensor_msgs::JointState>(parameters_.joint_topic);
-  ROS_INFO_NAMED("jog_arm_server", "Received first joint msg.");
+  ROS_INFO_NAMED(NODE_NAME, "Received first joint msg.");
 
-  ROS_INFO_NAMED("jog_arm_server", "Waiting for first command msg.");
+  ROS_INFO_NAMED(NODE_NAME, "Waiting for first command msg.");
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(
       parameters_.command_in_topic);
-  ROS_INFO_NAMED("jog_arm_server", "Received first command msg.");
+  ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
   ;
 
   jt_state_.name = move_group_.getJointNames();
@@ -333,7 +336,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     listener_.waitForTransform(cmd.header.frame_id, parameters_.planning_frame,
                                ros::Time::now(), ros::Duration(0.2));
   } catch (const tf::TransformException &ex) {
-    ROS_ERROR_STREAM_NAMED("jog_arm_server", ros::this_node::getName()
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName()
                                                  << ": " << ex.what());
     return;
   }
@@ -347,7 +350,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     listener_.transformVector(parameters_.planning_frame, lin_vector,
                               lin_vector);
   } catch (const tf::TransformException &ex) {
-    ROS_ERROR_STREAM_NAMED("jog_arm_server", ros::this_node::getName()
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName()
                                                  << ": " << ex.what());
     return;
   }
@@ -359,7 +362,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     listener_.transformVector(parameters_.planning_frame, rot_vector,
                               rot_vector);
   } catch (const tf::TransformException &ex) {
-    ROS_ERROR_STREAM_NAMED("jog_arm_server", ros::this_node::getName()
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName()
                                                  << ": " << ex.what());
     return;
   }
@@ -478,8 +481,8 @@ bool JogCalcs::checkIfImminentCollision(jog_arm_shared &shared_variables,
   bool collision = shared_variables.imminent_collision;
   pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
   if (collision) {
-    ROS_WARN_STREAM_THROTTLE_NAMED(2, "jog_arm_server",
-                                    ros::this_node::getName()
+    ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME,
+                                   ros::this_node::getName()
                                         << " Close to a collision. "
                                            "Halting.");
     return false;
@@ -497,8 +500,8 @@ bool JogCalcs::verifyJacobianIsWellConditioned(
     && (current_condition_number > old_condition_number)) {
     if (current_condition_number >
         parameters_.hard_stop_singularity_threshold) {
-      ROS_WARN_STREAM_THROTTLE_NAMED(1, "jog_arm_server",
-                                      ros::this_node::getName()
+      ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME,
+                                     ros::this_node::getName()
                                           << " Close to a "
                                              "singularity ("
                                           << current_condition_number
@@ -525,7 +528,7 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory &new_j
   for (auto joint: joint_model_group_->getJointModels()) {
     if (!kinematic_state_->satisfiesVelocityBounds(joint)) {
       ROS_WARN_STREAM_THROTTLE_NAMED(
-        2, "jog_arm_server", ros::this_node::getName()
+        2, NODE_NAME, ros::this_node::getName()
         << " " << joint->getName() << " " << joint->getFirstVariableIndex()
         << " close to a "
            " velocity limit. Enforcing limit.");
@@ -534,8 +537,8 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory &new_j
     }
     if (!kinematic_state_->satisfiesPositionBounds(joint)) {
       ROS_WARN_STREAM_THROTTLE_NAMED(
-        2, "jog_arm_server", ros::this_node::getName() << " " << joint->getName()
-                                                       << " close to a "
+        2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
+                                                << " close to a "
                                     " position limit. Halting.");
       halting = true;
     }
@@ -574,7 +577,7 @@ bool JogCalcs::updateJointVels(sensor_msgs::JointState &output,
     try {
       output.velocity[i] = joint_vels(static_cast<long>(i));
     } catch (const std::out_of_range &e) {
-      ROS_ERROR_STREAM_NAMED("jog_arm_server",
+      ROS_ERROR_STREAM_NAMED(NODE_NAME,
                              ros::this_node::getName()
                                  << " Vector lengths do not match.");
       return false;
@@ -633,7 +636,7 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState &output,
     try {
       output.position[i] += increments[static_cast<long>(i)];
     } catch (const std::out_of_range &e) {
-      ROS_ERROR_STREAM_NAMED("jog_arm_server",
+      ROS_ERROR_STREAM_NAMED(NODE_NAME,
                              ros::this_node::getName()
                                  << " Lengths of output and "
                                     "increments do not match.");
@@ -694,15 +697,15 @@ void jogROSInterface::jointsCB(const sensor_msgs::JointStateConstPtr &msg) {
 
 // Read ROS parameters, typically from YAML file
 int jogROSInterface::readParameters(ros::NodeHandle &n) {
-  ROS_INFO_NAMED("jog_arm_server", "---------------------------------------");
-  ROS_INFO_NAMED("jog_arm_server", " Parameters:");
-  ROS_INFO_NAMED("jog_arm_server", "---------------------------------------");
+  ROS_INFO_NAMED(NODE_NAME, "---------------------------------------");
+  ROS_INFO_NAMED(NODE_NAME, " Parameters:");
+  ROS_INFO_NAMED(NODE_NAME, "---------------------------------------");
 
   // If specified in the launch file, all other parameters will be read
   // from this namespace.
   std::string parameter_ns;
   ros::param::get("~parameter_ns", parameter_ns);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "Parameter namespace: " << parameter_ns);
 
   std::size_t error = 0;
@@ -754,68 +757,68 @@ int jogROSInterface::readParameters(ros::NodeHandle &n) {
       !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/warning_topic",
                                ros_parameters_.warning_topic);
 
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "move_group_name: " << ros_parameters_.move_group_name);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "publish_period: " << ros_parameters_.publish_period);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "linear_scale: " << ros_parameters_.linear_scale);
   ROS_INFO_STREAM_NAMED(
-      "jog_arm_server",
+    NODE_NAME,
       "rotational_scale: " << ros_parameters_.rotational_scale);
   ROS_INFO_STREAM_NAMED(
-      "jog_arm_server",
+    NODE_NAME,
       "low_pass_filter_coeff: " << ros_parameters_.low_pass_filter_coeff);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "joint_topic: " << ros_parameters_.joint_topic);
   ROS_INFO_STREAM_NAMED(
-      "jog_arm_server",
+    NODE_NAME,
       "command_in_topic: " << ros_parameters_.command_in_topic);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "command_frame: " << ros_parameters_.command_frame);
   ROS_INFO_STREAM_NAMED(
-      "jog_arm_server",
+    NODE_NAME,
       "incoming_command_timeout: " << ros_parameters_.incoming_command_timeout);
   ROS_INFO_STREAM_NAMED(
-      "jog_arm_server",
+    NODE_NAME,
       "command_out_topic: " << ros_parameters_.command_out_topic);
   ROS_INFO_STREAM_NAMED(
-      "jog_arm_server",
+    NODE_NAME,
       "singularity_threshold: " << ros_parameters_.singularity_threshold);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "hard_stop_singularity_threshold: "
                             << ros_parameters_.hard_stop_singularity_threshold);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "planning_frame: " << ros_parameters_.planning_frame);
-  ROS_INFO_STREAM_NAMED("jog_arm_server", "gazebo: " << ros_parameters_.gazebo);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME, "gazebo: " << ros_parameters_.gazebo);
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "collision_check: " << ros_parameters_.collision_check);
-  ROS_INFO_STREAM_NAMED("jog_arm_server",
+  ROS_INFO_STREAM_NAMED(NODE_NAME,
                         "warning_topic: " << ros_parameters_.warning_topic);
 
-  ROS_INFO_NAMED("jog_arm_server", "---------------------------------------");
-  ROS_INFO_NAMED("jog_arm_server", "---------------------------------------");
+  ROS_INFO_NAMED(NODE_NAME, "---------------------------------------");
+  ROS_INFO_NAMED(NODE_NAME, "---------------------------------------");
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
   // Input checking
   if (ros_parameters_.hard_stop_singularity_threshold <
       ros_parameters_.singularity_threshold) {
-    ROS_WARN_NAMED("jog_arm_server",
+    ROS_WARN_NAMED(NODE_NAME,
                    "Parameter 'hard_stop_singularity_threshold' "
                    "should be greater than 'singularity_threshold.'");
     return 1;
   }
   if ((ros_parameters_.hard_stop_singularity_threshold < 0.) ||
       (ros_parameters_.singularity_threshold < 0.)) {
-    ROS_WARN_NAMED("jog_arm_server",
+    ROS_WARN_NAMED(NODE_NAME,
                    "Parameters 'hard_stop_singularity_threshold' "
                    "and 'singularity_threshold' should be greater than zero.");
     return 1;
   }
   if (ros_parameters_.low_pass_filter_coeff < 0.) {
     ROS_WARN_NAMED(
-        "jog_arm_server",
+      NODE_NAME,
         "Parameter 'low_pass_filter_coeff' should be greater than zero.");
     return 1;
   }
