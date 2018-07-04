@@ -53,6 +53,7 @@ jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 /////////////////////////////////////////////////////////////////////////////////
 
 static const char* const NODE_NAME = "jog_arm_server";
+static const int GAZEBO_REDUNTANT_MESSAGE_COUNT = 30;
 
 // MAIN
 int main(int argc, char** argv)
@@ -321,7 +322,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       }
 
       // Store last traj message flag to prevent superflous warnings
-      last_was_zero_traj = zero_traj_flag;
+      last_was_zero_traj = zero_traj_flag && zero_joint_traj_flag;
     }
 
     main_rate.sleep();
@@ -416,7 +417,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
 
   // done with calculations
   if (parameters_.gazebo) {
-    insertRedundantPointsIntoTrajectory(new_traj_, 30);
+    insertRedundantPointsIntoTrajectory(new_jt_traj, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
 }
 
@@ -501,7 +502,7 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
 
   // done with calculations
   if (parameters_.gazebo) {
-    insertRedundantPointsIntoTrajectory(new_jt_traj, 30);
+    insertRedundantPointsIntoTrajectory(new_jt_traj, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
 }
 
@@ -689,6 +690,8 @@ JogCalcs::scaleJointCommand(const jog_msgs::JogJoint &command) const {
     }
   NEXT_JOINT:;
   }
+
+  return result;
 }
 
 // Calculate a pseudo-inverse.
