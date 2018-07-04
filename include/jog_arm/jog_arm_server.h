@@ -75,9 +75,6 @@ struct jog_arm_shared
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
-  trajectory_msgs::JointTrajectory new_traj;
-  pthread_mutex_t new_traj_mutex;
-
   bool imminent_collision;
   pthread_mutex_t imminent_collision_mutex;
 
@@ -224,6 +221,7 @@ protected:
   robot_state::RobotStatePtr kinematic_state_;
 
   sensor_msgs::JointState jt_state_, orig_jts_;
+  trajectory_msgs::JointTrajectory new_traj_;
 
   tf::TransformListener listener_;
 

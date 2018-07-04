@@ -316,6 +316,11 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
         // Skip the jogging publication if all inputs are 0.
         if (!(zero_traj_flag && zero_joint_traj_flag)) {
           joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(new_traj_);
+        }
+        else if (!last_was_zero_traj) {
+          endOfJogCalcs();
+          joint_trajectory_pub_.publish(new_traj_);
         }
       }
       else if (!last_was_zero_traj)
@@ -331,6 +336,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       // Store last traj message flag to prevent superflous warnings
       last_was_zero_traj = zero_traj_flag && zero_joint_traj_flag;
     }
+    pthread_mutex_unlock(&shared_variables.new_traj_mutex);
 
     main_rate.sleep();
   }
@@ -424,7 +430,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
 
   // done with calculations
   if (parameters_.gazebo) {
-    insertRedundantPointsIntoTrajectory(new_jt_traj, GAZEBO_REDUNTANT_MESSAGE_COUNT);
+    insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
 }
 
