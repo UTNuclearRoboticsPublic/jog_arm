@@ -94,10 +94,17 @@ jogROSInterface::jogROSInterface()
   }
 
   // ROS subscriptions. Share the data with the worker threads
-  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1, &jogROSInterface::deltaCmdCB, this);
-  ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &jogROSInterface::jointsCB, this);
-  ros::Subscriber joint_jog_cmd_sub = n.subscribe(ros_parameters_.joint_command_in_topic, 1,
-      &jogROSInterface::deltaJointCmdCB, this
+  ros::Subscriber cmd_sub = n.subscribe(
+    ros_parameters_.command_in_topic, 1,
+    &jogROSInterface::deltaCmdCB, this
+  );
+  ros::Subscriber joints_sub = n.subscribe(
+    ros_parameters_.joint_topic, 1,
+    &jogROSInterface::jointsCB, this
+  );
+  ros::Subscriber joint_jog_cmd_sub = n.subscribe(
+    ros_parameters_.joint_command_in_topic, 1,
+    &jogROSInterface::deltaJointCmdCB, this
   );
   ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.command_in_topic);
@@ -481,7 +488,7 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   // update joint state with new values
   kinematic_state_->setVariableValues(jt_state_);
 
-  const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
+  const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
   trajectory_msgs::JointTrajectory new_jt_traj =
     composeOutgoingMessage(jt_state_, next_time);
 
