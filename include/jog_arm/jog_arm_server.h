@@ -194,6 +194,8 @@ protected:
 
   void jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
 
+  void endOfJogCalcs();
+
   // Parse the incoming joint msg for the joints of our MoveGroup
   void updateJoints();
 
@@ -220,7 +222,7 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
 
-  sensor_msgs::JointState jt_state_, orig_jts_;
+  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
   trajectory_msgs::JointTrajectory new_traj_;
 
   tf::TransformListener listener_;
