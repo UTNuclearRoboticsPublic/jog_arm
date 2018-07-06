@@ -230,7 +230,7 @@ protected:
    *  Verify that the future Jacobian is well-conditioned before moving.
    *  Slow down if very close to a singularity.
    *  Stop if extremely close.
-   * @return true of Jacobian is well conditioned, false if not
+   * @return true if Jacobian is well conditioned, false if not
    */
   bool verifyJacobianIsWellConditioned(
     const Eigen::MatrixXd &old_jacobian, const Eigen::VectorXd &delta_theta,
