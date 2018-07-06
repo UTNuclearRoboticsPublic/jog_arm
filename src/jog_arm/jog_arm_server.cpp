@@ -52,12 +52,10 @@ jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 // Another worker thread does collision checking.
 /////////////////////////////////////////////////
 
-static const char *const NODE_NAME = "jog_arm_server";
-
 // MAIN: create the worker threads and subscribe to jogging cmds and joint
 // angles
 int main(int argc, char **argv) {
-  ros::init(argc, argv, NODE_NAME);
+  ros::init(argc, argv, "jog_arm_server");
 
   jog_arm::jogROSInterface ros_interface;
 
