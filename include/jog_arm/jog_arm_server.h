@@ -69,9 +69,6 @@ struct jog_arm_shared {
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
-  trajectory_msgs::JointTrajectory new_traj;
-  pthread_mutex_t new_traj_mutex;
-
   bool imminent_collision;
   pthread_mutex_t imminent_collision_mutex;
 
@@ -90,7 +87,7 @@ struct jog_arm_parameters {
 };
 
 /**
- * Class jogROSInterface - Instantiated in main(). Handles ROS subs & pubs.
+ * Class jogROSInterface - Instantiated in main(). Handles ROS subs & pubs and creates the worker threads.
  */
 class jogROSInterface {
 public:
@@ -180,6 +177,8 @@ protected:
   geometry_msgs::TwistStamped cmd_deltas_;
 
   sensor_msgs::JointState incoming_jts_;
+
+  trajectory_msgs::JointTrajectory new_traj_;
 
   void jogCalcs(const geometry_msgs::TwistStamped &cmd,
                 jog_arm_shared &shared_variables);

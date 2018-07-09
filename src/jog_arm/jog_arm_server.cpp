@@ -46,11 +46,11 @@
 jog_arm::jog_arm_parameters jog_arm::jogROSInterface::ros_parameters_;
 jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 
-/////////////////////////////////////////////////
-// MAIN handles ROS subscriptions.
-// A worker thread does the jogging calculations.
+/////////////////////////////////////////////////////////////////////////////////
+// jogROSInterface handles ROS subscriptions and instantiates the worker threads.
+// One worker thread does the jogging calculations.
 // Another worker thread does collision checking.
-/////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
 
 static const char *const NODE_NAME = "jog_arm_server";
 
@@ -285,15 +285,14 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
       jogCalcs(cmd_deltas_, shared_variables);
 
     // Send the newest target joints
-    pthread_mutex_lock(&shared_variables.new_traj_mutex);
-    if (!shared_variables.new_traj.joint_names.empty()) {
+    if (!new_traj_.joint_names.empty()) {
       // Check for stale cmds
-      if (ros::Time::now() - shared_variables.new_traj.header.stamp <
+      if (ros::Time::now() - new_traj_.header.stamp <
           ros::Duration(parameters.incoming_command_timeout)) {
 
         // Skip the jogging publication if all inputs are 0.
         if (!zero_traj_flag) {
-          joint_trajectory_pub_.publish(shared_variables.new_traj);
+          joint_trajectory_pub_.publish(new_traj_);
         }
 
       } else if (!last_was_zero_traj) {
@@ -310,7 +309,6 @@ JogCalcs::JogCalcs(const jog_arm_parameters &parameters,
       // Store last traj message flag to prevent superflous warnings
       last_was_zero_traj = zero_traj_flag;
     }
-    pthread_mutex_unlock(&shared_variables.new_traj_mutex);
 
     main_rate.sleep();
   }
@@ -406,22 +404,22 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
-  trajectory_msgs::JointTrajectory new_jt_traj =
+  new_traj_ =
     composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_jt_traj)) {
-    halt(new_jt_traj);
+  if (!checkIfImminentCollision(shared_variables, new_traj_)) {
+    halt(new_traj_);
     publishWarning(true);
   }
 
-  else if (!verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_jt_traj)) {
-    halt(new_jt_traj);
+  else if (!verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_)) {
+    halt(new_traj_);
     publishWarning(true);
   }
 
-  else if (!checkIfJointsWithinBounds(new_jt_traj)) {
-    halt(new_jt_traj);
+  else if (!checkIfJointsWithinBounds(new_traj_)) {
+    halt(new_traj_);
     publishWarning(true);
   }
 
@@ -437,17 +435,12 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped &cmd,
     // simulation.
     // Start from 2 because the first point's timestamp is already
     // 1*parameters_.publish_period
-    auto point = new_jt_traj.points[0];
+    auto point = new_traj_.points[0];
     for (int i = 2; i < 30; ++i) {
       point.time_from_start = ros::Duration(i * parameters_.publish_period);
-      new_jt_traj.points.push_back(point);
+      new_traj_.points.push_back(point);
     }
   }
-
-  // Share with main to be published
-  pthread_mutex_lock(&shared_variables.new_traj_mutex);
-  shared_variables.new_traj = new_jt_traj;
-  pthread_mutex_unlock(&shared_variables.new_traj_mutex);
 }
 
 trajectory_msgs::JointTrajectory
