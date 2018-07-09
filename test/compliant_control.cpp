@@ -111,23 +111,18 @@ TEST(compliantControlTest, getVelocity)
   ftData.wrench.torque.y = 10.0;
   ftData.wrench.torque.z = 10.0;
 
-  compliantEnum::exitCondition endcondition = control.getVelocity(vIn, ftData, vOut);
+  compliant_control::ExitCondition end_condition = control.getVelocity(vIn, ftData, vOut);
 
   // Output will not be exactly equal to input/stiffness because of the low-pass
   // filtering
   // and the compliant behavior. Should be close, though.
-  EXPECT_TRUE(endcondition == compliantEnum::CONDITION_NOT_MET);
+  EXPECT_TRUE(end_condition == compliant_control::CONDITION_NOT_MET);
   EXPECT_NEAR(vOut[0], vIn[0], 0.2);
   EXPECT_NEAR(vOut[1], vIn[1], 0.2);
   EXPECT_NEAR(vOut[2], vIn[2], 0.2);
   EXPECT_NEAR(vOut[3], vIn[3], 0.2);
   EXPECT_NEAR(vOut[4], vIn[4], 0.2);
   EXPECT_NEAR(vOut[5], vIn[5], 0.2);
-
-  //  To test std_msgs::String length
-  char cmd[74];
-  sprintf(cmd, "speedl([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], 0.2, 0.1)\n", vOut[0], vOut[1], vOut[2], vOut[3],
-          vOut[4], vOut[5]);
 
   //  One of the controlled velocities has met the force/torque end condition so
   //  velocity in
@@ -143,9 +138,9 @@ TEST(compliantControlTest, getVelocity)
 
   // Spam this several times to allow the filter to settle
   for (int i = 0; i < 20; i++)
-    endcondition = control.getVelocity(vIn, ftData, vOut);
+    end_condition = control.getVelocity(vIn, ftData, vOut);
 
-  EXPECT_TRUE(endcondition == compliantEnum::CONDITION_MET);
+  EXPECT_TRUE(end_condition == compliant_control::CONDITION_MET);
   EXPECT_NEAR(vOut[0], vIn[0], 0.2);
   EXPECT_EQ(vOut[1], 0.0);
   EXPECT_NEAR(vOut[2], vIn[2], 0.2);
@@ -164,9 +159,9 @@ TEST(compliantControlTest, getVelocity)
 
   // Spam this several times to allow the filter to settle
   for (int i = 0; i < 20; i++)
-    endcondition = control.getVelocity(vIn, ftData, vOut);
+    end_condition = control.getVelocity(vIn, ftData, vOut);
 
-  EXPECT_TRUE(endcondition == compliantEnum::FT_VIOLATION);
+  EXPECT_TRUE(end_condition == compliant_control::FT_VIOLATION);
   EXPECT_EQ(vOut[0], 0.0);
   EXPECT_EQ(vOut[1], 0.0);
   EXPECT_EQ(vOut[2], 0.0);
