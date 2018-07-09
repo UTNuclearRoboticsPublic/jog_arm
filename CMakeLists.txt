@@ -70,9 +70,3 @@ if(CATKIN_ENABLE_TESTING)
   add_rostest_gtest(${PROJECT_NAME}_utest test/launch/utest.launch ${UTEST_SRC_FILES})
   target_link_libraries(${PROJECT_NAME}_utest ${catkin_LIBRARIES} ${Boost_LIBRARIES} compliant_control)
 endif()
-
-#####################
-# QTCREATOR / CLION #
-#####################
-FILE(GLOB_RECURSE LibFiles "include/*")
-add_custom_target(headers SOURCES ${LibFiles})

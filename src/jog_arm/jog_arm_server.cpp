@@ -54,8 +54,7 @@ jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 
 static const char *const NODE_NAME = "jog_arm_server";
 
-// MAIN: create the worker threads and subscribe to jogging cmds and joint
-// angles
+// MAIN
 int main(int argc, char **argv) {
   ros::init(argc, argv, NODE_NAME);
 
