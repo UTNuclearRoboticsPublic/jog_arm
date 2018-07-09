@@ -479,31 +479,40 @@ bool JogCalcs::verifyJacobianIsWellConditioned(
   const Eigen::MatrixXd &old_jacobian, const Eigen::VectorXd &delta_theta,
   const Eigen::MatrixXd &new_jacobian, trajectory_msgs::JointTrajectory &new_jt_traj)
 {
+  // Ramp velocity down linearly when the Jacobian condition is between singularity_threshold and hard_stop_singurality_threshold
   double current_condition_number = checkConditionNumber(new_jacobian);
-  double old_condition_number = checkConditionNumber(old_jacobian);
-  if ((current_condition_number > parameters_.singularity_threshold)
-    && (current_condition_number > old_condition_number)) {
-    if (current_condition_number >
-        parameters_.hard_stop_singularity_threshold) {
-      ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME,
-                                     ros::this_node::getName()
-                                          << " Close to a "
-                                             "singularity ("
-                                          << current_condition_number
-                                          << "). Halting.");
-
-      return false;
-    }
-    // Only somewhat close to singularity. Just slow down.
-    else {
-      for (size_t i = 0; i < jt_state_.velocity.size(); ++i) {
-        new_jt_traj.points[0].positions[i] =
-            new_jt_traj.points[0].positions[i] -
-            0.7 * delta_theta[static_cast<long>(i)];
-        new_jt_traj.points[0].velocities[i] *= 0.3;
-      }
+  if ( (current_condition_number > parameters_.singularity_threshold)
+    && (current_condition_number < parameters_.hard_stop_singularity_threshold) )
+  {
+  	double velocity_scale = 1.-(current_condition_number-parameters_.singularity_threshold)/(parameters_.hard_stop_singularity_threshold-parameters_.singularity_threshold);
+    for (size_t i = 0; i < jt_state_.velocity.size(); ++i) {
+      new_jt_traj.points[0].positions[i] =
+          new_jt_traj.points[0].positions[i] -
+          velocity_scale * delta_theta[static_cast<long>(i)];
+      new_jt_traj.points[0].velocities[i] *= velocity_scale;
     }
   }
+
+  // Very close to singularity, so halt.
+  else
+  {
+		double old_condition_number = checkConditionNumber(old_jacobian);
+		if ((current_condition_number > parameters_.singularity_threshold)
+		  && (current_condition_number > old_condition_number)) {
+		  if (current_condition_number >
+		      parameters_.hard_stop_singularity_threshold) {
+		    ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME,
+		                                   ros::this_node::getName()
+		                                        << " Close to a "
+		                                           "singularity ("
+		                                        << current_condition_number
+		                                        << "). Halting.");
+
+		    return false;
+	    }
+	  }
+  }
+
   return true;
 }
 
