@@ -44,7 +44,7 @@
 
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <math.h>
+#include <cmath>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
@@ -69,9 +69,6 @@ struct jog_arm_shared {
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
-  trajectory_msgs::JointTrajectory new_traj;
-  pthread_mutex_t new_traj_mutex;
-
   bool imminent_collision;
   pthread_mutex_t imminent_collision_mutex;
 
@@ -90,7 +87,7 @@ struct jog_arm_parameters {
 };
 
 /**
- * Class jogROSInterface - Instantiated in main(). Handles ROS subs & pubs.
+ * Class jogROSInterface - Instantiated in main(). Handles ROS subs & pubs and creates the worker threads.
  */
 class jogROSInterface {
 public:
@@ -121,8 +118,8 @@ private:
  */
 class LowPassFilter {
 public:
-  LowPassFilter(double low_pass_filter_coeff);
-  double filter(const double new_msrmt);
+  explicit LowPassFilter(double low_pass_filter_coeff);
+  double filter(double new_msrmt);
   void reset(double data);
   double filter_coeff_ = 10.;
 
@@ -131,11 +128,11 @@ private:
   double prev_filtered_msrmts_[2] = {0., 0.};
 };
 
-LowPassFilter::LowPassFilter(double low_pass_filter_coeff) {
+LowPassFilter::LowPassFilter(const double low_pass_filter_coeff) {
   filter_coeff_ = low_pass_filter_coeff;
 }
 
-void LowPassFilter::reset(double data) {
+void LowPassFilter::reset(const double data) {
   prev_msrmts_[0] = data;
   prev_msrmts_[1] = data;
   prev_msrmts_[2] = data;
@@ -181,6 +178,8 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
+  trajectory_msgs::JointTrajectory new_traj_;
+
   void jogCalcs(const geometry_msgs::TwistStamped &cmd,
                 jog_arm_shared &shared_variables);
 
@@ -194,9 +193,6 @@ protected:
 
   bool addJointIncrements(sensor_msgs::JointState &output,
                           const Eigen::VectorXd &increments) const;
-
-  bool updateJointVels(sensor_msgs::JointState &output,
-                       const Eigen::VectorXd &joint_vels) const;
 
   double checkConditionNumber(const Eigen::MatrixXd &matrix) const;
 
@@ -215,30 +211,45 @@ protected:
 
   tf::TransformListener listener_;
 
-  ros::Time prev_time_;
-
-  double delta_t_;
-
   std::vector<jog_arm::LowPassFilter> velocity_filters_;
   std::vector<jog_arm::LowPassFilter> position_filters_;
 
-  // Check whether incoming cmds are stale. Pause if so
-  ros::Duration time_of_incoming_cmd_;
-
   ros::Publisher warning_pub_;
+  ros::Publisher joint_trajectory_pub_;
 
   jog_arm_parameters parameters_;
+
+  void publishWarning(bool active) const;
+
+  bool checkIfJointsWithinBounds(
+    trajectory_msgs::JointTrajectory_ <std::allocator<void>> &new_jt_traj
+  );
+
+  /**
+   *  Verify that the future Jacobian is well-conditioned before moving.
+   *  Slow down if very close to a singularity.
+   *  Stop if extremely close.
+   * @return true if Jacobian is well conditioned, false if not
+   */
+  bool verifyJacobianIsWellConditioned(
+    const Eigen::MatrixXd &old_jacobian, const Eigen::VectorXd &delta_theta,
+    const Eigen::MatrixXd &new_jacobian, trajectory_msgs::JointTrajectory &new_jt_traj
+  );
+
+  bool checkIfImminentCollision(
+    jog_arm_shared &shared_variables,
+    trajectory_msgs::JointTrajectory &new_jt_traj
+  );
+
+  trajectory_msgs::JointTrajectory
+  composeOutgoingMessage(sensor_msgs::JointState &joint_state,
+                         const ros::Time &stamp) const;
 };
 
 class CollisionCheck {
 public:
   CollisionCheck(const jog_arm_parameters &parameters,
                  jog_arm_shared &shared_variables);
-
-private:
-  ros::NodeHandle nh_;
-
-  ros::Publisher warning_pub_;
 };
 
 } // namespace jog_arm
