@@ -55,12 +55,7 @@ CompliantControl::CompliantControl(
   for (int i = 0; i < compliant_control::NUM_DIMS; i++)
     vectorOfFilters_.push_back(LowPassFilter(filter_param));
 
-  bias_[0] = bias.wrench.force.x;
-  bias_[1] = bias.wrench.force.y;
-  bias_[2] = bias.wrench.force.z;
-  bias_[3] = bias.wrench.torque.x;
-  bias_[4] = bias.wrench.torque.y;
-  bias_[5] = bias.wrench.torque.z;
+  biasSensor(bias);
   ft_ = bias_;
 }
 
