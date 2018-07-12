@@ -84,7 +84,7 @@ struct jog_arm_parameters
   std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
       warning_topic;
   double linear_scale, rotational_scale, singularity_threshold, hard_stop_singularity_threshold, low_pass_filter_coeff,
-      publish_period, incoming_command_timeout;
+      publish_period, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check;
 };
 
@@ -95,6 +95,9 @@ class jogROSInterface
 {
 public:
   jogROSInterface();
+
+  // Store the parameters that were read from ROS server
+  static struct jog_arm_parameters ros_parameters_;
 
 private:
   // ROS subscriber callbacks
@@ -108,9 +111,6 @@ private:
 
   // Collision checking thread
   static void* collisionCheck(void* thread_id);
-
-  // Store the parameters that were read from ROS server
-  static struct jog_arm_parameters ros_parameters_;
 
   // Variables to share between threads
   static struct jog_arm_shared shared_variables_;
@@ -202,8 +202,9 @@ protected:
   // jogging is resumed.
   void resetVelocityFilters();
 
-  // Halt the robot
-  void halt(trajectory_msgs::JointTrajectory& jt_traj);
+  // Avoid a singularity or other issue.
+  // Needs to be handled differently for position vs. velocity control
+  void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
 
   const robot_state::JointModelGroup* joint_model_group_;
 

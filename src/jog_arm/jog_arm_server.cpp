@@ -214,7 +214,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   ROS_INFO_NAMED(NODE_NAME, "Waiting for first command msg.");
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters_.command_in_topic);
   ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
-  ;
+
+  resetVelocityFilters();
 
   jt_state_.name = move_group_.getJointNames();
   jt_state_.position.resize(jt_state_.name.size());
@@ -396,38 +397,24 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
     }
   }
 
-  // Check the Jacobian with these new joints.
+  // apply several checks to see if new joint state is valid
   kinematic_state_->setVariableValues(jt_state_);
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
-  // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_traj_))
+  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+    !verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_) ||
+    !checkIfJointsWithinBounds(new_traj_)
+    )
   {
-    halt(new_traj_);
+    avoidIssue(new_traj_);
     publishWarning(true);
   }
-
-  else if (!verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_))
-  {
-    halt(new_traj_);
-    publishWarning(true);
-  }
-
-  else if (!checkIfJointsWithinBounds(new_traj_))
-  {
-    halt(new_traj_);
-    publishWarning(true);
-  }
-
   else
-  {
     publishWarning(false);
-  }
 
-  // done with calculations
   if (parameters_.gazebo)
   {
     // Spam several redundant points into the trajectory. The first few may be
@@ -533,7 +520,8 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
       kinematic_state_->enforceVelocityBounds(joint);
       new_jt_traj.points[0].velocities[joint->getFirstVariableIndex()] = kinematic_state_->getJointVelocities(joint)[0];
     }
-    if (!kinematic_state_->satisfiesPositionBounds(joint))
+
+    if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::ros_parameters_.joint_limit_margin))
     {
       ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
                                                                              << " close to a "
@@ -551,16 +539,18 @@ void JogCalcs::publishWarning(const bool active) const
   warning_pub_.publish(status);
 }
 
-// Halt the robot
-void JogCalcs::halt(trajectory_msgs::JointTrajectory& jt_traj)
+// Avoid a singularity or other issue.
+// Needs to be handled differently for position vs. velocity control
+void JogCalcs::avoidIssue(trajectory_msgs::JointTrajectory& jt_traj)
 {
   for (std::size_t i = 0; i < jt_state_.velocity.size(); ++i)
   {
+    // For position-controlled robots, can reset the joints to a known, good state
     jt_traj.points[0].positions[i] = orig_jts_.position[i];
-    jt_traj.points[0].velocities[i] = 0.;
+
+    // For velocity-controlled robots, slow down and reverse away from the singularity/joint limit/etc
+    jt_traj.points[0].velocities[i] = -0.1;
   }
-  // Store all zeros in the velocity filter
-  resetVelocityFilters();
 }
 
 // Reset the data stored in filters so the trajectory won't jump when jogging is
@@ -576,11 +566,7 @@ void JogCalcs::updateJoints()
 {
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size())
-  {
-    ROS_WARN_NAMED("JogCalcs", "The joint msg does not contain enough "
-                               "joints.");
     return;
-  }
 
   // Store joints in a member variable
   for (std::size_t m = 0; m < incoming_jts_.name.size(); ++m)
@@ -691,41 +677,50 @@ void jogROSInterface::jointsCB(const sensor_msgs::JointStateConstPtr& msg)
 // Read ROS parameters, typically from YAML file
 int jogROSInterface::readParameters(ros::NodeHandle& n)
 {
-  // If specified in the launch file, all other parameters will be read
+  std::size_t error = 0;
+
+  // Specified in the launch file. All other parameters will be read
   // from this namespace.
   std::string parameter_ns;
   ros::param::get("~parameter_ns", parameter_ns);
+  if ( parameter_ns == "" )
+  {
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" type=\"string\" value=\"left_jog_arm_server\" />");
+    return 1;
+  }
 
-  std::size_t error = 0;
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/move_group_name",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name",
                                     ros_parameters_.move_group_name);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/publish_period", ros_parameters_.publish_period);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/scale/linear", ros_parameters_.linear_scale);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/scale/rotational",
+      !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/linear", ros_parameters_.linear_scale);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/rotational",
                                     ros_parameters_.rotational_scale);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/low_pass_filter_coeff",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/low_pass_filter_coeff",
                                     ros_parameters_.low_pass_filter_coeff);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/joint_topic", ros_parameters_.joint_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/command_in_topic",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", ros_parameters_.joint_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic",
                                     ros_parameters_.command_in_topic);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/command_frame", ros_parameters_.command_frame);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/incoming_command_timeout",
+      !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/incoming_command_timeout",
                                     ros_parameters_.incoming_command_timeout);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/command_out_topic",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_topic",
                                     ros_parameters_.command_out_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/singularity_threshold",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/singularity_threshold",
                                     ros_parameters_.singularity_threshold);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/hard_stop_singularity_threshold",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
                                     ros_parameters_.hard_stop_singularity_threshold);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/planning_frame", ros_parameters_.planning_frame);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/gazebo", ros_parameters_.gazebo);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/collision_check",
+      !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check",
                                     ros_parameters_.collision_check);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/warning_topic", ros_parameters_.warning_topic);
+      !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", ros_parameters_.warning_topic);
+  error +=
+      !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
