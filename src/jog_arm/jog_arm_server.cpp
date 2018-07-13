@@ -456,17 +456,16 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   kinematic_state_->setVariableValues(jt_state_);
 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
-  trajectory_msgs::JointTrajectory new_jt_traj =
-    composeOutgoingMessage(jt_state_, next_time);
+  new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_jt_traj)) {
-    halt(new_jt_traj);
+  if (!checkIfImminentCollision(shared_variables, new_traj_)) {
+    halt(new_traj_);
     publishWarning(true);
   }
 
-  else if (!checkIfJointsWithinBounds(new_jt_traj)) {
-    halt(new_jt_traj);
+  else if (!checkIfJointsWithinBounds(new_traj_)) {
+    halt(new_traj_);
     publishWarning(true);
   }
 
@@ -476,31 +475,27 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
 
   // done with calculations
   if (parameters_.gazebo) {
-    insertRedundantPointsIntoTrajectory(new_jt_traj, GAZEBO_REDUNTANT_MESSAGE_COUNT);
+    insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
 
   last_jts_ = jt_state_; // save state for end of jog
-  new_traj_ = new_jt_traj; // Share with main to be published
 }
 
 void JogCalcs::endOfJogCalcs()
 {
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
-  trajectory_msgs::JointTrajectory new_jt_traj =
-    composeOutgoingMessage(last_jts_, next_time);
+  new_traj_ = composeOutgoingMessage(last_jts_, next_time);
 
   // halt the robot, make sure that controllers are stopped
   for (std::size_t i = 0; i < last_jts_.velocity.size(); ++i) {
-    new_jt_traj.points[0].velocities[i] = 0.;
+    new_traj_.points[0].velocities[i] = 0.;
   }
-  new_jt_traj.points[0].time_from_start = ros::Duration(0);
+  new_traj_.points[0].time_from_start = ros::Duration(0);
 
   // done with calculations
   if (parameters_.gazebo) {
-    insertRedundantPointsIntoTrajectory(new_jt_traj, GAZEBO_REDUNTANT_MESSAGE_COUNT);
+    insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
-
-  new_traj_ = new_jt_traj; // Share with main to be published
 }
 
 // Spam several redundant points into the trajectory. The first few may be
