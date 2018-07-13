@@ -20,4 +20,3 @@ install:
 script:
   - .ci_config/travis.sh
 #  - ./travis.sh  # Enable this when you have a package-local script
-
