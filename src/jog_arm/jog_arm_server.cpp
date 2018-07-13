@@ -854,6 +854,8 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", ros_parameters_.joint_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic",
                                     ros_parameters_.command_in_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/joint_command_in_topic",
+                                    ros_parameters_.joint_command_in_topic);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/incoming_command_timeout",
@@ -864,6 +866,8 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
                                     ros_parameters_.singularity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
                                     ros_parameters_.hard_stop_singularity_threshold);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/move_group_name",
+                                    ros_parameters_.move_group_name);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
