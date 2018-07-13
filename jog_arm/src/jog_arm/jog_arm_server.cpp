@@ -459,16 +459,12 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_traj_)) {
-    halt(new_traj_);
+  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+      !checkIfJointsWithinBounds(new_traj_))
+  {
+    avoidIssue(new_traj_);
     publishWarning(true);
   }
-
-  else if (!checkIfJointsWithinBounds(new_traj_)) {
-    halt(new_traj_);
-    publishWarning(true);
-  }
-
   else {
     publishWarning(false);
   }
@@ -837,24 +833,25 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
   ros::param::get("~parameter_ns", parameter_ns);
   if ( parameter_ns == "" )
   {
-    ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespcae must be specified in the launch file, like:");
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" type=\"string\" value=\"left_jog_arm_server\" />");
     return 1;
   }
 
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name",
-                                    ros_parameters_.move_group_name);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
+  error +=
+      !rosparam_shortcuts::get("", n, parameter_ns + "/publish_delay", ros_parameters_.publish_delay);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/linear", ros_parameters_.linear_scale);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/rotational",
                                     ros_parameters_.rotational_scale);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/joint", ros_parameters_.joint_scale);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/low_pass_filter_coeff",
                                     ros_parameters_.low_pass_filter_coeff);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", ros_parameters_.joint_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic",
                                     ros_parameters_.command_in_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/joint_command_in_topic",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_command_in_topic",
                                     ros_parameters_.joint_command_in_topic);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
@@ -866,7 +863,7 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
                                     ros_parameters_.singularity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
                                     ros_parameters_.hard_stop_singularity_threshold);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/jog_arm_server/move_group_name",
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name",
                                     ros_parameters_.move_group_name);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
