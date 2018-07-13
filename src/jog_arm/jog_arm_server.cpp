@@ -230,10 +230,13 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   }
 
   // Initialize the position filters to initial robot joints
-  pthread_mutex_lock(&shared_variables.joints_mutex);
-  incoming_jts_ = shared_variables.joints;
-  pthread_mutex_unlock(&shared_variables.joints_mutex);
-  updateJoints();
+  while ( !updateJoints() && ros::ok() )
+  {
+    pthread_mutex_lock(&shared_variables.joints_mutex);
+    incoming_jts_ = shared_variables.joints;
+    pthread_mutex_unlock(&shared_variables.joints_mutex);
+    ros::Duration(0.001).sleep();
+  }
   for (std::size_t i = 0; i < jt_state_.name.size(); ++i)
     position_filters_[i].reset(jt_state_.position[i]);
 
@@ -271,7 +274,14 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     incoming_jts_ = shared_variables.joints;
     pthread_mutex_unlock(&shared_variables.joints_mutex);
 
-    updateJoints();
+    // Initialize the position filters to initial robot joints
+    while ( !updateJoints() && ros::ok() )
+    {
+      pthread_mutex_lock(&shared_variables.joints_mutex);
+      incoming_jts_ = shared_variables.joints;
+      pthread_mutex_unlock(&shared_variables.joints_mutex);
+      ros::Duration(0.001).sleep();
+    }
 
     if (!zero_traj_flag)
       jogCalcs(cmd_deltas_, shared_variables);
@@ -549,7 +559,7 @@ void JogCalcs::avoidIssue(trajectory_msgs::JointTrajectory& jt_traj)
     jt_traj.points[0].positions[i] = orig_jts_.position[i];
 
     // For velocity-controlled robots, slow down and reverse away from the singularity/joint limit/etc
-    jt_traj.points[0].velocities[i] = -0.1;
+    jt_traj.points[0].velocities[i] = 0;
   }
 }
 
@@ -562,11 +572,14 @@ void JogCalcs::resetVelocityFilters()
 }
 
 // Parse the incoming joint msg for the joints of our MoveGroup
-void JogCalcs::updateJoints()
+bool JogCalcs::updateJoints()
 {
+  // Check if every joint was zero. Sometimes an issue.
+  bool all_zeros = true;
+
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size())
-    return;
+    return false;
 
   // Store joints in a member variable
   for (std::size_t m = 0; m < incoming_jts_.name.size(); ++m)
@@ -576,11 +589,16 @@ void JogCalcs::updateJoints()
       if (incoming_jts_.name[m] == jt_state_.name[c])
       {
         jt_state_.position[c] = incoming_jts_.position[m];
+        // Make sure there was at least one nonzero value
+        if ( incoming_jts_.position[m] != 0.)
+          all_zeros = false;
         goto NEXT_JOINT;
       }
     }
   NEXT_JOINT:;
   }
+
+  return !all_zeros;
 }
 
 // Scale the incoming jog command

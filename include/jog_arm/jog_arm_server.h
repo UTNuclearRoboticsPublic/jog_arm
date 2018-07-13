@@ -188,7 +188,7 @@ protected:
   void jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
 
   // Parse the incoming joint msg for the joints of our MoveGroup
-  void updateJoints();
+  bool updateJoints();
 
   Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
