@@ -16,3 +16,4 @@ scale:
   rotational:  0.005  # Max angular velocity. Rads per publish_period. Units is [rad/s]
 # Publish boolean warnings to this topic
 warning_topic:  jog_arm_server/warning
+joint_limit_margin: -0.1 # added as a buffer to joint limits [radians]. If moving quickly, make this larger.

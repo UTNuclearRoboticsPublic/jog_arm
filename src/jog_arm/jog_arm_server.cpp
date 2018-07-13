@@ -760,6 +760,11 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be greater than zero.");
     return 1;
   }
+  if (ros_parameters_.joint_limit_margin > 0.)
+  {
+    ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero.");
+    return 1;
+  }
 
   return 0;
 }
