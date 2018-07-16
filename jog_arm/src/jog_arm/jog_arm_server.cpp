@@ -426,7 +426,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   else
     publishWarning(false);
 
-  // done with calculations
+  // If using Gazebo simulator, insert redundant points
   if (parameters_.gazebo) {
     insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
@@ -774,7 +774,6 @@ void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
   shared_variables_.command_deltas = *msg;
   // Input frame determined by YAML file:
   shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
-  // unlock mutex after all zero check
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
@@ -798,7 +797,6 @@ void jogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg) {
   // Input frame determined by YAML file
   shared_variables_.joint_command_deltas.header.frame_id =
     ros_parameters_.command_frame;
-  // unlock mutex after all zero check
 
   // Check if joint inputs is all zeros. Flag it if so to skip calculations/publication
   bool all_zeros = true;
@@ -809,7 +807,6 @@ void jogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg) {
   shared_variables_.zero_joint_trajectory_flag = all_zeros;
   pthread_mutex_unlock(&shared_variables_.zero_joint_trajectory_flag_mutex);
 
-  // unlock mutex locked before all zero check
   pthread_mutex_unlock(&shared_variables_.joint_command_deltas_mutex); // locked at beginning
 }
 
@@ -833,7 +830,7 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
   ros::param::get("~parameter_ns", parameter_ns);
   if ( parameter_ns == "" )
   {
-    ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespcae must be specified in the launch file, like:");
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" type=\"string\" value=\"left_jog_arm_server\" />");
     return 1;
   }
