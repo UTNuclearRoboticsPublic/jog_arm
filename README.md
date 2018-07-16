@@ -1,1 +1,1 @@
-http://wiki.ros.org/jog_arm
+# jog_arm metapackage
