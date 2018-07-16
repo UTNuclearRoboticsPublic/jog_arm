@@ -55,6 +55,7 @@
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
+#include <jog_msgs/JogJoint.h>
 #include <std_msgs/Bool.h>
 #include <string>
 #include <tf/transform_listener.h>
@@ -68,23 +69,30 @@ struct jog_arm_shared
   geometry_msgs::TwistStamped command_deltas;
   pthread_mutex_t command_deltas_mutex;
 
+  jog_msgs::JogJoint joint_command_deltas;
+  pthread_mutex_t joint_command_deltas_mutex;
+
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
   bool imminent_collision;
   pthread_mutex_t imminent_collision_mutex;
 
-  bool zero_trajectory_flag;
+  bool zero_trajectory_flag = true;
   pthread_mutex_t zero_trajectory_flag_mutex;
+
+  bool zero_joint_trajectory_flag = true;
+  pthread_mutex_t zero_joint_trajectory_flag_mutex;
 };
 
 // ROS params to be read
 struct jog_arm_parameters
 {
-  std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
-      warning_topic;
-  double linear_scale, rotational_scale, singularity_threshold, hard_stop_singularity_threshold, low_pass_filter_coeff,
-      publish_period, incoming_command_timeout, joint_limit_margin;
+  std::string move_group_name, joint_topic, command_in_topic, command_frame,
+      command_out_topic, planning_frame, warning_topic, joint_command_in_topic;
+  double linear_scale, rotational_scale, joint_scale, singularity_threshold,
+      hard_stop_singularity_threshold, low_pass_filter_coeff, publish_period,
+      publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check;
 };
 
@@ -101,8 +109,9 @@ public:
 
 private:
   // ROS subscriber callbacks
-  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
-  void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
+  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr &msg);
+  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg);
+  void jointsCB(const sensor_msgs::JointStateConstPtr &msg);
 
   int readParameters(ros::NodeHandle& n);
 
@@ -179,20 +188,23 @@ protected:
 
   moveit::planning_interface::MoveGroupInterface move_group_;
 
-  geometry_msgs::TwistStamped cmd_deltas_;
-
   sensor_msgs::JointState incoming_jts_;
 
-  trajectory_msgs::JointTrajectory new_traj_;
+  void jogCalcs(const geometry_msgs::TwistStamped &cmd, jog_arm_shared &shared_variables);
 
-  void jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
+  void jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
+
+  void endOfJogCalcs();
 
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
   Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
-  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
+  Eigen::VectorXd
+  scaleJointCommand(const jog_msgs::JogJoint &command) const;
+
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
@@ -210,7 +222,8 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
 
-  sensor_msgs::JointState jt_state_, orig_jts_;
+  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
+  trajectory_msgs::JointTrajectory new_traj_;
 
   tf::TransformListener listener_;
 
@@ -238,8 +251,15 @@ protected:
 
   bool checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
 
-  trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
-                                                          const ros::Time& stamp) const;
+  trajectory_msgs::JointTrajectory
+  composeOutgoingMessage(sensor_msgs::JointState &joint_state,
+                         const ros::Time &stamp) const;
+
+  void lowPassFilterVelocities(const Eigen::VectorXd &joint_vel);
+
+  void lowPassFilterPositions();
+
+  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory &trajectory, int count) const;
 };
 
 class CollisionCheck

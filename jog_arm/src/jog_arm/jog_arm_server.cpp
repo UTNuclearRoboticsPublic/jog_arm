@@ -53,6 +53,7 @@ jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 /////////////////////////////////////////////////////////////////////////////////
 
 static const char* const NODE_NAME = "jog_arm_server";
+static const int GAZEBO_REDUNTANT_MESSAGE_COUNT = 30;
 
 // MAIN
 int main(int argc, char** argv)
@@ -93,9 +94,18 @@ jogROSInterface::jogROSInterface()
   }
 
   // ROS subscriptions. Share the data with the worker threads
-  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1, &jogROSInterface::deltaCmdCB, this);
-  ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &jogROSInterface::jointsCB, this);
-
+  ros::Subscriber cmd_sub = n.subscribe(
+    ros_parameters_.command_in_topic, 1,
+    &jogROSInterface::deltaCmdCB, this
+  );
+  ros::Subscriber joints_sub = n.subscribe(
+    ros_parameters_.joint_topic, 1,
+    &jogROSInterface::jointsCB, this
+  );
+  ros::Subscriber joint_jog_cmd_sub = n.subscribe(
+    ros_parameters_.joint_command_in_topic, 1,
+    &jogROSInterface::deltaJointCmdCB, this
+  );
   ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.command_in_topic);
 
@@ -243,12 +253,20 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   // Wait for the first jogging cmd.
   // Store it in a class member for further calcs.
   // Then free up the shared variable again.
-  while (cmd_deltas_.header.stamp == ros::Time(0.))
+  geometry_msgs::TwistStamped cartesian_deltas;
+  jog_msgs::JogJoint joint_deltas;
+  while ((cartesian_deltas.header.stamp == ros::Time(0.))
+    && (joint_deltas.header.stamp == ros::Time(0.)))
   {
     ros::Duration(0.05).sleep();
+
     pthread_mutex_lock(&shared_variables.command_deltas_mutex);
-    cmd_deltas_ = shared_variables.command_deltas;
+    cartesian_deltas = shared_variables.command_deltas;
     pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
+
+    pthread_mutex_lock(&shared_variables.joint_command_deltas_mutex);
+    joint_deltas = shared_variables.joint_command_deltas;
+    pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
   }
 
   // Now do jogging calcs
@@ -261,15 +279,16 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     pthread_mutex_lock(&shared_variables.zero_trajectory_flag_mutex);
     bool zero_traj_flag = shared_variables.zero_trajectory_flag;
     pthread_mutex_unlock(&shared_variables.zero_trajectory_flag_mutex);
-    if (zero_traj_flag)
+
+    pthread_mutex_lock(&shared_variables.zero_joint_trajectory_flag_mutex);
+    bool zero_joint_traj_flag = shared_variables.zero_joint_trajectory_flag;
+    pthread_mutex_unlock(&shared_variables.zero_joint_trajectory_flag_mutex);
+
+    if (zero_traj_flag && zero_joint_traj_flag)
       // Reset low-pass filters
       resetVelocityFilters();
 
     // Pull data from the shared variables.
-    pthread_mutex_lock(&shared_variables.command_deltas_mutex);
-    cmd_deltas_ = shared_variables.command_deltas;
-    pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
-
     pthread_mutex_lock(&shared_variables.joints_mutex);
     incoming_jts_ = shared_variables.joints;
     pthread_mutex_unlock(&shared_variables.joints_mutex);
@@ -283,8 +302,20 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       ros::Duration(0.001).sleep();
     }
 
-    if (!zero_traj_flag)
-      jogCalcs(cmd_deltas_, shared_variables);
+    if (!zero_traj_flag) {
+      pthread_mutex_lock(&shared_variables.command_deltas_mutex);
+      cartesian_deltas = shared_variables.command_deltas;
+      pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
+
+      jogCalcs(cartesian_deltas, shared_variables);
+    }
+    else if (!zero_joint_traj_flag) {
+      pthread_mutex_lock(&shared_variables.joint_command_deltas_mutex);
+      joint_deltas = shared_variables.joint_command_deltas;
+      pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
+
+      jointJogCalcs(joint_deltas, shared_variables);
+    }
 
     // Send the newest target joints
     if (!new_traj_.joint_names.empty())
@@ -293,8 +324,11 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       if (ros::Time::now() - new_traj_.header.stamp < ros::Duration(parameters.incoming_command_timeout))
       {
         // Skip the jogging publication if all inputs are 0.
-        if (!zero_traj_flag)
-        {
+        if (!(zero_traj_flag && zero_joint_traj_flag)) {
+          joint_trajectory_pub_.publish(new_traj_);
+        }
+        else if (!last_was_zero_traj) {
+          endOfJogCalcs();
           joint_trajectory_pub_.publish(new_traj_);
         }
       }
@@ -309,7 +343,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       }
 
       // Store last traj message flag to prevent superflous warnings
-      last_was_zero_traj = zero_traj_flag;
+      last_was_zero_traj = zero_traj_flag && zero_joint_traj_flag;
     }
 
     main_rate.sleep();
@@ -381,31 +415,8 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   // Include a velocity estimate for velocity-controller robots
   Eigen::VectorXd joint_vel(delta_theta / parameters_.publish_period);
 
-  // Low-pass filter the velocities
-  for (std::size_t i = 0; i < jt_state_.name.size(); ++i)
-  {
-    jt_state_.velocity[i] = velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
-
-    // Check for nan's
-    if (std::isnan(joint_vel[static_cast<long>(i)]))
-    {
-      jt_state_.position[i] = orig_jts_.position[i];
-      jt_state_.velocity[i] = 0.;
-    }
-  }
-
-  // Low-pass filter the positions
-  for (std::size_t i = 0; i < jt_state_.name.size(); ++i)
-  {
-    jt_state_.position[i] = position_filters_[i].filter(jt_state_.position[i]);
-
-    // Check for nan's
-    if (std::isnan(jt_state_.position[i]))
-    {
-      jt_state_.position[i] = orig_jts_.position[i];
-      jt_state_.velocity[i] = 0.;
-    }
-  }
+  lowPassFilterVelocities(joint_vel);
+  lowPassFilterPositions();
 
   // apply several checks to see if new joint state is valid
   kinematic_state_->setVariableValues(jt_state_);
@@ -425,19 +436,109 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   else
     publishWarning(false);
 
-  if (parameters_.gazebo)
+  // If using Gazebo simulator, insert redundant points
+  if (parameters_.gazebo) {
+    insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
+  }
+
+  last_jts_ = jt_state_; // save state for end of jog
+}
+
+void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
+                             jog_arm_shared &shared_variables)
+{
+  // Apply user-defined scaling
+  const Eigen::VectorXd delta = scaleJointCommand(cmd);
+
+  kinematic_state_->setVariableValues(jt_state_);
+  orig_jts_ = jt_state_;
+
+  if (!addJointIncrements(jt_state_, delta))
+    return;
+
+  // Include a velocity estimate for velocity-controller robots
+  Eigen::VectorXd joint_vel(delta / parameters_.publish_period);
+
+  lowPassFilterVelocities(joint_vel);
+  lowPassFilterPositions();
+
+  // update joint state with new values
+  kinematic_state_->setVariableValues(jt_state_);
+
+  const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
+  new_traj_ = composeOutgoingMessage(jt_state_, next_time);
+
+  // apply several checks if new joint state is valid
+  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+      !checkIfJointsWithinBounds(new_traj_))
   {
-    // Spam several redundant points into the trajectory. The first few may be
-    // skipped if the
-    // time stamp is in the past when it reaches the client. Needed for gazebo
-    // simulation.
-    // Start from 2 because the first point's timestamp is already
-    // 1*parameters_.publish_period
-    auto point = new_traj_.points[0];
-    for (int i = 2; i < 30; ++i)
-    {
+    avoidIssue(new_traj_);
+    publishWarning(true);
+  }
+  else {
+    publishWarning(false);
+  }
+
+  // done with calculations
+  if (parameters_.gazebo) {
+    insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
+  }
+
+  last_jts_ = jt_state_; // save state for end of jog
+}
+
+void JogCalcs::endOfJogCalcs()
+{
+  const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
+  new_traj_ = composeOutgoingMessage(last_jts_, next_time);
+
+  // halt the robot, make sure that controllers are stopped
+  for (std::size_t i = 0; i < last_jts_.velocity.size(); ++i) {
+    new_traj_.points[0].velocities[i] = 0.;
+  }
+  new_traj_.points[0].time_from_start = ros::Duration(0);
+
+  // done with calculations
+  if (parameters_.gazebo) {
+    insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
+  }
+}
+
+// Spam several redundant points into the trajectory. The first few may be
+// skipped if the
+// time stamp is in the past when it reaches the client. Needed for gazebo
+// simulation.
+// Start from 2 because the first point's timestamp is already
+// 1*parameters_.publish_period
+void JogCalcs::insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory &trajectory, int count) const {
+  auto point = trajectory.points[0];
+  for (int i = 2; i < count; ++i) {
       point.time_from_start = ros::Duration(i * parameters_.publish_period);
-      new_traj_.points.push_back(point);
+      trajectory.points.push_back(point);
+    }
+}
+
+void JogCalcs::lowPassFilterPositions() {
+  for (size_t i = 0; i < jt_state_.name.size(); ++i) {
+    jt_state_.position[i] = position_filters_[i].filter(jt_state_.position[i]);
+
+    // Check for nan's
+    if (std::isnan(jt_state_.position[i])) {
+      jt_state_.position[i] = orig_jts_.position[i];
+      jt_state_.velocity[i] = 0.;
+    }
+  }
+}
+
+void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd &joint_vel) {
+  for (size_t i = 0; i < jt_state_.name.size(); ++i) {
+    jt_state_.velocity[i] =
+        velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
+
+    // Check for nan's
+    if (std::isnan(joint_vel[static_cast<long>(i)])) {
+      jt_state_.position[i] = orig_jts_.position[i];
+      jt_state_.velocity[i] = 0.;
     }
   }
 }
@@ -524,7 +625,6 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
     if (!kinematic_state_->satisfiesVelocityBounds(joint))
     {
       ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName() << " "
-                                                                             << joint->getFirstVariableIndex()
                                                                              << " close to a "
                                                                                 " velocity limit. Enforcing limit.");
       kinematic_state_->enforceVelocityBounds(joint);
@@ -616,6 +716,28 @@ Eigen::VectorXd JogCalcs::scaleCommand(const geometry_msgs::TwistStamped& comman
   return result;
 }
 
+Eigen::VectorXd
+JogCalcs::scaleJointCommand(const jog_msgs::JogJoint &command) const {
+  Eigen::VectorXd result(jt_state_.name.size());
+
+  for (std::size_t i = 0; i < jt_state_.name.size(); ++i) {
+    result[i] = 0.0;
+  }
+
+  // Store joints in a member variable
+  for (std::size_t m = 0; m < command.joint_names.size(); ++m) {
+    for (std::size_t c = 0; c < jt_state_.name.size(); ++c) {
+      if (command.joint_names[m] == jt_state_.name[c]) {
+        result[c] = command.deltas[m] * parameters_.joint_scale;
+        goto NEXT_JOINT;
+      }
+    }
+  NEXT_JOINT:;
+  }
+
+  return result;
+}
+
 // Calculate a pseudo-inverse.
 Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& J) const
 {
@@ -670,7 +792,6 @@ void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
   shared_variables_.command_deltas = *msg;
   // Input frame determined by YAML file:
   shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
-  pthread_mutex_unlock(&shared_variables_.command_deltas_mutex);
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
@@ -681,6 +802,30 @@ void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
                                            shared_variables_.command_deltas.twist.angular.y == 0.0 &&
                                            shared_variables_.command_deltas.twist.angular.z == 0.0;
   pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
+
+  // unlock mutex locked before all zero check
+  pthread_mutex_unlock(&shared_variables_.command_deltas_mutex);
+}
+
+// Listen to joint delta commands.
+// Store them in a shared variable.
+void jogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg) {
+  pthread_mutex_lock(&shared_variables_.joint_command_deltas_mutex);
+  shared_variables_.joint_command_deltas = *msg;
+  // Input frame determined by YAML file
+  shared_variables_.joint_command_deltas.header.frame_id =
+    ros_parameters_.command_frame;
+
+  // Check if joint inputs is all zeros. Flag it if so to skip calculations/publication
+  bool all_zeros = true;
+  for (double delta : shared_variables_.joint_command_deltas.deltas) {
+    all_zeros &= (delta == 0.0);
+  };
+  pthread_mutex_lock(&shared_variables_.zero_joint_trajectory_flag_mutex);
+  shared_variables_.zero_joint_trajectory_flag = all_zeros;
+  pthread_mutex_unlock(&shared_variables_.zero_joint_trajectory_flag_mutex);
+
+  pthread_mutex_unlock(&shared_variables_.joint_command_deltas_mutex); // locked at beginning
 }
 
 // Listen to joint angles.
@@ -708,18 +853,21 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
     return 1;
   }
 
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name",
-                                    ros_parameters_.move_group_name);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
+  error +=
+      !rosparam_shortcuts::get("", n, parameter_ns + "/publish_delay", ros_parameters_.publish_delay);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/linear", ros_parameters_.linear_scale);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/rotational",
                                     ros_parameters_.rotational_scale);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/joint", ros_parameters_.joint_scale);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/low_pass_filter_coeff",
                                     ros_parameters_.low_pass_filter_coeff);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", ros_parameters_.joint_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic",
                                     ros_parameters_.command_in_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_command_in_topic",
+                                    ros_parameters_.joint_command_in_topic);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/incoming_command_timeout",
@@ -730,6 +878,8 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
                                     ros_parameters_.singularity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
                                     ros_parameters_.hard_stop_singularity_threshold);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name",
+                                    ros_parameters_.move_group_name);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
