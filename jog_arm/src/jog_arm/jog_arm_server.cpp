@@ -307,14 +307,16 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       cartesian_deltas = shared_variables.command_deltas;
       pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
 
-      jogCalcs(cartesian_deltas, shared_variables);
+      if (!jogCalcs(cartesian_deltas, shared_variables))
+        continue;
     }
     else if (!zero_joint_traj_flag) {
       pthread_mutex_lock(&shared_variables.joint_command_deltas_mutex);
       joint_deltas = shared_variables.joint_command_deltas;
       pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
 
-      jointJogCalcs(joint_deltas, shared_variables);
+      if (!jointJogCalcs(joint_deltas, shared_variables))
+        continue;
     }
 
     // Send the newest target joints
@@ -352,8 +354,19 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 }
 
 // Perform the jogging calculations
-void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables)
+bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables)
 {
+  // Check for nan's in the incoming command
+  if (
+    std::isnan(cmd.twist.linear.x) ||
+    std::isnan(cmd.twist.linear.y) ||
+    std::isnan(cmd.twist.linear.z)
+  )
+  {
+    ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
+    return 0;
+  }
+
   // Convert the cmd to the MoveGroup planning frame.
   try
   {
@@ -362,7 +375,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   catch (const tf::TransformException& ex)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << ": " << ex.what());
-    return;
+    return 0;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org
   // Q#199376
@@ -377,7 +390,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   catch (const tf::TransformException& ex)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << ": " << ex.what());
-    return;
+    return 0;
   }
 
   geometry_msgs::Vector3Stamped rot_vector;
@@ -390,7 +403,7 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   catch (const tf::TransformException& ex)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << ": " << ex.what());
-    return;
+    return 0;
   }
 
   // Put these components back into a TwistStamped
@@ -411,9 +424,9 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   Eigen::VectorXd delta_theta = pseudoInverse(old_jacobian) * delta_x;
 
   if (!addJointIncrements(jt_state_, delta_theta))
-    return;
+    return 0;
 
-  // Include a velocity estimate for velocity-controller robots
+  // Include a velocity estimate for velocity-controlled robots
   Eigen::VectorXd joint_vel(delta_theta / parameters_.publish_period);
 
   lowPassFilterVelocities(joint_vel);
@@ -443,11 +456,21 @@ void JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   }
 
   last_jts_ = jt_state_; // save state for end of jog
+  return 1;
 }
 
-void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
+bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
                              jog_arm_shared &shared_variables)
 {
+  // Check for nan's in the incoming command
+  for (std::size_t i = 0; i < cmd.deltas.size(); ++i) {
+    if ( std::isnan(cmd.deltas[0]) )
+    {
+      //ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
+      return 0;
+    }
+  }
+
   // Apply user-defined scaling
   const Eigen::VectorXd delta = scaleJointCommand(cmd);
 
@@ -455,9 +478,9 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   orig_jts_ = jt_state_;
 
   if (!addJointIncrements(jt_state_, delta))
-    return;
+    return 0;
 
-  // Include a velocity estimate for velocity-controller robots
+  // Include a velocity estimate for velocity-controlled robots
   Eigen::VectorXd joint_vel(delta / parameters_.publish_period);
 
   lowPassFilterVelocities(joint_vel);
@@ -486,6 +509,7 @@ void JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   }
 
   last_jts_ = jt_state_; // save state for end of jog
+  return 1;
 }
 
 void JogCalcs::endOfJogCalcs()
@@ -540,6 +564,7 @@ void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd &joint_vel) {
     if (std::isnan(jt_state_.velocity[static_cast<long>(i)])) {
       jt_state_.position[i] = orig_jts_.position[i];
       jt_state_.velocity[i] = 0.;
+      ROS_WARN_STREAM("nan in velocity filter");
     }
   }
 }
@@ -570,9 +595,9 @@ bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables, trajec
   {
     ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " Close to a collision. "
                                                                               "Halting.");
-    return false;
+    return 0;
   }
-  return true;
+  return 1;
 }
 
 bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
@@ -610,12 +635,12 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
                                                                                << current_condition_number
                                                                                << "). Halting.");
 
-        return false;
+        return 0;
       }
     }
   }
 
-  return true;
+  return 1;
 }
 
 bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_jt_traj)
@@ -680,7 +705,7 @@ bool JogCalcs::updateJoints()
 
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size())
-    return false;
+    return 0;
 
   // Store joints in a member variable
   for (std::size_t m = 0; m < incoming_jts_.name.size(); ++m)
@@ -758,11 +783,11 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::
     {
       ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << " Lengths of output and "
                                                                      "increments do not match.");
-      return false;
+      return 0;
     }
   }
 
-  return true;
+  return 1;
 }
 
 // Calculate the condition number of the jacobian, to check for singularities

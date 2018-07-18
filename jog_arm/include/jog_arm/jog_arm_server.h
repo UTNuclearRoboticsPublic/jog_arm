@@ -190,9 +190,9 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
-  void jogCalcs(const geometry_msgs::TwistStamped &cmd, jog_arm_shared &shared_variables);
+  bool jogCalcs(const geometry_msgs::TwistStamped &cmd, jog_arm_shared &shared_variables);
 
-  void jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
+  bool jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
 
   void endOfJogCalcs();
 
