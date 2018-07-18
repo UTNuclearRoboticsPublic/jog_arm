@@ -323,10 +323,11 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       // Check for stale cmds
       if (ros::Time::now() - new_traj_.header.stamp < ros::Duration(parameters.incoming_command_timeout))
       {
-        // Skip the jogging publication if all inputs are 0.
+        // If everything normal
         if (!(zero_traj_flag && zero_joint_traj_flag)) {
           joint_trajectory_pub_.publish(new_traj_);
         }
+        // Skip the jogging publication if all inputs are 0.
         else if (!last_was_zero_traj) {
           endOfJogCalcs();
           joint_trajectory_pub_.publish(new_traj_);
@@ -536,7 +537,7 @@ void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd &joint_vel) {
         velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
 
     // Check for nan's
-    if (std::isnan(joint_vel[static_cast<long>(i)])) {
+    if (std::isnan(jt_state_.velocity[static_cast<long>(i)])) {
       jt_state_.position[i] = orig_jts_.position[i];
       jt_state_.velocity[i] = 0.;
     }

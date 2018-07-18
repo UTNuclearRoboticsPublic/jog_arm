@@ -119,10 +119,9 @@ bool jog_api::maintainPose(std::string frame,
     current_pose = move_group_.getCurrentPose();
 
     transformPose(current_pose, frame);
-    ROS_ERROR_STREAM(current_pose);
 
     // Update distance and twist to target
-    distanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, linear_vel_scale, rot_vel_scale);
+    distanceAndTwist = calculateDistanceAndTwist(initial_pose, current_pose, linear_vel_scale, rot_vel_scale);
 
     // Publish the twist commands to move the robot
     jog_vel_pub_.publish(distanceAndTwist.twist);
@@ -147,6 +146,7 @@ bool jog_api::transformPose(geometry_msgs::PoseStamped &pose, std::string& desir
   try {
     geometry_msgs::TransformStamped current_frame_to_target = tf_buffer_.lookupTransform(pose.header.frame_id, desired_frame, ros::Time(0), ros::Duration(1.0) );
     tf2::doTransform(pose, pose, current_frame_to_target);
+    pose.header.frame_id = desired_frame;
   }
   catch (tf2::TransformException &ex) {
     ROS_WARN("%s", ex.what());
