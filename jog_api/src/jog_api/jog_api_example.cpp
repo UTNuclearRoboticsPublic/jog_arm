@@ -44,7 +44,7 @@ int main(int argc, char **argv)
   // Put your robot name here -- often "manipulator"
   //////////////////////////////////////////////////
   std::string move_group_name = "manipulator";
-  jog_api jogger(move_group_name);
+  jog_api jogger(move_group_name, "/jog_arm_server/delta_jog_cmds");
 
   ////////////////////////////
   // Move to a good start pose

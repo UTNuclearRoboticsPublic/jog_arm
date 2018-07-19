@@ -44,12 +44,12 @@
 class jog_api {
 public:
 	// Constructor
-  jog_api(const std::string& move_group_name) :
+  jog_api(const std::string& move_group_name, const std::string& outgoing_jog_topic) :
     move_group_(move_group_name),
     tf2_listener_(tf_buffer_)
   {
     //TODO: do not hard-code this
-  	jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/left_arm/jog_arm_server/delta_jog_cmds", 1);
+  	jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>(outgoing_jog_topic, 1);
   }
 
   // Publish cmds for a Cartesian motion to bring the robot to the target pose.
