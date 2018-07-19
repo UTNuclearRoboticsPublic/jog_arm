@@ -360,10 +360,27 @@ bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   if (
     std::isnan(cmd.twist.linear.x) ||
     std::isnan(cmd.twist.linear.y) ||
-    std::isnan(cmd.twist.linear.z)
+    std::isnan(cmd.twist.linear.z) ||
+    std::isnan(cmd.twist.angular.x) ||
+    std::isnan(cmd.twist.angular.y) ||
+    std::isnan(cmd.twist.angular.z)
   )
   {
     ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
+    return 0;
+  }
+
+  // Check for |delta|>1 in the incoming command
+  if (
+    (fabs(cmd.twist.linear.x) > 1) ||
+    (fabs(cmd.twist.linear.y) > 1) ||
+    (fabs(cmd.twist.linear.z) > 1) ||
+    (fabs(cmd.twist.angular.x) > 1) ||
+    (fabs(cmd.twist.angular.y) > 1) ||
+    (fabs(cmd.twist.angular.z) > 1)
+  )
+  {
+    ROS_WARN_STREAM_NAMED(NODE_NAME, "Component of incoming command is >1. Skipping this datapoint.");
     return 0;
   }
 
@@ -462,11 +479,11 @@ bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
 bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
                              jog_arm_shared &shared_variables)
 {
-  // Check for nan's in the incoming command
+  // Check for nan's or |delta|>1 in the incoming command
   for (std::size_t i = 0; i < cmd.deltas.size(); ++i) {
-    if ( std::isnan(cmd.deltas[0]) )
+    if ( std::isnan(cmd.deltas[i]) || (fabs(cmd.deltas[i])>1) )
     {
-      //ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
+      ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
       return 0;
     }
   }
