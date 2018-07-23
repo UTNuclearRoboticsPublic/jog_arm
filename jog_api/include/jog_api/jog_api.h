@@ -56,15 +56,13 @@ public:
   bool jacobianMove(geometry_msgs::PoseStamped& target_pose,
     const double trans_tolerance,
     const double rot_tolerance,
-    const double linear_vel_scale,
-    const double rot_vel_scale,
+    const std::vector<double> &speed_scale,
     const ros::Duration& timeout);
 
   // Maintain the current pose in given frame for given duration
   bool maintainPose(std::string frame,
     const ros::Duration duration,
-    const double linear_vel_scale,
-    const double rot_vel_scale);
+    const std::vector<double> &speed_scale);
 
 private:
 	ros::NodeHandle nh_;
@@ -84,7 +82,7 @@ private:
     double translational_distance, rotational_distance;
     geometry_msgs::TwistStamped twist;
   };
-  distanceAndTwist calculateDistanceAndTwist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const double &linear_vel_scale, const double &rot_vel_scale);
+  distanceAndTwist calculateDistanceAndTwist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const std::vector<double> &speed_scale);
 };
 
 #endif

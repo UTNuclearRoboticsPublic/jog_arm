@@ -60,12 +60,15 @@ int main(int argc, char **argv)
   new_pose.pose.orientation.z = 0.283;
   new_pose.pose.orientation.w = 0.926;
 
-  // 1cm tolerance on the linear motion.
-  // 0.01rad tolerance on the angular
+  // Speed scales for each dimension (x,y,z, Rx, Ry, Rz)
   // Scale linear velocity commands between -0.5:0.5
   // Scale angular velocity commands between -1.0 : 1.0
+  std::vector<double> speed_scale{ 0.5, 0.5, 0.5, 1.0, 1.0, 1.0 };
+
+  // 1cm tolerance on the linear motion.
+  // 0.01rad tolerance on the angular
   // Timeout, i.e. stop sending commands, after 10s
-  if ( !jogger.jacobianMove(new_pose, 0.01, 0.01, 0.5, 1.0, ros::Duration(10)) )
+  if ( !jogger.jacobianMove(new_pose, 0.01, 0.01, speed_scale, ros::Duration(10)) )
 	{
   	ROS_ERROR_STREAM("Jacobian move failed");
   	return 1;

@@ -40,20 +40,17 @@
 bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
   const double trans_tolerance, 
   const double rot_tolerance,
-  const double linear_vel_scale,
-  const double rot_vel_scale,
+  const std::vector<double> &speed_scale,
   const ros::Duration& timeout)
 {
   // Velocity scaling should be between 0 and 1
-  if ( 0.>linear_vel_scale || 1.<linear_vel_scale )
+  for (int i=0; i<speed_scale.size(); i++)
   {
-    ROS_ERROR_STREAM("[jog_api::jacobianMove] Velocity scaling parameter should be between 0 and 1.");
-    return false;
-  }
-  if ( 0.>rot_vel_scale || 1.<rot_vel_scale )
-  {
-    ROS_ERROR_STREAM("[jog_api::jacobianMove] Velocity scaling parameter should be between 0 and 1.");
-    return false;
+    if ( 0.>speed_scale[i] || 1.<speed_scale[i] )
+    {
+      ROS_ERROR_STREAM("[jog_api::jacobianMove] Velocity scaling parameter should be between 0 and 1.");
+      return false;
+    }
   }
 
   geometry_msgs::PoseStamped current_pose;
@@ -63,7 +60,7 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
 
   // A structure to hold the result
   distanceAndTwist distanceAndTwist;
-  distanceAndTwist = calculateDistanceAndTwist(current_pose, target_pose, linear_vel_scale, rot_vel_scale);
+  distanceAndTwist = calculateDistanceAndTwist(current_pose, target_pose, speed_scale);
 
   ros::Time begin = ros::Time::now();
 
@@ -82,7 +79,7 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
     transformPose(current_pose, target_pose.header.frame_id);
 
     // Update distance and twist to target
-    distanceAndTwist = calculateDistanceAndTwist(current_pose, target_pose, linear_vel_scale, rot_vel_scale);
+    distanceAndTwist = calculateDistanceAndTwist(current_pose, target_pose, speed_scale);
 
     // Publish the twist commands to move the robot
     jog_vel_pub_.publish(distanceAndTwist.twist);
@@ -98,9 +95,18 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
 //////////////////////////////////////////////////////////////
 bool jog_api::maintainPose(std::string frame,
   const ros::Duration duration,
-  const double linear_vel_scale,
-  const double rot_vel_scale)
+  const std::vector<double> &speed_scale)
 {
+  // Velocity scaling should be between 0 and 1
+  for (int i=0; i<speed_scale.size(); i++)
+  {
+    if ( 0.>speed_scale[i] || 1.<speed_scale[i] )
+    {
+      ROS_ERROR_STREAM("[jog_api::maintainPose] Velocity scaling parameter should be between 0 and 1.");
+      return false;
+    }
+  }
+
   // Get initial pose -- to be maintained
   geometry_msgs::PoseStamped initial_pose;
   // The first call to this function often returns garbage. Do it twice.
@@ -122,7 +128,7 @@ bool jog_api::maintainPose(std::string frame,
     transformPose(current_pose, frame);
 
     // Update distance and twist to target
-    distanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, linear_vel_scale, rot_vel_scale);
+    distanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, speed_scale);
 
     // Publish the twist commands to move the robot
     jog_vel_pub_.publish(distanceAndTwist.twist);
@@ -177,7 +183,7 @@ bool jog_api::transformPose(geometry_msgs::PoseStamped &pose, std::string& desir
 // they can serve as motion commands as if from a joystick.
 ////////////////////////////////////////////////////////////////////////////////
 jog_api::distanceAndTwist jog_api::calculateDistanceAndTwist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose,
-  const double &linear_vel_scale, const double &rot_vel_scale)
+  const std::vector<double>& speed_scale)
 {
   distanceAndTwist result;
   
@@ -224,9 +230,9 @@ jog_api::distanceAndTwist jog_api::calculateDistanceAndTwist(const geometry_msgs
   sos += pow(result.twist.twist.linear.z, 2.);
   result.translational_distance = pow( sos, 0.5 );
 
-  result.twist.twist.linear.x = linear_vel_scale*result.twist.twist.linear.x/result.translational_distance;
-  result.twist.twist.linear.y = linear_vel_scale*result.twist.twist.linear.y/result.translational_distance;
-  result.twist.twist.linear.z = linear_vel_scale*result.twist.twist.linear.z/result.translational_distance;
+  result.twist.twist.linear.x = speed_scale[0]*result.twist.twist.linear.x/result.translational_distance;
+  result.twist.twist.linear.y = speed_scale[1]*result.twist.twist.linear.y/result.translational_distance;
+  result.twist.twist.linear.z = speed_scale[2]*result.twist.twist.linear.z/result.translational_distance;
 
   // Angular:
   sos = pow(result.twist.twist.angular.x, 2.);
@@ -235,9 +241,9 @@ jog_api::distanceAndTwist jog_api::calculateDistanceAndTwist(const geometry_msgs
   result.rotational_distance = pow( sos, 0.5 );
 
   // Ignore angle for now
-  result.twist.twist.angular.x = rot_vel_scale*result.twist.twist.angular.x/result.rotational_distance;
-  result.twist.twist.angular.y = rot_vel_scale*result.twist.twist.angular.y/result.rotational_distance;
-  result.twist.twist.angular.z = rot_vel_scale*result.twist.twist.angular.z/result.rotational_distance;
+  result.twist.twist.angular.x = speed_scale[3]*result.twist.twist.angular.x/result.rotational_distance;
+  result.twist.twist.angular.y = speed_scale[4]*result.twist.twist.angular.y/result.rotational_distance;
+  result.twist.twist.angular.z = speed_scale[5]*result.twist.twist.angular.z/result.rotational_distance;
 
   return result;
 }
