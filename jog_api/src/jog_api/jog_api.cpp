@@ -97,12 +97,14 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
 // Maintain the current pose in given frame for given duration
 //////////////////////////////////////////////////////////////
 bool jog_api::maintainPose(std::string frame,
-  ros::Duration duration,
+  const ros::Duration duration,
   const double linear_vel_scale,
   const double rot_vel_scale)
 {
   // Get initial pose -- to be maintained
   geometry_msgs::PoseStamped initial_pose;
+  // The first call to this function often returns garbage. Do it twice.
+  initial_pose = move_group_.getCurrentPose();
   initial_pose = move_group_.getCurrentPose();
   transformPose(initial_pose, frame);
 
@@ -112,7 +114,7 @@ bool jog_api::maintainPose(std::string frame,
 
   while (
     ros::ok() &&
-    (ros::Time::now() < (begin + duration))
+    (ros::Time::now() < (begin + duration))  
   )
   {
     // Get current robot pose
@@ -123,11 +125,19 @@ bool jog_api::maintainPose(std::string frame,
     distanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, linear_vel_scale, rot_vel_scale);
 
     // Publish the twist commands to move the robot
-    distanceAndTwist.twist.twist.linear.y = 0;
-    distanceAndTwist.twist.twist.linear.z = 0;
     jog_vel_pub_.publish(distanceAndTwist.twist);
-    ros::Duration(0.01).sleep();  
+
+    ros::Duration(0.01).sleep();
   }
+
+  // Ensure the robot stops
+  distanceAndTwist.twist.twist.linear.x = 0;
+  distanceAndTwist.twist.twist.linear.y = 0;
+  distanceAndTwist.twist.twist.linear.z = 0;
+  distanceAndTwist.twist.twist.angular.x = 0;
+  distanceAndTwist.twist.twist.angular.y = 0;
+  distanceAndTwist.twist.twist.angular.z = 0;
+  jog_vel_pub_.publish(distanceAndTwist.twist);
 
   return true;
 }

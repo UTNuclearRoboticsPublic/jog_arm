@@ -61,7 +61,9 @@ public:
     const ros::Duration& timeout);
 
   // Maintain the current pose in given frame for given duration
-  bool maintainPose(std::string frame, ros::Duration duration, const double linear_vel_scale,
+  bool maintainPose(std::string frame,
+    const ros::Duration duration,
+    const double linear_vel_scale,
     const double rot_vel_scale);
 
 private:
