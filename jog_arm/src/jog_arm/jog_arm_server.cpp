@@ -201,7 +201,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   warning_pub_ = nh_.advertise<std_msgs::Bool>(parameters_.warning_topic, 1);
 
   // Publish freshly-calculated joints to the robot
-  joint_trajectory_pub_ = nh_.advertise<trajectory_msgs::JointTrajectory>(parameters.command_out_topic, 1);
+  joint_trajectory_pub_ = nh_.advertise<std_msgs::String>(parameters.command_out_topic, 1);
 
   // MoveIt Setup
   robot_model_loader::RobotModelLoader model_loader("robot_description");
@@ -272,6 +272,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   // Now do jogging calcs
   ros::Rate main_rate(1. / parameters_.publish_period);
   bool last_was_zero_traj = false;
+  std_msgs::String ur_string;
+  char ur_char [400];
   while (ros::ok())
   {
     // If user commands are all zero, reset the low-pass filters
@@ -325,14 +327,28 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       // Check for stale cmds
       if (ros::Time::now() - new_traj_.header.stamp < ros::Duration(parameters.incoming_command_timeout))
       {
+
+        // Convert to a string msg type for UR robots
+        sprintf(ur_char, "speedj([%1.5f, %1.5f, %1.5f, %1.5f, %1.5f, %1.5f], %f, %f)\n",
+          new_traj_.points.at(0).velocities.at(0),
+          new_traj_.points.at(0).velocities.at(1),
+          new_traj_.points.at(0).velocities.at(2),
+          new_traj_.points.at(0).velocities.at(3),
+          new_traj_.points.at(0).velocities.at(4),
+          new_traj_.points.at(0).velocities.at(5),
+          1.2, // max accel (rad/s^2)
+					0.01); // min. time before function returns
+
+        ur_string.data = ur_char;
+
         // If everything normal
         if (!(zero_traj_flag && zero_joint_traj_flag)) {
-          joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(ur_string);
         }
         // Skip the jogging publication if all inputs are 0.
         else if (!last_was_zero_traj) {
           endOfJogCalcs();
-          joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(ur_string);
         }
       }
       else if (!last_was_zero_traj)
