@@ -8,7 +8,7 @@ namespace to_twist
 class spaceNavToTwist
 {
 public:
-  spaceNavToTwist() : spinner_(2)
+  spaceNavToTwist() : spinner_(1)
   {
     joy_sub_ = n_.subscribe("spacenav/joy", 1, &spaceNavToTwist::joyCallback, this);
     twist_pub_ = n_.advertise<geometry_msgs::TwistStamped>("jog_arm_server/delta_jog_cmds", 1);
@@ -41,7 +41,7 @@ private:
 
     // Joint jogging with the buttons
     jog_msgs::JogJoint joint_deltas;
-    // This example is for a Motoman SIA5. joint_s is the wrist joint.
+    // This example is for a Motoman SIA5. joint_s is the base joint.
     joint_deltas.joint_names.push_back("joint_s");
 
     // Button 0: positive on the wrist joint
