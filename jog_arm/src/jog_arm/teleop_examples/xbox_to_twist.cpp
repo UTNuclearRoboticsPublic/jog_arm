@@ -45,8 +45,8 @@ private:
     jog_msgs::JogJoint joint_deltas;
     // This example is for a Motoman SIA5. joint_s is the base joint.
     joint_deltas.joint_names.push_back("joint_s");
-    // Button 6: positive on the wrist joint
-    // Button 7: negative on the wrist joint
+    // Button 6: positive
+    // Button 7: negative
     joint_deltas.deltas.push_back( msg->buttons[6] - msg->buttons[7] );
 
 
