@@ -52,6 +52,10 @@ add_executable(xbox_to_twist src/jog_arm/xbox_to_twist.cpp)
 add_dependencies(xbox_to_twist ${catkin_EXPORTED_TARGETS})
 target_link_libraries(xbox_to_twist ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
+add_executable(dragonrise_to_twist src/jog_arm/dragonrise_to_twist.cpp)
+add_dependencies(dragonrise_to_twist ${catkin_EXPORTED_TARGETS})
+target_link_libraries(dragonrise_to_twist ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
+
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   FILES_MATCHING PATTERN "*.h"
