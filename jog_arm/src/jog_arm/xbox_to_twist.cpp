@@ -8,7 +8,7 @@ namespace to_twist
 class xboxToTwist
 {
 public:
-  xboxToTwist() : spinner_(2)
+  xboxToTwist() : spinner_(1)
   {
     joy_sub_ = n_.subscribe("joy", 1, &xboxToTwist::joyCallback, this);
     twist_pub_ = n_.advertise<geometry_msgs::TwistStamped>("jog_arm_server/delta_jog_cmds", 1);
