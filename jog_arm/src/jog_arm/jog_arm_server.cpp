@@ -671,7 +671,14 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
                                                                              << " close to a "
                                                                                 " velocity limit. Enforcing limit.");
       kinematic_state_->enforceVelocityBounds(joint);
-      new_jt_traj.points[0].velocities[joint->getFirstVariableIndex()] = kinematic_state_->getJointVelocities(joint)[0];
+      for (std::size_t c = 0; c < new_jt_traj.joint_names.size(); ++c)
+      {
+        if (new_jt_traj.joint_names[c] == joint->getName()) {
+          new_jt_traj.points[0].velocities[c] = kinematic_state_->getJointVelocities(joint)[0];
+          break;
+        }
+      }
+
     }
 
     if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::ros_parameters_.joint_limit_margin))
