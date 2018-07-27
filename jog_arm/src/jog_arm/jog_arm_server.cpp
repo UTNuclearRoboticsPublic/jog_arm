@@ -573,10 +573,10 @@ void JogCalcs::lowPassFilterPositions() {
 void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd &joint_vel) {
   for (size_t i = 0; i < jt_state_.name.size(); ++i) {
     jt_state_.velocity[i] =
-        velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
+        velocity_filters_[i].filter(joint_vel[i]);
 
     // Check for nan's
-    if (std::isnan(jt_state_.velocity[static_cast<long>(i)])) {
+    if (std::isnan(jt_state_.velocity[i])) {
       jt_state_.position[i] = orig_jts_.position[i];
       jt_state_.velocity[i] = 0.;
       ROS_WARN_STREAM("nan in velocity filter");
@@ -631,7 +631,7 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
     for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
     {
       new_jt_traj.points[0].positions[i] =
-          new_jt_traj.points[0].positions[i] - velocity_scale * delta_theta[static_cast<long>(i)];
+          new_jt_traj.points[0].positions[i] - velocity_scale * delta_theta[i];
       new_jt_traj.points[0].velocities[i] *= velocity_scale;
     }
   }
@@ -795,11 +795,11 @@ Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& J) const
 // Add the deltas to each joint
 bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const
 {
-  for (std::size_t i = 0, size = static_cast<std::size_t>(increments.size()); i < size; ++i)
+  for (std::size_t i = 0, size = increments.size(); i < size; ++i)
   {
     try
     {
-      output.position[i] += increments[static_cast<long>(i)];
+      output.position[i] += increments[i];
     }
     catch (const std::out_of_range& e)
     {
