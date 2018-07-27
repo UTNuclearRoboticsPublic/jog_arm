@@ -5,12 +5,12 @@
 
 namespace to_twist
 {
-class xboxToTwist
+class dragonriseToTwist
 {
 public:
-  xboxToTwist() : spinner_(2)
+  dragonriseToTwist() : spinner_(1)
   {
-    joy_sub_ = n_.subscribe("joy", 1, &xboxToTwist::joyCallback, this);
+    joy_sub_ = n_.subscribe("joy", 1, &dragonriseToTwist::joyCallback, this);
     twist_pub_ = n_.advertise<geometry_msgs::TwistStamped>("jog_arm_server/delta_jog_cmds", 1);
     joint_delta_pub_ = n_.advertise<jog_msgs::JogJoint>("jog_arm_server/joint_delta_jog_cmds", 1);
 
@@ -30,24 +30,23 @@ private:
     // Cartesian jogging
     geometry_msgs::TwistStamped twist;
     twist.header.stamp = ros::Time::now();
-    // This button is binary
-    twist.twist.linear.x = -msg->buttons[4] + msg->buttons[5];
-    // Double buttons
-    twist.twist.linear.y = msg->axes[0];
-    twist.twist.linear.z = msg->axes[1];
-    twist.twist.angular.x = -msg->axes[3];
-    twist.twist.angular.y = msg->axes[4];
+    
+    twist.twist.linear.x = -msg->axes[0];   // left stick x (inversed)
+    twist.twist.linear.y = msg->axes[1];    // left stick y
+    twist.twist.linear.z = msg->axes[4];    // right stick y
+    
+    // buttons
+    twist.twist.angular.x = -msg->axes[5];  // dpad x (inversed)
+    twist.twist.angular.y = msg->axes[6];   // dpad y
     // A binary button
-    twist.twist.angular.z = -msg->buttons[0] + msg->buttons[1];
+    twist.twist.angular.z = -msg->buttons[6] + msg->buttons[4]; // buttons L2 L1
 
 
     // Joint jogging
     jog_msgs::JogJoint joint_deltas;
-    // This example is for a Motoman SIA5. joint_s is the base joint.
-    joint_deltas.joint_names.push_back("joint_s");
-    // Button 6: positive on the wrist joint
-    // Button 7: negative on the wrist joint
-    joint_deltas.deltas.push_back( msg->buttons[6] - msg->buttons[7] );
+    // This example is for a Phoenix hexapod : "femur_joint_r1" is the R1 femur joint (move leg up/down)
+    joint_deltas.joint_names.push_back("femur_joint_r1");
+    joint_deltas.deltas.push_back( msg->buttons[5] - msg->buttons[7] ); // buttons R2 R1
 
 
     twist_pub_.publish(twist);
@@ -58,9 +57,9 @@ private:
 
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "xbox_to_twist");
+  ros::init(argc, argv, "dragonrise_to_twist");
 
-  to_twist::xboxToTwist to_twist;
+  to_twist::dragonriseToTwist to_twist;
 
   return 0;
 }
