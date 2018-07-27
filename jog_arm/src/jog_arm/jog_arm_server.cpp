@@ -185,7 +185,6 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_sha
       shared_variables.imminent_collision = collision_result.collision;
       pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
-      ros::spinOnce();
       collision_rate.sleep();
     }
   }
