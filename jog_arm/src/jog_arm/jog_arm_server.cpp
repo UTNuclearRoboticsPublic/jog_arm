@@ -454,7 +454,7 @@ bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
-  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+  if (!checkIfImminentCollision(shared_variables) ||
     !verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_) ||
     !checkIfJointsWithinBounds(new_traj_)
     )
@@ -508,7 +508,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+  if (!checkIfImminentCollision(shared_variables) ||
       !checkIfJointsWithinBounds(new_traj_))
   {
     avoidIssue(new_traj_);
@@ -601,7 +601,7 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
   return new_jt_traj;
 }
 
-bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj)
+bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables)
 {
   pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
   bool collision = shared_variables.imminent_collision;
