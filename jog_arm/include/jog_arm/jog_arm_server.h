@@ -235,6 +235,8 @@ protected:
 
   jog_arm_parameters parameters_;
 
+  trajectory_msgs::JointTrajectory filterPassiveJoints(trajectory_msgs::JointTrajectory traj) const;
+  
   void publishWarning(bool active) const;
 
   bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
@@ -249,7 +251,7 @@ protected:
                                        const Eigen::MatrixXd& new_jacobian,
                                        trajectory_msgs::JointTrajectory& new_jt_traj);
 
-  bool checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
+  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
 
   trajectory_msgs::JointTrajectory
   composeOutgoingMessage(sensor_msgs::JointState &joint_state,

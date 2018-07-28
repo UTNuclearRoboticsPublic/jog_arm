@@ -185,7 +185,6 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_sha
       shared_variables.imminent_collision = collision_result.collision;
       pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
-      ros::spinOnce();
       collision_rate.sleep();
     }
   }
@@ -212,7 +211,6 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
   joint_model_group_ = kinematic_model->getJointModelGroup(parameters_.move_group_name);
 
-  const std::vector<std::string>& joint_names = joint_model_group_->getJointModelNames();
   std::vector<double> dummy_joint_values;
   kinematic_state_->copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
@@ -233,7 +231,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   jt_state_.effort.resize(jt_state_.name.size());
 
   // Low-pass filters for the joint positions & velocities
-  for (std::size_t i = 0; i < joint_names.size(); ++i)
+  for (size_t i = 0; i < jt_state_.name.size(); ++i)
   {
     velocity_filters_.emplace_back(parameters_.low_pass_filter_coeff);
     position_filters_.emplace_back(parameters_.low_pass_filter_coeff);
@@ -327,12 +325,12 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       {
         // If everything normal
         if (!(zero_traj_flag && zero_joint_traj_flag)) {
-          joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(filterPassiveJoints(new_traj_));
         }
         // Skip the jogging publication if all inputs are 0.
         else if (!last_was_zero_traj) {
           endOfJogCalcs();
-          joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(filterPassiveJoints(new_traj_));
         }
       }
       else if (!last_was_zero_traj)
@@ -456,7 +454,7 @@ bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
-  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+  if (!checkIfImminentCollision(shared_variables) ||
     !verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_) ||
     !checkIfJointsWithinBounds(new_traj_)
     )
@@ -510,7 +508,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+  if (!checkIfImminentCollision(shared_variables) ||
       !checkIfJointsWithinBounds(new_traj_))
   {
     avoidIssue(new_traj_);
@@ -575,10 +573,10 @@ void JogCalcs::lowPassFilterPositions() {
 void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd &joint_vel) {
   for (size_t i = 0; i < jt_state_.name.size(); ++i) {
     jt_state_.velocity[i] =
-        velocity_filters_[i].filter(joint_vel[static_cast<long>(i)]);
+        velocity_filters_[i].filter(joint_vel[i]);
 
     // Check for nan's
-    if (std::isnan(jt_state_.velocity[static_cast<long>(i)])) {
+    if (std::isnan(jt_state_.velocity[i])) {
       jt_state_.position[i] = orig_jts_.position[i];
       jt_state_.velocity[i] = 0.;
       ROS_WARN_STREAM("nan in velocity filter");
@@ -603,7 +601,7 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
   return new_jt_traj;
 }
 
-bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj)
+bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables)
 {
   pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
   bool collision = shared_variables.imminent_collision;
@@ -633,7 +631,7 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
     for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
     {
       new_jt_traj.points[0].positions[i] =
-          new_jt_traj.points[0].positions[i] - velocity_scale * delta_theta[static_cast<long>(i)];
+          new_jt_traj.points[0].positions[i] - velocity_scale * delta_theta[i];
       new_jt_traj.points[0].velocities[i] *= velocity_scale;
     }
   }
@@ -671,7 +669,14 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
                                                                              << " close to a "
                                                                                 " velocity limit. Enforcing limit.");
       kinematic_state_->enforceVelocityBounds(joint);
-      new_jt_traj.points[0].velocities[joint->getFirstVariableIndex()] = kinematic_state_->getJointVelocities(joint)[0];
+      for (std::size_t c = 0; c < new_jt_traj.joint_names.size(); ++c)
+      {
+        if (new_jt_traj.joint_names[c] == joint->getName()) {
+          new_jt_traj.points[0].velocities[c] = kinematic_state_->getJointVelocities(joint)[0];
+          break;
+        }
+      }
+
     }
 
     if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::ros_parameters_.joint_limit_margin))
@@ -683,6 +688,64 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
     }
   }
   return !halting;
+}
+
+// Filter out passive joint in trajectory
+trajectory_msgs::JointTrajectory JogCalcs::filterPassiveJoints(trajectory_msgs::JointTrajectory traj) const
+{
+  trajectory_msgs::JointTrajectory filteredtraj;
+  std::vector<int> injTable;
+  for (std::size_t c = 0; c < traj.joint_names.size(); ++c)
+  {
+    if ( ! joint_model_group_->getJointModel(traj.joint_names[c])->isPassive() )
+    injTable.push_back(c);
+  }
+
+  if ( injTable.size() == traj.joint_names.size() ) // no passive joints, return unchanged traj
+  {
+    filteredtraj = traj;
+  } else
+  {
+    filteredtraj.header = traj.header;
+    for (std::size_t c = 0; c < injTable.size(); ++c)
+      filteredtraj.joint_names.push_back(traj.joint_names[injTable[c]]);
+    
+    for (std::size_t i = 0; i < traj.points.size(); ++i)
+    {
+      trajectory_msgs::JointTrajectoryPoint fp;
+      if ( traj.points[i].positions.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.positions.push_back(traj.points[i].positions[injTable[c]]);
+        }
+      }
+      if ( traj.points[i].velocities.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.velocities.push_back(traj.points[i].velocities[injTable[c]]);
+        }
+      }
+      if ( traj.points[i].accelerations.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.accelerations.push_back(traj.points[i].accelerations[injTable[c]]);
+        }
+      }
+      if ( traj.points[i].effort.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.effort.push_back(traj.points[i].effort[injTable[c]]);
+        }
+      }
+      fp.time_from_start = traj.points[i].time_from_start;
+      filteredtraj.points.push_back(fp);
+    }
+  }
+  return filteredtraj;
 }
 
 void JogCalcs::publishWarning(const bool active) const
@@ -790,11 +853,11 @@ Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& J) const
 // Add the deltas to each joint
 bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const
 {
-  for (std::size_t i = 0, size = static_cast<std::size_t>(increments.size()); i < size; ++i)
+  for (std::size_t i = 0, size = increments.size(); i < size; ++i)
   {
     try
     {
-      output.position[i] += increments[static_cast<long>(i)];
+      output.position[i] += increments[i];
     }
     catch (const std::out_of_range& e)
     {
