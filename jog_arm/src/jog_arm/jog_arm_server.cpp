@@ -325,12 +325,12 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       {
         // If everything normal
         if (!(zero_traj_flag && zero_joint_traj_flag)) {
-          joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(filterPassiveJoints(new_traj_));
         }
         // Skip the jogging publication if all inputs are 0.
         else if (!last_was_zero_traj) {
           endOfJogCalcs();
-          joint_trajectory_pub_.publish(new_traj_);
+          joint_trajectory_pub_.publish(filterPassiveJoints(new_traj_));
         }
       }
       else if (!last_was_zero_traj)
@@ -688,6 +688,64 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
     }
   }
   return !halting;
+}
+
+// Filter out passive joint in trajectory
+trajectory_msgs::JointTrajectory JogCalcs::filterPassiveJoints(trajectory_msgs::JointTrajectory traj) const
+{
+  trajectory_msgs::JointTrajectory filteredtraj;
+  std::vector<int> injTable;
+  for (std::size_t c = 0; c < traj.joint_names.size(); ++c)
+  {
+    if ( ! joint_model_group_->getJointModel(traj.joint_names[c])->isPassive() )
+    injTable.push_back(c);
+  }
+
+  if ( injTable.size() == traj.joint_names.size() ) // no passive joints, return unchanged traj
+  {
+    filteredtraj = traj;
+  } else
+  {
+    filteredtraj.header = traj.header;
+    for (std::size_t c = 0; c < injTable.size(); ++c)
+      filteredtraj.joint_names.push_back(traj.joint_names[injTable[c]]);
+    
+    for (std::size_t i = 0; i < traj.points.size(); ++i)
+    {
+      trajectory_msgs::JointTrajectoryPoint fp;
+      if ( traj.points[i].positions.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.positions.push_back(traj.points[i].positions[injTable[c]]);
+        }
+      }
+      if ( traj.points[i].velocities.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.velocities.push_back(traj.points[i].velocities[injTable[c]]);
+        }
+      }
+      if ( traj.points[i].accelerations.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.accelerations.push_back(traj.points[i].accelerations[injTable[c]]);
+        }
+      }
+      if ( traj.points[i].effort.size() > 0 )
+      {
+        for (std::size_t c = 0; c < injTable.size(); ++c)
+        {
+          fp.effort.push_back(traj.points[i].effort[injTable[c]]);
+        }
+      }
+      fp.time_from_start = traj.points[i].time_from_start;
+      filteredtraj.points.push_back(fp);
+    }
+  }
+  return filteredtraj;
 }
 
 void JogCalcs::publishWarning(const bool active) const
