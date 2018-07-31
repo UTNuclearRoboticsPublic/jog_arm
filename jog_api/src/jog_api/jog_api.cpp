@@ -37,7 +37,7 @@
 // Param linear_vel_scale: scales the velocity components of outgoing Twist msgs. Should be 0<linear_vel_scale<1
 // Return true if successful.
 //////////////////////////////////////////////////////////////////////////////////////////////////
-bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance,
+bool JogAPI::jacobianMove(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance,
                            const double rot_tolerance, const std::vector<double>& speed_scale,
                            const ros::Duration& timeout)
 {
@@ -90,7 +90,7 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose, const double
 //////////////////////////////////////////////////////////////
 // Maintain the current pose in given frame for given duration
 //////////////////////////////////////////////////////////////
-bool jog_api::maintainPose(std::string frame, const ros::Duration duration, const std::vector<double>& speed_scale)
+bool JogAPI::maintainPose(std::string frame, const ros::Duration duration, const std::vector<double>& speed_scale)
 {
   // Velocity scaling should be between 0 and 1
   for (int i = 0; i < speed_scale.size(); i++)
@@ -143,7 +143,7 @@ bool jog_api::maintainPose(std::string frame, const ros::Duration duration, cons
 ////////////////////////////////////
 // Transform a pose into given frame
 ////////////////////////////////////
-bool jog_api::transformPose(geometry_msgs::PoseStamped& pose, std::string& desired_frame)
+bool JogAPI::transformPose(geometry_msgs::PoseStamped& pose, std::string& desired_frame)
 {
   // Remove a leading slash, if any
   if (pose.header.frame_id.at(0) == '/')
@@ -175,7 +175,7 @@ bool jog_api::transformPose(geometry_msgs::PoseStamped& pose, std::string& desir
 // distanceAndTwist.twist: these components have been normalized between -1:1,
 // they can serve as motion commands as if from a joystick.
 ////////////////////////////////////////////////////////////////////////////////
-jog_api::distanceAndTwist jog_api::calculateDistanceAndTwist(const geometry_msgs::PoseStamped& current_pose,
+JogAPI::distanceAndTwist JogAPI::calculateDistanceAndTwist(const geometry_msgs::PoseStamped& current_pose,
                                                              const geometry_msgs::PoseStamped& target_pose,
                                                              const std::vector<double>& speed_scale)
 {

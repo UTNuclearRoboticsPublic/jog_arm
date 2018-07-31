@@ -34,6 +34,8 @@
 #define JOG_API_H
 
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Vector3Stamped.h>
+#include <geometry_msgs/WrenchStamped.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>
@@ -41,11 +43,11 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 
-class jog_api
+class JogAPI
 {
 public:
   // Constructor
-  jog_api(const std::string& move_group_name, const std::string& outgoing_jog_topic)
+  JogAPI(const std::string& move_group_name, const std::string& outgoing_jog_topic)
     : move_group_(move_group_name), tf2_listener_(tf_buffer_)
   {
     // TODO: do not hard-code this

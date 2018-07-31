@@ -40,11 +40,11 @@ int main(int argc, char** argv)
   spinner.start();
 
   //////////////////////////////////////////////////
-  // Send motion commands with this jog_api object.
+  // Send motion commands with this JogAPI object.
   // Put your robot name here -- often "manipulator"
   //////////////////////////////////////////////////
   std::string move_group_name = "manipulator";
-  jog_api jogger(move_group_name, "/jog_arm_server/delta_jog_cmds");
+  JogAPI jogger(move_group_name, "/jog_arm_server/delta_jog_cmds");
 
   ////////////////////////////
   // Move to a good start pose
