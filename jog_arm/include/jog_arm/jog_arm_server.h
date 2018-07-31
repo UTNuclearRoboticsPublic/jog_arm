@@ -88,11 +88,10 @@ struct jog_arm_shared
 // ROS params to be read
 struct jog_arm_parameters
 {
-  std::string move_group_name, joint_topic, command_in_topic, command_frame,
-      command_out_topic, planning_frame, warning_topic, joint_command_in_topic;
-  double linear_scale, rotational_scale, joint_scale, singularity_threshold,
-      hard_stop_singularity_threshold, low_pass_filter_coeff, publish_period,
-      publish_delay, incoming_command_timeout, joint_limit_margin;
+  std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
+      warning_topic, joint_command_in_topic;
+  double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
+      low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check;
 };
 
@@ -109,9 +108,9 @@ public:
 
 private:
   // ROS subscriber callbacks
-  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr &msg);
-  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg);
-  void jointsCB(const sensor_msgs::JointStateConstPtr &msg);
+  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
+  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
+  void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
   int readParameters(ros::NodeHandle& n);
 
@@ -190,9 +189,9 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
-  bool jogCalcs(const geometry_msgs::TwistStamped &cmd, jog_arm_shared &shared_variables);
+  bool jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
 
-  bool jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
+  bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
   void finishJogCalcs();
 
@@ -201,10 +200,9 @@ protected:
 
   Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
-  Eigen::VectorXd
-  scaleJointCommand(const jog_msgs::JogJoint &command) const;
+  Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
-  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
@@ -234,15 +232,14 @@ protected:
 
   bool checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
 
-  trajectory_msgs::JointTrajectory
-  composeOutgoingMessage(sensor_msgs::JointState &joint_state,
-                         const ros::Time &stamp) const;
+  trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
+                                                          const ros::Time& stamp) const;
 
-  void lowPassFilterVelocities(const Eigen::VectorXd &joint_vel);
+  void lowPassFilterVelocities(const Eigen::VectorXd& joint_vel);
 
   void lowPassFilterPositions();
 
-  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory &trajectory, int count) const;
+  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory& trajectory, int count) const;
 
   const robot_state::JointModelGroup* joint_model_group_;
 

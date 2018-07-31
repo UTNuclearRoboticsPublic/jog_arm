@@ -32,14 +32,14 @@
 
 #include "jog_api/jog_api_example.h"
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-	ros::init(argc, argv, "jog_api_example");
+  ros::init(argc, argv, "jog_api_example");
 
-	ros::AsyncSpinner spinner(1);
-	spinner.start();
+  ros::AsyncSpinner spinner(1);
+  spinner.start();
 
-	//////////////////////////////////////////////////
+  //////////////////////////////////////////////////
   // Send motion commands with this jog_api object.
   // Put your robot name here -- often "manipulator"
   //////////////////////////////////////////////////
@@ -68,11 +68,11 @@ int main(int argc, char **argv)
   // 1cm tolerance on the linear motion.
   // 0.01rad tolerance on the angular
   // Timeout, i.e. stop sending commands, after 10s
-  if ( !jogger.jacobianMove(new_pose, 0.01, 0.01, speed_scale, ros::Duration(10)) )
-	{
-  	ROS_ERROR_STREAM("Jacobian move failed");
-  	return 1;
-	}
+  if (!jogger.jacobianMove(new_pose, 0.01, 0.01, speed_scale, ros::Duration(10)))
+  {
+    ROS_ERROR_STREAM("Jacobian move failed");
+    return 1;
+  }
 
   ////////////////////////////////////////////
   // Get robot's current pose via MoveIt's api

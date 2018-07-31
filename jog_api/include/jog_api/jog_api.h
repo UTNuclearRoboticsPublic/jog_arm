@@ -41,48 +41,46 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 
-class jog_api {
+class jog_api
+{
 public:
-	// Constructor
-  jog_api(const std::string& move_group_name, const std::string& outgoing_jog_topic) :
-    move_group_(move_group_name),
-    tf2_listener_(tf_buffer_)
+  // Constructor
+  jog_api(const std::string& move_group_name, const std::string& outgoing_jog_topic)
+    : move_group_(move_group_name), tf2_listener_(tf_buffer_)
   {
-    //TODO: do not hard-code this
-  	jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>(outgoing_jog_topic, 1);
+    // TODO: do not hard-code this
+    jog_vel_pub_ = nh_.advertise<geometry_msgs::TwistStamped>(outgoing_jog_topic, 1);
   }
 
   // Publish cmds for a Cartesian motion to bring the robot to the target pose.
-  bool jacobianMove(geometry_msgs::PoseStamped& target_pose,
-    const double trans_tolerance,
-    const double rot_tolerance,
-    const std::vector<double> &speed_scale,
-    const ros::Duration& timeout);
+  bool jacobianMove(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance, const double rot_tolerance,
+                    const std::vector<double>& speed_scale, const ros::Duration& timeout);
 
   // Maintain the current pose in given frame for given duration
-  bool maintainPose(std::string frame,
-    const ros::Duration duration,
-    const std::vector<double> &speed_scale);
+  bool maintainPose(std::string frame, const ros::Duration duration, const std::vector<double>& speed_scale);
 
 private:
-	ros::NodeHandle nh_;
+  ros::NodeHandle nh_;
 
-	// Used to retrieve the current robot pose, etc.
+  // Used to retrieve the current robot pose, etc.
   moveit::planning_interface::MoveGroupInterface move_group_;
 
-	ros::Publisher jog_vel_pub_;
+  ros::Publisher jog_vel_pub_;
 
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf2_listener_;
 
-  bool transformPose(geometry_msgs::PoseStamped &pose, std::string &desired_frame);
+  bool transformPose(geometry_msgs::PoseStamped& pose, std::string& desired_frame);
 
   // Calculate Euclidean distance between 2 Poses
-  struct distanceAndTwist {
+  struct distanceAndTwist
+  {
     double translational_distance, rotational_distance;
     geometry_msgs::TwistStamped twist;
   };
-  distanceAndTwist calculateDistanceAndTwist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose, const std::vector<double> &speed_scale);
+  distanceAndTwist calculateDistanceAndTwist(const geometry_msgs::PoseStamped& current_pose,
+                                             const geometry_msgs::PoseStamped& target_pose,
+                                             const std::vector<double>& speed_scale);
 };
 
 #endif
