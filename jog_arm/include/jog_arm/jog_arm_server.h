@@ -194,7 +194,7 @@ protected:
 
   bool jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
 
-  void endOfJogCalcs();
+  void finishJogCalcs();
 
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
@@ -217,23 +217,6 @@ protected:
   // Avoid a singularity or other issue.
   // Needs to be handled differently for position vs. velocity control
   void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
-
-  const robot_state::JointModelGroup* joint_model_group_;
-
-  robot_state::RobotStatePtr kinematic_state_;
-
-  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
-  trajectory_msgs::JointTrajectory new_traj_;
-
-  tf::TransformListener listener_;
-
-  std::vector<jog_arm::LowPassFilter> velocity_filters_;
-  std::vector<jog_arm::LowPassFilter> position_filters_;
-
-  ros::Publisher warning_pub_;
-  ros::Publisher joint_trajectory_pub_;
-
-  jog_arm_parameters parameters_;
 
   void publishWarning(bool active) const;
 
@@ -260,6 +243,25 @@ protected:
   void lowPassFilterPositions();
 
   void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory &trajectory, int count) const;
+
+  const robot_state::JointModelGroup* joint_model_group_;
+
+  robot_state::RobotStatePtr kinematic_state_;
+
+  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
+  trajectory_msgs::JointTrajectory new_traj_;
+
+  tf::TransformListener listener_;
+
+  std::vector<jog_arm::LowPassFilter> velocity_filters_;
+  std::vector<jog_arm::LowPassFilter> position_filters_;
+
+  ros::Publisher warning_pub_;
+  ros::Publisher joint_trajectory_pub_;
+
+  jog_arm_parameters parameters_;
+
+  ros::Time most_recent_delta_command_;
 };
 
 class CollisionCheck

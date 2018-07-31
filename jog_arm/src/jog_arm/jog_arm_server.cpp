@@ -307,6 +307,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       cartesian_deltas = shared_variables.command_deltas;
       pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
 
+      most_recent_delta_command_ = cartesian_deltas.header.stamp;
+
       if (!jogCalcs(cartesian_deltas, shared_variables))
         continue;
     }
@@ -314,6 +316,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       pthread_mutex_lock(&shared_variables.joint_command_deltas_mutex);
       joint_deltas = shared_variables.joint_command_deltas;
       pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
+
+      most_recent_delta_command_ = cartesian_deltas.header.stamp;
 
       if (!jointJogCalcs(joint_deltas, shared_variables))
         continue;
@@ -323,7 +327,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     if (!new_traj_.joint_names.empty())
     {
       // Check for stale cmds
-      if (ros::Time::now() - new_traj_.header.stamp < ros::Duration(parameters.incoming_command_timeout))
+      if ( ros::Time::now() - most_recent_delta_command_ < ros::Duration(parameters.incoming_command_timeout))
       {
         // If everything normal
         if (!(zero_traj_flag && zero_joint_traj_flag)) {
@@ -331,7 +335,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
         }
         // Skip the jogging publication if all inputs are 0.
         else if (!last_was_zero_traj) {
-          endOfJogCalcs();
+          finishJogCalcs();
           joint_trajectory_pub_.publish(new_traj_);
         }
       }
@@ -529,7 +533,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint &cmd,
   return 1;
 }
 
-void JogCalcs::endOfJogCalcs()
+void JogCalcs::finishJogCalcs()
 {
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
   new_traj_ = composeOutgoingMessage(last_jts_, next_time);
@@ -833,6 +837,7 @@ void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
   shared_variables_.command_deltas = *msg;
+
   // Input frame determined by YAML file:
   shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
 
