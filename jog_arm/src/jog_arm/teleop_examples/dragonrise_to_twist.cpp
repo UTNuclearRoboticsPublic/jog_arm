@@ -30,24 +30,22 @@ private:
     // Cartesian jogging
     geometry_msgs::TwistStamped twist;
     twist.header.stamp = ros::Time::now();
-    
-    twist.twist.linear.x = -msg->axes[0];   // left stick x (inversed)
-    twist.twist.linear.y = msg->axes[1];    // left stick y
-    twist.twist.linear.z = msg->axes[4];    // right stick y
-    
+
+    twist.twist.linear.x = -msg->axes[0];  // left stick x (inversed)
+    twist.twist.linear.y = msg->axes[1];   // left stick y
+    twist.twist.linear.z = msg->axes[4];   // right stick y
+
     // buttons
     twist.twist.angular.x = -msg->axes[5];  // dpad x (inversed)
     twist.twist.angular.y = msg->axes[6];   // dpad y
     // A binary button
-    twist.twist.angular.z = -msg->buttons[6] + msg->buttons[4]; // buttons L2 L1
-
+    twist.twist.angular.z = -msg->buttons[6] + msg->buttons[4];  // buttons L2 L1
 
     // Joint jogging
     jog_msgs::JogJoint joint_deltas;
     // This example is for a Phoenix hexapod : "femur_joint_r1" is the R1 femur joint (move leg up/down)
     joint_deltas.joint_names.push_back("femur_joint_r1");
-    joint_deltas.deltas.push_back( msg->buttons[5] - msg->buttons[7] ); // buttons R2 R1
-
+    joint_deltas.deltas.push_back(msg->buttons[5] - msg->buttons[7]);  // buttons R2 R1
 
     twist_pub_.publish(twist);
     joint_delta_pub_.publish(joint_deltas);

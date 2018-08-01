@@ -52,13 +52,13 @@ CompliantControl::CompliantControl(const std::vector<double>& stiffness, const s
   , safe_torque_limit_(highest_allowable_torque)
 {
   bias_.resize(compliant_control::NUM_DIMS);
-  ft_.resize(compliant_control::NUM_DIMS);
+  wrench_.resize(compliant_control::NUM_DIMS);
 
   for (int i = 0; i < compliant_control::NUM_DIMS; i++)
     vectorOfFilters_.push_back(LowPassFilter(filter_param));
 
   biasSensor(bias);
-  ft_ = bias_;
+  wrench_ = bias_;
 }
 
 // Tare or bias the wrench readings -- i.e. reset its ground truth
@@ -148,12 +148,12 @@ void CompliantControl::getForceTorque(geometry_msgs::WrenchStamped force_torque_
   else
     biasedFT[5] = force_torque_data.wrench.torque.x - bias_[5];
 
-  ft_[0] = vectorOfFilters_[0].filter(biasedFT[0]);
-  ft_[1] = vectorOfFilters_[1].filter(biasedFT[1]);
-  ft_[2] = vectorOfFilters_[2].filter(biasedFT[2]);
-  ft_[3] = vectorOfFilters_[3].filter(biasedFT[3]);
-  ft_[4] = vectorOfFilters_[4].filter(biasedFT[4]);
-  ft_[5] = vectorOfFilters_[5].filter(biasedFT[5]);
+  wrench_[0] = vectorOfFilters_[0].filter(biasedFT[0]);
+  wrench_[1] = vectorOfFilters_[1].filter(biasedFT[1]);
+  wrench_[2] = vectorOfFilters_[2].filter(biasedFT[2]);
+  wrench_[3] = vectorOfFilters_[3].filter(biasedFT[3]);
+  wrench_[4] = vectorOfFilters_[4].filter(biasedFT[4]);
+  wrench_[5] = vectorOfFilters_[5].filter(biasedFT[5]);
 }
 
 compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<double> v_in,
@@ -163,8 +163,8 @@ compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<doubl
   compliant_control::ExitCondition exit_condition = compliant_control::NOT_CONTROLLED;
   getForceTorque(force_torque_data);
 
-  if (((fabs(ft_[0]) + fabs(ft_[1]) + fabs(ft_[2])) >= safe_force_limit_) ||
-      ((fabs(ft_[3]) + fabs(ft_[4]) + fabs(ft_[5])) >= safe_torque_limit_))
+  if (((fabs(wrench_[0]) + fabs(wrench_[1]) + fabs(wrench_[2])) >= safe_force_limit_) ||
+      ((fabs(wrench_[3]) + fabs(wrench_[4]) + fabs(wrench_[5])) >= safe_torque_limit_))
   {
     ROS_ERROR_NAMED("compliant_control", "Total force or torque exceeds safety limits. Stopping motion.");
     v_out = std::vector<double>(6, 0.0);
@@ -175,7 +175,7 @@ compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<doubl
   {
     if (end_condition_wrench_[i] > 0)
     {
-      if (ft_[i] > end_condition_wrench_[i])
+      if (wrench_[i] > end_condition_wrench_[i])
       {
         ROS_INFO_STREAM_NAMED("compliant_control", "Exit condition met in direction: " << i);
         v_out[i] = 0.0;
@@ -183,7 +183,7 @@ compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<doubl
       }
       else
       {
-        v_out[i] = v_in[i] + ft_[i] / stiffness_[i];
+        v_out[i] = v_in[i] + wrench_[i] / stiffness_[i];
         if (exit_condition != compliant_control::CONDITION_MET)
         {
           exit_condition = compliant_control::CONDITION_NOT_MET;
@@ -192,7 +192,7 @@ compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<doubl
     }
     else  // end_condition_wrench_[i]<=0
     {
-      if (ft_[i] < end_condition_wrench_[i])
+      if (wrench_[i] < end_condition_wrench_[i])
       {
         ROS_INFO_STREAM_NAMED("compliant_control", "Exit condition met in direction: " << i);
         v_out[i] = 0.0;
@@ -200,7 +200,7 @@ compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<doubl
       }
       else
       {
-        v_out[i] = v_in[i] + ft_[i] / stiffness_[i];
+        v_out[i] = v_in[i] + wrench_[i] / stiffness_[i];
         if (exit_condition != compliant_control::CONDITION_MET)
         {
           exit_condition = compliant_control::CONDITION_NOT_MET;

@@ -40,15 +40,13 @@ private:
     // A binary button
     twist.twist.angular.z = -msg->buttons[0] + msg->buttons[1];
 
-
     // Joint jogging
     jog_msgs::JogJoint joint_deltas;
     // This example is for a Motoman SIA5. joint_s is the base joint.
     joint_deltas.joint_names.push_back("joint_s");
     // Button 6: positive
     // Button 7: negative
-    joint_deltas.deltas.push_back( msg->buttons[6] - msg->buttons[7] );
-
+    joint_deltas.deltas.push_back(msg->buttons[6] - msg->buttons[7]);
 
     twist_pub_.publish(twist);
     joint_delta_pub_.publish(joint_deltas);
