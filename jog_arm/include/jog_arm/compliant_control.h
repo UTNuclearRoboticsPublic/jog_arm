@@ -124,7 +124,7 @@ public:
   std::vector<double> stiffness_;
   std::vector<double> deadband_;
   std::vector<double> end_condition_wrench_;
-  std::vector<double> ft_;
+  std::vector<double> wrench_;
   // Initial biased force
   std::vector<double> bias_;
   // Quit if these forces/torques are exceeded

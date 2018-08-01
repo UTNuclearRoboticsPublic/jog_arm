@@ -88,11 +88,10 @@ struct jog_arm_shared
 // ROS params to be read
 struct jog_arm_parameters
 {
-  std::string move_group_name, joint_topic, command_in_topic, command_frame,
-      command_out_topic, planning_frame, warning_topic, joint_command_in_topic;
-  double linear_scale, rotational_scale, joint_scale, singularity_threshold,
-      hard_stop_singularity_threshold, low_pass_filter_coeff, publish_period,
-      publish_delay, incoming_command_timeout, joint_limit_margin;
+  std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
+      warning_topic, joint_command_in_topic;
+  double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
+      low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check;
 };
 
@@ -109,9 +108,9 @@ public:
 
 private:
   // ROS subscriber callbacks
-  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr &msg);
-  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg);
-  void jointsCB(const sensor_msgs::JointStateConstPtr &msg);
+  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
+  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
+  void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
   int readParameters(ros::NodeHandle& n);
 
@@ -190,21 +189,20 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
-  bool jogCalcs(const geometry_msgs::TwistStamped &cmd, jog_arm_shared &shared_variables);
+  bool jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
 
-  bool jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
+  bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
-  void endOfJogCalcs();
+  void finishJogCalcs();
 
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
   Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
-  Eigen::VectorXd
-  scaleJointCommand(const jog_msgs::JogJoint &command) const;
+  Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
-  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
@@ -217,6 +215,31 @@ protected:
   // Avoid a singularity or other issue.
   // Needs to be handled differently for position vs. velocity control
   void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
+
+  void publishWarning(bool active) const;
+
+  bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
+
+  /**
+   *  Verify that the future Jacobian is well-conditioned before moving.
+   *  Slow down if very close to a singularity.
+   *  Stop if extremely close.
+   * @return true if Jacobian is well conditioned, false if not
+   */
+  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
+                                       const Eigen::MatrixXd& new_jacobian,
+                                       trajectory_msgs::JointTrajectory& new_jt_traj);
+
+  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
+
+  trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
+                                                          const ros::Time& stamp) const;
+
+  void lowPassFilterVelocities(const Eigen::VectorXd& joint_vel);
+
+  void lowPassFilterPositions();
+
+  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory& trajectory, int count) const;
 
   const robot_state::JointModelGroup* joint_model_group_;
 
@@ -235,31 +258,7 @@ protected:
 
   jog_arm_parameters parameters_;
 
-  void publishWarning(bool active) const;
-
-  bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
-
-  /**
-   *  Verify that the future Jacobian is well-conditioned before moving.
-   *  Slow down if very close to a singularity.
-   *  Stop if extremely close.
-   * @return true if Jacobian is well conditioned, false if not
-   */
-  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
-                                       const Eigen::MatrixXd& new_jacobian,
-                                       trajectory_msgs::JointTrajectory& new_jt_traj);
-
-  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
-
-  trajectory_msgs::JointTrajectory
-  composeOutgoingMessage(sensor_msgs::JointState &joint_state,
-                         const ros::Time &stamp) const;
-
-  void lowPassFilterVelocities(const Eigen::VectorXd &joint_vel);
-
-  void lowPassFilterPositions();
-
-  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory &trajectory, int count) const;
+  ros::Time most_recent_delta_command_;
 };
 
 class CollisionCheck
