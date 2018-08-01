@@ -308,7 +308,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       joint_deltas = shared_variables.joint_command_deltas;
       pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
 
-      most_recent_delta_command_ = cartesian_deltas.header.stamp;
+      most_recent_delta_command_ = joint_deltas.header.stamp;
 
       if (!jointJogCalcs(joint_deltas, shared_variables))
         continue;

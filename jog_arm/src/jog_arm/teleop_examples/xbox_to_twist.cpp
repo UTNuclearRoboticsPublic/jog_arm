@@ -47,6 +47,7 @@ private:
     // Button 6: positive
     // Button 7: negative
     joint_deltas.deltas.push_back(msg->buttons[6] - msg->buttons[7]);
+    joint_deltas.header.stamp = ros::Time::now();
 
     twist_pub_.publish(twist);
     joint_delta_pub_.publish(joint_deltas);
