@@ -177,7 +177,6 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_sha
       shared_variables.imminent_collision = collision_result.collision;
       pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
-      ros::spinOnce();
       collision_rate.sleep();
     }
   }
@@ -204,7 +203,6 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
   joint_model_group_ = kinematic_model->getJointModelGroup(parameters_.move_group_name);
 
-  const std::vector<std::string>& joint_names = joint_model_group_->getJointModelNames();
   std::vector<double> dummy_joint_values;
   kinematic_state_->copyJointGroupPositions(joint_model_group_, dummy_joint_values);
 
@@ -225,7 +223,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   jt_state_.effort.resize(jt_state_.name.size());
 
   // Low-pass filters for the joint positions & velocities
-  for (std::size_t i = 0; i < joint_names.size(); ++i)
+  for (size_t i = 0; i < jt_state_.name.size(); ++i)
   {
     velocity_filters_.emplace_back(parameters_.low_pass_filter_coeff);
     position_filters_.emplace_back(parameters_.low_pass_filter_coeff);
@@ -443,7 +441,7 @@ bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& 
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
-  if (!checkIfImminentCollision(shared_variables, new_traj_) ||
+  if (!checkIfImminentCollision(shared_variables) ||
       !verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_) ||
       !checkIfJointsWithinBounds(new_traj_))
   {
@@ -497,7 +495,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables, new_traj_) || !checkIfJointsWithinBounds(new_traj_))
+  if (!checkIfImminentCollision(shared_variables) || !checkIfJointsWithinBounds(new_traj_))
   {
     avoidIssue(new_traj_);
     publishWarning(true);
@@ -600,7 +598,7 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
   return new_jt_traj;
 }
 
-bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj)
+bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables)
 {
   pthread_mutex_lock(&shared_variables.imminent_collision_mutex);
   bool collision = shared_variables.imminent_collision;
@@ -668,7 +666,14 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
                                                                              << " close to a "
                                                                                 " velocity limit. Enforcing limit.");
       kinematic_state_->enforceVelocityBounds(joint);
-      new_jt_traj.points[0].velocities[joint->getFirstVariableIndex()] = kinematic_state_->getJointVelocities(joint)[0];
+      for (std::size_t c = 0; c < new_jt_traj.joint_names.size(); ++c)
+      {
+        if (new_jt_traj.joint_names[c] == joint->getName()) {
+          new_jt_traj.points[0].velocities[c] = kinematic_state_->getJointVelocities(joint)[0];
+          break;
+        }
+      }
+
     }
 
     if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::ros_parameters_.joint_limit_margin))
