@@ -110,7 +110,7 @@ bool JogAPI::maintainPose(std::string frame, const ros::Duration duration, const
   transformPose(initial_pose, frame);
 
   ros::Time begin = ros::Time::now();
-  distanceAndTwist distanceAndTwist;
+  distanceAndTwist currentDistanceAndTwist, previousGoodDistanceAndTwist;
   geometry_msgs::PoseStamped current_pose;
 
   while (ros::ok() && (ros::Time::now() < (begin + duration)))
@@ -120,22 +120,34 @@ bool JogAPI::maintainPose(std::string frame, const ros::Duration duration, const
     transformPose(current_pose, frame);
 
     // Update distance and twist to target
-    distanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, speed_scale);
+    currentDistanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, speed_scale);
 
-    // Publish the twist commands to move the robot
-    jog_vel_pub_.publish(distanceAndTwist.twist);
+    // Check for nan's. Sometimes caused by calculateDistanceAndTwist
+    if ( ! (std::isnan(currentDistanceAndTwist.twist.twist.linear.x) || std::isnan(currentDistanceAndTwist.twist.twist.linear.y) || std::isnan(currentDistanceAndTwist.twist.twist.linear.z) ||
+        std::isnan(currentDistanceAndTwist.twist.twist.angular.x) || std::isnan(currentDistanceAndTwist.twist.twist.angular.y) || std::isnan(currentDistanceAndTwist.twist.twist.angular.z)))
+    {
+      // Publish the twist commands to move the robot
+      jog_vel_pub_.publish(currentDistanceAndTwist.twist);
+
+      previousGoodDistanceAndTwist = currentDistanceAndTwist;
+    }
+    else
+    {
+      ROS_WARN_STREAM("[jog_api] nan in incoming command. Skipping this datapoint.");
+      jog_vel_pub_.publish(previousGoodDistanceAndTwist.twist);      
+    }
 
     ros::Duration(0.01).sleep();
   }
 
   // Ensure the robot stops
-  distanceAndTwist.twist.twist.linear.x = 0;
-  distanceAndTwist.twist.twist.linear.y = 0;
-  distanceAndTwist.twist.twist.linear.z = 0;
-  distanceAndTwist.twist.twist.angular.x = 0;
-  distanceAndTwist.twist.twist.angular.y = 0;
-  distanceAndTwist.twist.twist.angular.z = 0;
-  jog_vel_pub_.publish(distanceAndTwist.twist);
+  currentDistanceAndTwist.twist.twist.linear.x = 0;
+  currentDistanceAndTwist.twist.twist.linear.y = 0;
+  currentDistanceAndTwist.twist.twist.linear.z = 0;
+  currentDistanceAndTwist.twist.twist.angular.x = 0;
+  currentDistanceAndTwist.twist.twist.angular.y = 0;
+  currentDistanceAndTwist.twist.twist.angular.z = 0;
+  jog_vel_pub_.publish(currentDistanceAndTwist.twist);
 
   return true;
 }
@@ -184,7 +196,7 @@ JogAPI::distanceAndTwist JogAPI::calculateDistanceAndTwist(const geometry_msgs::
   // Check frames on incoming PoseStampeds
   if (current_pose.header.frame_id != target_pose.header.frame_id)
   {
-    ROS_ERROR_STREAM("[arm_namespace::distanceAndTwist] Incoming PoseStampeds tf frames do not match.");
+    ROS_ERROR_STREAM("[JogAPI::distanceAndTwist] Incoming PoseStamped tf frames do not match.");
     return result;
   }
   result.twist.header.frame_id = current_pose.header.frame_id;
@@ -220,6 +232,7 @@ JogAPI::distanceAndTwist JogAPI::calculateDistanceAndTwist(const geometry_msgs::
   ///////////////////////////////////////////////////////////////////////////////
   // Normalize the twist to the target pose. Calculate distance while we're at it
   ///////////////////////////////////////////////////////////////////////////////
+
   // Linear:
   double sos = pow(result.twist.twist.linear.x, 2.);  // Sum-of-squares
   sos += pow(result.twist.twist.linear.y, 2.);
