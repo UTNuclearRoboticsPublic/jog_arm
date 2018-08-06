@@ -1,5 +1,7 @@
 <launch>
 
+  <arg name="enable_compliance" default="false"/>
+
   <node name="joy_node" pkg="joy" type="joy_node" />
 
   <node name="xbox_to_twist" pkg="jog_arm" type="xbox_to_twist" output="screen" />
@@ -7,6 +9,9 @@
   <node name="jog_arm_server" pkg="jog_arm" type="jog_arm_server" output="screen" >
     <param name="parameter_ns" type="string" value="jog_arm_server" />
     <rosparam command="load" file="$(find jog_arm)/config/jog_settings.yaml" />
+
+    <!-- Only enable compliance if the arg above is true -->
+    <rosparam if="$(arg enable_compliance)" command="load" file="$(find jog_arm)/config/compliance_settings.yaml" />
   </node>
 
 </launch>

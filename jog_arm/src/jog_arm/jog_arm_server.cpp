@@ -43,7 +43,8 @@
 #include <memory>
 
 // Initialize these static struct to hold ROS parameters
-jog_arm::jog_arm_parameters jog_arm::jogROSInterface::ros_parameters_;
+jog_arm::jogging_parameters jog_arm::jogROSInterface::jogging_parameters_;
+jog_arm::compliance_parameters jog_arm::jogROSInterface::compliance_parameters_;
 jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -94,15 +95,15 @@ jogROSInterface::jogROSInterface()
   }
 
   // ROS subscriptions. Share the data with the worker threads
-  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1, &jogROSInterface::deltaCmdCB, this);
-  ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &jogROSInterface::jointsCB, this);
+  ros::Subscriber cmd_sub = n.subscribe(jogging_parameters_.command_in_topic, 1, &jogROSInterface::deltaCmdCB, this);
+  ros::Subscriber joints_sub = n.subscribe(jogging_parameters_.joint_topic, 1, &jogROSInterface::jointsCB, this);
   ros::Subscriber joint_jog_cmd_sub =
-      n.subscribe(ros_parameters_.joint_command_in_topic, 1, &jogROSInterface::deltaJointCmdCB, this);
-  ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
-  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.command_in_topic);
+      n.subscribe(jogging_parameters_.joint_command_in_topic, 1, &jogROSInterface::deltaJointCmdCB, this);
+  ros::topic::waitForMessage<sensor_msgs::JointState>(jogging_parameters_.joint_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(jogging_parameters_.command_in_topic);
 
   // Wait for jog filters to stabilize
-  ros::Duration(10 * ros_parameters_.publish_period).sleep();
+  ros::Duration(10 * jogging_parameters_.publish_period).sleep();
 
   ros::spin();
 
@@ -113,19 +114,19 @@ jogROSInterface::jogROSInterface()
 // A separate thread for the heavy jogging calculations.
 void* jogROSInterface::joggingPipeline(void*)
 {
-  jog_arm::JogCalcs ja(ros_parameters_, shared_variables_);
+  jog_arm::JogCalcs ja(jogging_parameters_, shared_variables_);
   return nullptr;
 }
 
 // A separate thread for collision checking.
 void* jogROSInterface::collisionCheck(void*)
 {
-  jog_arm::CollisionCheck cc(ros_parameters_, shared_variables_);
+  jog_arm::CollisionCheck cc(jogging_parameters_, shared_variables_);
   return nullptr;
 }
 
 // Constructor for the class that handles collision checking
-CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables)
+CollisionCheck::CollisionCheck(const jogging_parameters& parameters, jog_arm_shared& shared_variables)
 {
   // If user specified true in yaml file
   if (parameters.collision_check)
@@ -183,7 +184,7 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_sha
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables)
+JogCalcs::JogCalcs(const jogging_parameters& parameters, jog_arm_shared& shared_variables)
   : move_group_(parameters.move_group_name)
 {
   parameters_ = parameters;
@@ -676,7 +677,7 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
 
     }
 
-    if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::ros_parameters_.joint_limit_margin))
+    if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::jogging_parameters_.joint_limit_margin))
     {
       ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
                                                                              << " close to a "
@@ -841,7 +842,7 @@ void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
   shared_variables_.command_deltas = *msg;
 
   // Input frame determined by YAML file:
-  shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
+  shared_variables_.command_deltas.header.frame_id = jogging_parameters_.command_frame;
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
@@ -864,7 +865,7 @@ void jogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
   pthread_mutex_lock(&shared_variables_.joint_command_deltas_mutex);
   shared_variables_.joint_command_deltas = *msg;
   // Input frame determined by YAML file
-  shared_variables_.joint_command_deltas.header.frame_id = ros_parameters_.command_frame;
+  shared_variables_.joint_command_deltas.header.frame_id = jogging_parameters_.command_frame;
 
   // Check if joint inputs is all zeros. Flag it if so to skip calculations/publication
   bool all_zeros = true;
@@ -904,53 +905,62 @@ int jogROSInterface::readParameters(ros::NodeHandle& n)
     return 1;
   }
 
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_delay", ros_parameters_.publish_delay);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/linear", ros_parameters_.linear_scale);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/rotational", ros_parameters_.rotational_scale);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/joint", ros_parameters_.joint_scale);
+  // Parameters for jogging
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", jogging_parameters_.publish_period);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_delay", jogging_parameters_.publish_delay);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/linear", jogging_parameters_.linear_scale);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/rotational", jogging_parameters_.rotational_scale);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/scale/joint", jogging_parameters_.joint_scale);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/low_pass_filter_coeff", ros_parameters_.low_pass_filter_coeff);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", ros_parameters_.joint_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic", ros_parameters_.command_in_topic);
+      !rosparam_shortcuts::get("", n, parameter_ns + "/low_pass_filter_coeff", jogging_parameters_.low_pass_filter_coeff);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", jogging_parameters_.joint_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic", jogging_parameters_.command_in_topic);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/joint_command_in_topic", ros_parameters_.joint_command_in_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
+      !rosparam_shortcuts::get("", n, parameter_ns + "/joint_command_in_topic", jogging_parameters_.joint_command_in_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", jogging_parameters_.command_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/incoming_command_timeout",
-                                    ros_parameters_.incoming_command_timeout);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_topic", ros_parameters_.command_out_topic);
+                                    jogging_parameters_.incoming_command_timeout);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_topic", jogging_parameters_.command_out_topic);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/singularity_threshold", ros_parameters_.singularity_threshold);
+      !rosparam_shortcuts::get("", n, parameter_ns + "/singularity_threshold", jogging_parameters_.singularity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
-                                    ros_parameters_.hard_stop_singularity_threshold);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name", ros_parameters_.move_group_name);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check", ros_parameters_.collision_check);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", ros_parameters_.warning_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
+                                    jogging_parameters_.hard_stop_singularity_threshold);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name", jogging_parameters_.move_group_name);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", jogging_parameters_.planning_frame);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", jogging_parameters_.gazebo);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check", jogging_parameters_.collision_check);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", jogging_parameters_.warning_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", jogging_parameters_.joint_limit_margin);
+
+  // Parameters for compliance
+  // Check if the compliance parameters were loaded from launch file:
+  if ( n.hasParam(parameter_ns + "/enable_compliance_initially") )
+  {
+    //enable_compliance_ = true;
+    error += !rosparam_shortcuts::get("", n, parameter_ns + "/enable_compliance_initially", compliance_parameters_.enable_compliance_initially);
+  }
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
   // Input checking
-  if (ros_parameters_.hard_stop_singularity_threshold < ros_parameters_.singularity_threshold)
+  if (jogging_parameters_.hard_stop_singularity_threshold < jogging_parameters_.singularity_threshold)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_singularity_threshold' "
                               "should be greater than 'singularity_threshold.'");
     return 1;
   }
-  if ((ros_parameters_.hard_stop_singularity_threshold < 0.) || (ros_parameters_.singularity_threshold < 0.))
+  if ((jogging_parameters_.hard_stop_singularity_threshold < 0.) || (jogging_parameters_.singularity_threshold < 0.))
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_singularity_threshold' "
                               "and 'singularity_threshold' should be greater than zero.");
     return 1;
   }
-  if (ros_parameters_.low_pass_filter_coeff < 0.)
+  if (jogging_parameters_.low_pass_filter_coeff < 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be greater than zero.");
     return 1;
   }
-  if (ros_parameters_.joint_limit_margin > 0.)
+  if (jogging_parameters_.joint_limit_margin > 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero.");
     return 1;

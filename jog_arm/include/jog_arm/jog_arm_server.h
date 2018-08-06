@@ -85,14 +85,20 @@ struct jog_arm_shared
   pthread_mutex_t zero_joint_trajectory_flag_mutex;
 };
 
-// ROS params to be read
-struct jog_arm_parameters
+// Jogging-related ROS params to be read
+struct jogging_parameters
 {
   std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
       warning_topic, joint_command_in_topic;
   double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
       low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check;
+};
+
+// Compliance-related ROS params to be read
+struct compliance_parameters
+{
+  bool enable_compliance_initially;
 };
 
 /**
@@ -104,7 +110,8 @@ public:
   jogROSInterface();
 
   // Store the parameters that were read from ROS server
-  static struct jog_arm_parameters ros_parameters_;
+  static struct jogging_parameters jogging_parameters_;
+  static struct compliance_parameters compliance_parameters_;
 
 private:
   // ROS subscriber callbacks
@@ -180,7 +187,7 @@ double LowPassFilter::filter(const double new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables);
+  JogCalcs(const jogging_parameters& parameters, jog_arm_shared& shared_variables);
 
 protected:
   ros::NodeHandle nh_;
@@ -256,7 +263,7 @@ protected:
   ros::Publisher warning_pub_;
   ros::Publisher joint_trajectory_pub_;
 
-  jog_arm_parameters parameters_;
+  jogging_parameters parameters_;
 
   ros::Time most_recent_delta_command_;
 };
@@ -264,7 +271,7 @@ protected:
 class CollisionCheck
 {
 public:
-  CollisionCheck(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables);
+  CollisionCheck(const jogging_parameters& parameters, jog_arm_shared& shared_variables);
 };
 
 }  // namespace jog_arm
