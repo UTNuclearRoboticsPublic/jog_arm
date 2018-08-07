@@ -43,11 +43,11 @@
 #include <memory>
 
 // Initialize these static struct to hold ROS parameters
-jog_arm::jog_arm_parameters jog_arm::jogROSInterface::ros_parameters_;
-jog_arm::jog_arm_shared jog_arm::jogROSInterface::shared_variables_;
+jog_arm::jog_arm_parameters jog_arm::JogROSInterface::ros_parameters_;
+jog_arm::jog_arm_shared jog_arm::JogROSInterface::shared_variables_;
 
 /////////////////////////////////////////////////////////////////////////////////
-// jogROSInterface handles ROS subscriptions and instantiates the worker threads.
+// JogROSInterface handles ROS subscriptions and instantiates the worker threads.
 // One worker thread does the jogging calculations.
 // Another worker thread does collision checking.
 /////////////////////////////////////////////////////////////////////////////////
@@ -60,7 +60,7 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, NODE_NAME);
 
-  jog_arm::jogROSInterface ros_interface;
+  jog_arm::JogROSInterface ros_interface;
 
   return 0;
 }
@@ -68,7 +68,7 @@ int main(int argc, char** argv)
 namespace jog_arm
 {
 // Constructor for the main ROS interface node
-jogROSInterface::jogROSInterface()
+JogROSInterface::JogROSInterface()
 {
   ros::NodeHandle n;
 
@@ -77,7 +77,7 @@ jogROSInterface::jogROSInterface()
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
-  int rc = pthread_create(&joggingThread, nullptr, jog_arm::jogROSInterface::joggingPipeline, this);
+  int rc = pthread_create(&joggingThread, nullptr, jog_arm::JogROSInterface::joggingPipeline, this);
   if (rc)
   {
     ROS_FATAL_NAMED(NODE_NAME, "Creating pipeline thread failed", rc);
@@ -86,7 +86,7 @@ jogROSInterface::jogROSInterface()
 
   // Check collisions in this thread
   pthread_t collisionThread;
-  rc = pthread_create(&collisionThread, nullptr, jog_arm::jogROSInterface::collisionCheck, this);
+  rc = pthread_create(&collisionThread, nullptr, jog_arm::JogROSInterface::collisionCheck, this);
   if (rc)
   {
     ROS_FATAL_NAMED(NODE_NAME, "Creating collision check failed", rc);
@@ -94,10 +94,10 @@ jogROSInterface::jogROSInterface()
   }
 
   // ROS subscriptions. Share the data with the worker threads
-  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1, &jogROSInterface::deltaCmdCB, this);
-  ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &jogROSInterface::jointsCB, this);
+  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1, &JogROSInterface::deltaCmdCB, this);
+  ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &JogROSInterface::jointsCB, this);
   ros::Subscriber joint_jog_cmd_sub =
-      n.subscribe(ros_parameters_.joint_command_in_topic, 1, &jogROSInterface::deltaJointCmdCB, this);
+      n.subscribe(ros_parameters_.joint_command_in_topic, 1, &JogROSInterface::deltaJointCmdCB, this);
   ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.command_in_topic);
 
@@ -111,14 +111,14 @@ jogROSInterface::jogROSInterface()
 }
 
 // A separate thread for the heavy jogging calculations.
-void* jogROSInterface::joggingPipeline(void*)
+void* JogROSInterface::joggingPipeline(void*)
 {
   jog_arm::JogCalcs ja(ros_parameters_, shared_variables_);
   return nullptr;
 }
 
 // A separate thread for collision checking.
-void* jogROSInterface::collisionCheck(void*)
+void* JogROSInterface::collisionCheck(void*)
 {
   jog_arm::CollisionCheck cc(ros_parameters_, shared_variables_);
   return nullptr;
@@ -299,7 +299,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
       most_recent_delta_command_ = cartesian_deltas.header.stamp;
 
-      if (!jogCalcs(cartesian_deltas, shared_variables))
+      if (!cartesianJogCalcs(cartesian_deltas, shared_variables))
         continue;
     }
     else if (!zero_joint_traj_flag)
@@ -328,7 +328,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
         // Skip the jogging publication if all inputs are 0.
         else if (!last_was_zero_traj)
         {
-          finishJogCalcs();
+          haltCartesianJogging();
           joint_trajectory_pub_.publish(new_traj_);
         }
       }
@@ -351,7 +351,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 }
 
 // Perform the jogging calculations
-bool JogCalcs::jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables)
+bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables)
 {
   // Check for nan's in the incoming command
   if (std::isnan(cmd.twist.linear.x) || std::isnan(cmd.twist.linear.y) || std::isnan(cmd.twist.linear.z) ||
@@ -515,7 +515,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
   return 1;
 }
 
-void JogCalcs::finishJogCalcs()
+void JogCalcs::haltCartesianJogging()
 {
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_delay);
   new_traj_ = composeOutgoingMessage(last_jts_, next_time);
@@ -576,7 +576,7 @@ void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd& joint_vel)
     {
       jt_state_.position[i] = orig_jts_.position[i];
       jt_state_.velocity[i] = 0.;
-      ROS_WARN_STREAM("nan in velocity filter");
+      ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in velocity filter");
     }
   }
 }
@@ -676,7 +676,7 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
 
     }
 
-    if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::jogROSInterface::ros_parameters_.joint_limit_margin))
+    if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin))
     {
       ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
                                                                              << " close to a "
@@ -835,7 +835,7 @@ double JogCalcs::checkConditionNumber(const Eigen::MatrixXd& matrix) const
 
 // Listen to cartesian delta commands.
 // Store them in a shared variable.
-void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
+void JogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
   shared_variables_.command_deltas = *msg;
@@ -859,7 +859,7 @@ void jogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
 
 // Listen to joint delta commands.
 // Store them in a shared variable.
-void jogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
+void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.joint_command_deltas_mutex);
   shared_variables_.joint_command_deltas = *msg;
@@ -881,7 +881,7 @@ void jogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
 
 // Listen to joint angles.
 // Store them in a shared variable.
-void jogROSInterface::jointsCB(const sensor_msgs::JointStateConstPtr& msg)
+void JogROSInterface::jointsCB(const sensor_msgs::JointStateConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.joints_mutex);
   shared_variables_.joints = *msg;
@@ -889,7 +889,7 @@ void jogROSInterface::jointsCB(const sensor_msgs::JointStateConstPtr& msg)
 }
 
 // Read ROS parameters, typically from YAML file
-int jogROSInterface::readParameters(ros::NodeHandle& n)
+int JogROSInterface::readParameters(ros::NodeHandle& n)
 {
   std::size_t error = 0;
 

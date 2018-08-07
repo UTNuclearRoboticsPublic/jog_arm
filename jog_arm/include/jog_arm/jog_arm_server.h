@@ -42,9 +42,10 @@
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H
 
+#include <cmath>
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <cmath>
+#include <jog_msgs/JogJoint.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
@@ -55,7 +56,6 @@
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
-#include <jog_msgs/JogJoint.h>
 #include <std_msgs/Bool.h>
 #include <string>
 #include <tf/transform_listener.h>
@@ -96,12 +96,12 @@ struct jog_arm_parameters
 };
 
 /**
- * Class jogROSInterface - Instantiated in main(). Handles ROS subs & pubs and creates the worker threads.
+ * Class JogROSInterface - Instantiated in main(). Handles ROS subs & pubs and creates the worker threads.
  */
-class jogROSInterface
+class JogROSInterface
 {
 public:
-  jogROSInterface();
+  JogROSInterface();
 
   // Store the parameters that were read from ROS server
   static struct jog_arm_parameters ros_parameters_;
@@ -189,11 +189,11 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
-  bool jogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
+  bool cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
 
   bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
-  void finishJogCalcs();
+  void haltCartesianJogging();
 
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();

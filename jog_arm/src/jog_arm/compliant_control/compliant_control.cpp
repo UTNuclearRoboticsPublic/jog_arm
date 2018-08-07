@@ -163,8 +163,8 @@ compliant_control::ExitCondition CompliantControl::getVelocity(std::vector<doubl
   compliant_control::ExitCondition exit_condition = compliant_control::NOT_CONTROLLED;
   getForceTorque(force_torque_data);
 
-  if (((fabs(wrench_[0]) + fabs(wrench_[1]) + fabs(wrench_[2])) >= safe_force_limit_) ||
-      ((fabs(wrench_[3]) + fabs(wrench_[4]) + fabs(wrench_[5])) >= safe_torque_limit_))
+  if ( pow( wrench_[0]*wrench_[0] + wrench_[1]*wrench_[1] + wrench_[2]*wrench_[2] , 0.5) ||
+    pow( wrench_[3]*wrench_[3] + wrench_[4]*wrench_[4] + wrench_[5]*wrench_[5] , 0.5) )
   {
     ROS_ERROR_NAMED("compliant_control", "Total force or torque exceeds safety limits. Stopping motion.");
     v_out = std::vector<double>(6, 0.0);
