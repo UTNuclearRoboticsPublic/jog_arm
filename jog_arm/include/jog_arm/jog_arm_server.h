@@ -98,6 +98,7 @@ struct jogging_parameters
 // Compliance-related ROS params to be read
 struct compliance_parameters
 {
+  bool instantiate_compliance = false;
   bool enable_compliance_initially;
 };
 
@@ -110,7 +111,7 @@ public:
   jogROSInterface();
 
   // Store the parameters that were read from ROS server
-  static struct jogging_parameters jogging_parameters_;
+  static struct jogging_parameters jog_parameters_;
   static struct compliance_parameters compliance_parameters_;
 
 private:
@@ -187,7 +188,9 @@ double LowPassFilter::filter(const double new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(const jogging_parameters& parameters, jog_arm_shared& shared_variables);
+  JogCalcs(const jogging_parameters& jog_parameters, const compliance_parameters& compliance_parameters, jog_arm_shared& shared_variables);
+
+  bool instantiateCompliance();
 
 protected:
   ros::NodeHandle nh_;
@@ -263,7 +266,7 @@ protected:
   ros::Publisher warning_pub_;
   ros::Publisher joint_trajectory_pub_;
 
-  jogging_parameters parameters_;
+  jogging_parameters jog_parameters_;
 
   ros::Time most_recent_delta_command_;
 };
