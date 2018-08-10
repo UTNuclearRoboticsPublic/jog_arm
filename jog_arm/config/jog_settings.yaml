@@ -20,3 +20,6 @@ scale:
 # Publish boolean warnings to this topic
 warning_topic:  jog_arm_server/warning
 joint_limit_margin: -0.1 # added as a buffer to joint limits [radians]. If moving quickly, make this larger.
+# Can save some bandwidth as most robots only require positions or velocities
+publish_joint_positions: false
+publish_joint_velocities: true

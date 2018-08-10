@@ -325,14 +325,14 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
         {
           joint_trajectory_pub_.publish(new_traj_);
         }
-        // Skip the jogging publication if all inputs are 0.
+        // Skip the jogging publication if all inputs have been 0 for 2 cycles in a row.
         else if (!last_was_zero_traj)
         {
           haltCartesianJogging();
           joint_trajectory_pub_.publish(new_traj_);
         }
       }
-      else if (!last_was_zero_traj)
+      else if (last_was_zero_traj)
       {
         ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale joint "
                                                      "trajectory msg. Try a larger "
@@ -342,7 +342,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
                                                      "calculations taking too long?");
       }
 
-      // Store last traj message flag to prevent superflous warnings
+      // Store last traj message flag to prevent superfluous warnings
       last_was_zero_traj = zero_traj_flag && zero_joint_traj_flag;
     }
 
@@ -521,11 +521,12 @@ void JogCalcs::haltCartesianJogging()
   new_traj_ = composeOutgoingMessage(last_jts_, next_time);
 
   // halt the robot, make sure that controllers are stopped
-  for (std::size_t i = 0; i < last_jts_.velocity.size(); ++i)
+  if (parameters_.publish_joint_velocities)
   {
-    new_traj_.points[0].velocities[i] = 0.;
+    for (std::size_t i = 0; i < last_jts_.velocity.size(); ++i)
+      new_traj_.points.at(0).velocities.at(i) = 0.;
   }
-  new_traj_.points[0].time_from_start = ros::Duration(0);
+  new_traj_.points.at(0).time_from_start = ros::Duration(0);
 
   // done with calculations
   if (parameters_.gazebo)
@@ -590,9 +591,11 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
   new_jt_traj.joint_names = joint_state.name;
 
   trajectory_msgs::JointTrajectoryPoint point;
-  point.positions = joint_state.position;
   point.time_from_start = ros::Duration(parameters_.publish_period);
-  point.velocities = joint_state.velocity;
+  if (parameters_.publish_joint_positions)
+    point.positions = joint_state.position;
+  if (parameters_.publish_joint_velocities)
+    point.velocities = joint_state.velocity;
   new_jt_traj.points.push_back(point);
 
   return new_jt_traj;
@@ -929,6 +932,8 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check", ros_parameters_.collision_check);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", ros_parameters_.warning_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_positions", ros_parameters_.publish_joint_positions);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_velocities", ros_parameters_.publish_joint_velocities);
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
@@ -953,6 +958,11 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   if (ros_parameters_.joint_limit_margin > 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero.");
+    return 1;
+  }
+  if (!ros_parameters_.publish_joint_positions && !ros_parameters_.publish_joint_velocities)
+  {
+    ROS_WARN_NAMED(NODE_NAME, "Publishing is not enabled for joint positions nor joint velocities.");
     return 1;
   }
 
