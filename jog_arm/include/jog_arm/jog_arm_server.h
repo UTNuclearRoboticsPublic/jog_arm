@@ -83,6 +83,12 @@ struct jog_arm_shared
 
   bool zero_joint_trajectory_flag = true;
   pthread_mutex_t zero_joint_trajectory_flag_mutex;
+
+  trajectory_msgs::JointTrajectory new_traj;
+  pthread_mutex_t new_traj_mutex;
+
+  bool ok_to_publish = false;
+  pthread_mutex_t ok_to_publish_mutex;
 };
 
 // ROS params to be read
@@ -254,11 +260,8 @@ protected:
   std::vector<jog_arm::LowPassFilter> position_filters_;
 
   ros::Publisher warning_pub_;
-  ros::Publisher joint_trajectory_pub_;
 
   jog_arm_parameters parameters_;
-
-  ros::Time most_recent_delta_command_;
 };
 
 class CollisionCheck
