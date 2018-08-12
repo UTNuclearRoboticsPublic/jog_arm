@@ -850,21 +850,8 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::
 // Calculate the condition number of the jacobian, to check for singularities
 double JogCalcs::checkConditionNumber(const Eigen::MatrixXd& matrix) const
 {
-  // For 6-DOF arms, use eigenvalues. It's faster than singular value
-  // decomposition
-  if (jt_state_.name.size() == 6)
-  {
-    Eigen::MatrixXd::EigenvaluesReturnType eigs = matrix.eigenvalues();
-    Eigen::VectorXd eig_vector = eigs.cwiseAbs();
-
-    // condition = max(eigs)/min(eigs)
-    return eig_vector.maxCoeff() / eig_vector.minCoeff();
-  }
-  else
-  {
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
-    return svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
-  }
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
+  return svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
 }
 
 // Listen to cartesian delta commands.
