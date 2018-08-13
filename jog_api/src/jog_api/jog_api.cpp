@@ -37,16 +37,14 @@
 // Param linear_vel_scale: scales the velocity components of outgoing Twist msgs. Should be 0<linear_vel_scale<1
 // Return true if successful.
 //////////////////////////////////////////////////////////////////////////////////////////////////
-bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
-  const double trans_tolerance, 
-  const double rot_tolerance,
-  const std::vector<double> &speed_scale,
-  const ros::Duration& timeout)
+bool JogAPI::jacobianMove(geometry_msgs::PoseStamped& target_pose, const double trans_tolerance,
+                           const double rot_tolerance, const std::vector<double>& speed_scale,
+                           const ros::Duration& timeout)
 {
   // Velocity scaling should be between 0 and 1
-  for (int i=0; i<speed_scale.size(); i++)
+  for (int i = 0; i < speed_scale.size(); i++)
   {
-    if ( 0.>speed_scale[i] || 1.<speed_scale[i] )
+    if (0. > speed_scale[i] || 1. < speed_scale[i])
     {
       ROS_ERROR_STREAM("[jog_api::jacobianMove] Velocity scaling parameter should be between 0 and 1.");
       return false;
@@ -65,12 +63,12 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
   ros::Time begin = ros::Time::now();
 
   // Is the current pose close enough?
-  while (
-    (distanceAndTwist.translational_distance > trans_tolerance || distanceAndTwist.rotational_distance > rot_tolerance)
-    && ros::ok() )
+  while ((distanceAndTwist.translational_distance > trans_tolerance ||
+          distanceAndTwist.rotational_distance > rot_tolerance) &&
+         ros::ok())
   {
     // Have we timed out?
-    if ( ros::Time::now()-begin > timeout )
+    if (ros::Time::now() - begin > timeout)
       return false;
 
     // Get current robot pose
@@ -89,18 +87,15 @@ bool jog_api::jacobianMove(geometry_msgs::PoseStamped& target_pose,
   return true;
 }
 
-
 //////////////////////////////////////////////////////////////
 // Maintain the current pose in given frame for given duration
 //////////////////////////////////////////////////////////////
-bool jog_api::maintainPose(std::string frame,
-  const ros::Duration duration,
-  const std::vector<double> &speed_scale)
+bool JogAPI::maintainPose(std::string frame, const ros::Duration duration, const std::vector<double>& speed_scale)
 {
   // Velocity scaling should be between 0 and 1
-  for (int i=0; i<speed_scale.size(); i++)
+  for (int i = 0; i < speed_scale.size(); i++)
   {
-    if ( 0.>speed_scale[i] || 1.<speed_scale[i] )
+    if (0. > speed_scale[i] || 1. < speed_scale[i])
     {
       ROS_ERROR_STREAM("[jog_api::maintainPose] Velocity scaling parameter should be between 0 and 1.");
       return false;
@@ -115,64 +110,74 @@ bool jog_api::maintainPose(std::string frame,
   transformPose(initial_pose, frame);
 
   ros::Time begin = ros::Time::now();
-  distanceAndTwist distanceAndTwist;
+  distanceAndTwist currentDistanceAndTwist, previousGoodDistanceAndTwist;
   geometry_msgs::PoseStamped current_pose;
 
-  while (
-    ros::ok() &&
-    (ros::Time::now() < (begin + duration))  
-  )
+  while (ros::ok() && (ros::Time::now() < (begin + duration)))
   {
     // Get current robot pose
     current_pose = move_group_.getCurrentPose();
     transformPose(current_pose, frame);
 
     // Update distance and twist to target
-    distanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, speed_scale);
+    currentDistanceAndTwist = calculateDistanceAndTwist(current_pose, initial_pose, speed_scale);
 
-    // Publish the twist commands to move the robot
-    jog_vel_pub_.publish(distanceAndTwist.twist);
+    // Check for nan's. Sometimes caused by calculateDistanceAndTwist
+    if ( ! (std::isnan(currentDistanceAndTwist.twist.twist.linear.x) || std::isnan(currentDistanceAndTwist.twist.twist.linear.y) || std::isnan(currentDistanceAndTwist.twist.twist.linear.z) ||
+        std::isnan(currentDistanceAndTwist.twist.twist.angular.x) || std::isnan(currentDistanceAndTwist.twist.twist.angular.y) || std::isnan(currentDistanceAndTwist.twist.twist.angular.z)))
+    {
+      // Publish the twist commands to move the robot
+      jog_vel_pub_.publish(currentDistanceAndTwist.twist);
+
+      previousGoodDistanceAndTwist = currentDistanceAndTwist;
+    }
+    else
+    {
+      ROS_WARN_STREAM("[jog_api] nan in incoming command. Skipping this datapoint.");
+      jog_vel_pub_.publish(previousGoodDistanceAndTwist.twist);      
+    }
 
     ros::Duration(0.01).sleep();
   }
 
   // Ensure the robot stops
-  distanceAndTwist.twist.twist.linear.x = 0;
-  distanceAndTwist.twist.twist.linear.y = 0;
-  distanceAndTwist.twist.twist.linear.z = 0;
-  distanceAndTwist.twist.twist.angular.x = 0;
-  distanceAndTwist.twist.twist.angular.y = 0;
-  distanceAndTwist.twist.twist.angular.z = 0;
-  jog_vel_pub_.publish(distanceAndTwist.twist);
+  currentDistanceAndTwist.twist.twist.linear.x = 0;
+  currentDistanceAndTwist.twist.twist.linear.y = 0;
+  currentDistanceAndTwist.twist.twist.linear.z = 0;
+  currentDistanceAndTwist.twist.twist.angular.x = 0;
+  currentDistanceAndTwist.twist.twist.angular.y = 0;
+  currentDistanceAndTwist.twist.twist.angular.z = 0;
+  jog_vel_pub_.publish(currentDistanceAndTwist.twist);
 
   return true;
 }
-
 
 ////////////////////////////////////
 // Transform a pose into given frame
 ////////////////////////////////////
-bool jog_api::transformPose(geometry_msgs::PoseStamped &pose, std::string& desired_frame)
+bool JogAPI::transformPose(geometry_msgs::PoseStamped& pose, std::string& desired_frame)
 {
   // Remove a leading slash, if any
-  if ( pose.header.frame_id.at(0) == '/' )
-    pose.header.frame_id.erase(0,1);
-  if ( desired_frame.at(0) == '/' )
-    desired_frame.erase(0,1);
+  if (pose.header.frame_id.at(0) == '/')
+    pose.header.frame_id.erase(0, 1);
+  if (desired_frame.at(0) == '/')
+    desired_frame.erase(0, 1);
 
-  try {
-    geometry_msgs::TransformStamped current_frame_to_target = tf_buffer_.lookupTransform(desired_frame, pose.header.frame_id, ros::Time(0), ros::Duration(1.0) );
+  try
+  {
+    geometry_msgs::TransformStamped current_frame_to_target =
+        tf_buffer_.lookupTransform(desired_frame, pose.header.frame_id, ros::Time(0), ros::Duration(1.0));
     tf2::doTransform(pose, pose, current_frame_to_target);
     pose.header.frame_id = desired_frame;
   }
-  catch (tf2::TransformException &ex) {
+  catch (tf2::TransformException& ex)
+  {
     ROS_WARN("%s", ex.what());
     ros::Duration(1.0).sleep();
-  } 
+  }
 
   return true;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Calculate Euclidean distance between 2 poses
@@ -182,28 +187,31 @@ bool jog_api::transformPose(geometry_msgs::PoseStamped &pose, std::string& desir
 // distanceAndTwist.twist: these components have been normalized between -1:1,
 // they can serve as motion commands as if from a joystick.
 ////////////////////////////////////////////////////////////////////////////////
-jog_api::distanceAndTwist jog_api::calculateDistanceAndTwist(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &target_pose,
-  const std::vector<double>& speed_scale)
+JogAPI::distanceAndTwist JogAPI::calculateDistanceAndTwist(const geometry_msgs::PoseStamped& current_pose,
+                                                             const geometry_msgs::PoseStamped& target_pose,
+                                                             const std::vector<double>& speed_scale)
 {
   distanceAndTwist result;
-  
+
   // Check frames on incoming PoseStampeds
-  if ( current_pose.header.frame_id != target_pose.header.frame_id )
+  if (current_pose.header.frame_id != target_pose.header.frame_id)
   {
-    ROS_ERROR_STREAM("[arm_namespace::distanceAndTwist] Incoming PoseStampeds tf frames do not match.");
+    ROS_ERROR_STREAM("[JogAPI::distanceAndTwist] Incoming PoseStamped tf frames do not match.");
     return result;
   }
   result.twist.header.frame_id = current_pose.header.frame_id;
   result.twist.header.stamp = ros::Time::now();
 
   // Current pose: convert from quat to RPY
-  tf::Quaternion q(current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z, current_pose.pose.orientation.w);
+  tf::Quaternion q(current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z,
+                   current_pose.pose.orientation.w);
   tf::Matrix3x3 m(q);
   double curr_r, curr_p, curr_y;
   m.getRPY(curr_r, curr_p, curr_y);
 
   // Target pose: convert from quat to RPY
-  q = tf::Quaternion(target_pose.pose.orientation.x, target_pose.pose.orientation.y, target_pose.pose.orientation.z, target_pose.pose.orientation.w);
+  q = tf::Quaternion(target_pose.pose.orientation.x, target_pose.pose.orientation.y, target_pose.pose.orientation.z,
+                     target_pose.pose.orientation.w);
   m = tf::Matrix3x3(q);
   double targ_r, targ_p, targ_y;
   m.getRPY(targ_r, targ_p, targ_y);
@@ -224,26 +232,27 @@ jog_api::distanceAndTwist jog_api::calculateDistanceAndTwist(const geometry_msgs
   ///////////////////////////////////////////////////////////////////////////////
   // Normalize the twist to the target pose. Calculate distance while we're at it
   ///////////////////////////////////////////////////////////////////////////////
+
   // Linear:
-  double sos = pow(result.twist.twist.linear.x, 2.); // Sum-of-squares
+  double sos = pow(result.twist.twist.linear.x, 2.);  // Sum-of-squares
   sos += pow(result.twist.twist.linear.y, 2.);
   sos += pow(result.twist.twist.linear.z, 2.);
-  result.translational_distance = pow( sos, 0.5 );
+  result.translational_distance = pow(sos, 0.5);
 
-  result.twist.twist.linear.x = speed_scale[0]*result.twist.twist.linear.x/result.translational_distance;
-  result.twist.twist.linear.y = speed_scale[1]*result.twist.twist.linear.y/result.translational_distance;
-  result.twist.twist.linear.z = speed_scale[2]*result.twist.twist.linear.z/result.translational_distance;
+  result.twist.twist.linear.x = speed_scale[0] * result.twist.twist.linear.x / result.translational_distance;
+  result.twist.twist.linear.y = speed_scale[1] * result.twist.twist.linear.y / result.translational_distance;
+  result.twist.twist.linear.z = speed_scale[2] * result.twist.twist.linear.z / result.translational_distance;
 
   // Angular:
   sos = pow(result.twist.twist.angular.x, 2.);
   sos += pow(result.twist.twist.angular.y, 2.);
   sos += pow(result.twist.twist.angular.z, 2.);
-  result.rotational_distance = pow( sos, 0.5 );
+  result.rotational_distance = pow(sos, 0.5);
 
   // Ignore angle for now
-  result.twist.twist.angular.x = speed_scale[3]*result.twist.twist.angular.x/result.rotational_distance;
-  result.twist.twist.angular.y = speed_scale[4]*result.twist.twist.angular.y/result.rotational_distance;
-  result.twist.twist.angular.z = speed_scale[5]*result.twist.twist.angular.z/result.rotational_distance;
+  result.twist.twist.angular.x = speed_scale[3] * result.twist.twist.angular.x / result.rotational_distance;
+  result.twist.twist.angular.y = speed_scale[4] * result.twist.twist.angular.y / result.rotational_distance;
+  result.twist.twist.angular.z = speed_scale[5] * result.twist.twist.angular.z / result.rotational_distance;
 
   return result;
 }

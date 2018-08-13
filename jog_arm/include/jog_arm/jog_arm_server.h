@@ -42,9 +42,10 @@
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H
 
+#include <cmath>
 #include <Eigen/Eigenvalues>
 #include <geometry_msgs/Twist.h>
-#include <cmath>
+#include <jog_msgs/JogJoint.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
@@ -55,7 +56,6 @@
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
-#include <jog_msgs/JogJoint.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/String.h>
 #include <string>
@@ -84,35 +84,44 @@ struct jog_arm_shared
 
   bool zero_joint_trajectory_flag = true;
   pthread_mutex_t zero_joint_trajectory_flag_mutex;
+
+  trajectory_msgs::JointTrajectory new_traj;
+  pthread_mutex_t new_traj_mutex;
+
+  // This variable is only used on the kinetic-urscript branch
+  std_msgs::String ur_string;
+  pthread_mutex_t ur_string_mutex;
+
+  bool ok_to_publish = false;
+  pthread_mutex_t ok_to_publish_mutex;
 };
 
 // ROS params to be read
 struct jog_arm_parameters
 {
-  std::string move_group_name, joint_topic, command_in_topic, command_frame,
-      command_out_topic, planning_frame, warning_topic, joint_command_in_topic;
-  double linear_scale, rotational_scale, joint_scale, singularity_threshold,
-      hard_stop_singularity_threshold, low_pass_filter_coeff, publish_period,
-      publish_delay, incoming_command_timeout, joint_limit_margin;
-  bool gazebo, collision_check;
+  std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
+      warning_topic, joint_command_in_topic;
+  double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
+      low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
+  bool gazebo, collision_check, publish_joint_positions, publish_joint_velocities;
 };
 
 /**
- * Class jogROSInterface - Instantiated in main(). Handles ROS subs & pubs and creates the worker threads.
+ * Class JogROSInterface - Instantiated in main(). Handles ROS subs & pubs and creates the worker threads.
  */
-class jogROSInterface
+class JogROSInterface
 {
 public:
-  jogROSInterface();
+  JogROSInterface();
 
   // Store the parameters that were read from ROS server
   static struct jog_arm_parameters ros_parameters_;
 
 private:
   // ROS subscriber callbacks
-  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr &msg);
-  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr &msg);
-  void jointsCB(const sensor_msgs::JointStateConstPtr &msg);
+  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
+  void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
+  void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
   int readParameters(ros::NodeHandle& n);
 
@@ -191,21 +200,20 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
-  bool jogCalcs(const geometry_msgs::TwistStamped &cmd, jog_arm_shared &shared_variables);
+  bool cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
 
-  bool jointJogCalcs(const jog_msgs::JogJoint &cmd, jog_arm_shared &shared_variables);
+  bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
-  void endOfJogCalcs();
+  void haltCartesianJogging();
 
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
   Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
-  Eigen::VectorXd
-  scaleJointCommand(const jog_msgs::JogJoint &command) const;
+  Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
-  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd &J) const;
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
@@ -218,23 +226,6 @@ protected:
   // Avoid a singularity or other issue.
   // Needs to be handled differently for position vs. velocity control
   void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
-
-  const robot_state::JointModelGroup* joint_model_group_;
-
-  robot_state::RobotStatePtr kinematic_state_;
-
-  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
-  trajectory_msgs::JointTrajectory new_traj_;
-
-  tf::TransformListener listener_;
-
-  std::vector<jog_arm::LowPassFilter> velocity_filters_;
-  std::vector<jog_arm::LowPassFilter> position_filters_;
-
-  ros::Publisher warning_pub_;
-  ros::Publisher joint_trajectory_pub_;
-
-  jog_arm_parameters parameters_;
 
   void publishWarning(bool active) const;
 
@@ -250,17 +241,32 @@ protected:
                                        const Eigen::MatrixXd& new_jacobian,
                                        trajectory_msgs::JointTrajectory& new_jt_traj);
 
-  bool checkIfImminentCollision(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
+  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
 
-  trajectory_msgs::JointTrajectory
-  composeOutgoingMessage(sensor_msgs::JointState &joint_state,
-                         const ros::Time &stamp) const;
+  trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
+                                                          const ros::Time& stamp) const;
 
-  void lowPassFilterVelocities(const Eigen::VectorXd &joint_vel);
+  void lowPassFilterVelocities(const Eigen::VectorXd& joint_vel);
 
   void lowPassFilterPositions();
 
-  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory &trajectory, int count) const;
+  void insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory& trajectory, int count) const;
+
+  const robot_state::JointModelGroup* joint_model_group_;
+
+  robot_state::RobotStatePtr kinematic_state_;
+
+  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
+  trajectory_msgs::JointTrajectory new_traj_;
+
+  tf::TransformListener listener_;
+
+  std::vector<jog_arm::LowPassFilter> velocity_filters_;
+  std::vector<jog_arm::LowPassFilter> position_filters_;
+
+  ros::Publisher warning_pub_;
+
+  jog_arm_parameters parameters_;
 };
 
 class CollisionCheck
