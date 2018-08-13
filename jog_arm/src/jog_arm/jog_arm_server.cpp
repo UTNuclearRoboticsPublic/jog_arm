@@ -648,7 +648,7 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
 {
   // Ramp velocity down linearly when the Jacobian condition is between singularity_threshold and
   // hard_stop_singurality_threshold
-  double current_condition_number = checkConditionNumber(new_jacobian);
+  double current_condition_number = checkConditionNumber( new_jacobian );
   if ((current_condition_number > parameters_.singularity_threshold) &&
       (current_condition_number < parameters_.hard_stop_singularity_threshold))
   {
@@ -668,7 +668,7 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
   // Very close to singularity, so halt.
   else
   {
-    double old_condition_number = checkConditionNumber(old_jacobian);
+    double old_condition_number = checkConditionNumber( old_jacobian );
     if ((current_condition_number > parameters_.singularity_threshold) &&
         (current_condition_number > old_condition_number))
     {
@@ -850,8 +850,7 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::
 // Calculate the condition number of the jacobian, to check for singularities
 double JogCalcs::checkConditionNumber(const Eigen::MatrixXd& matrix) const
 {
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(matrix);
-  return svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
+  return pseudoInverse(matrix).norm() * matrix.norm();
 }
 
 // Listen to cartesian delta commands.
