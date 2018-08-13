@@ -368,7 +368,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       }
 
       // Store last traj message flag to prevent superfluous warnings
-      last_was_zero_traj = zero_traj_flag && zero_joint_traj_flag;
+      last_was_zero_traj = zero_traj_flag || zero_joint_traj_flag;
     }
 
     // Add a small sleep to avoid 100% CPU usage
@@ -736,7 +736,7 @@ void JogCalcs::avoidIssue(trajectory_msgs::JointTrajectory& jt_traj)
     if(parameters_.publish_joint_positions)
       jt_traj.points[0].positions[i] = orig_jts_.position[i];
 
-    // For velocity-controlled robots, slow down and reverse away from the singularity/joint limit/etc
+    // For velocity-controlled robots, stop
     if(parameters_.publish_joint_velocities)
       jt_traj.points[0].velocities[i] = 0;
   }
