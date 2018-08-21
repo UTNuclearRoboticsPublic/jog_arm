@@ -3,7 +3,7 @@
 # angles (or displacements for linear joints).
 
 # header message. You must set frame_id to define the reference
-# coordinate system of the displacament
+# coordinate system of the displacement
 Header header
 
 # Name list of the joints. You don't need to specify all joint of the
