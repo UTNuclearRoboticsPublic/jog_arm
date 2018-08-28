@@ -78,7 +78,7 @@ JogROSInterface::JogROSInterface()
   readParameters(n);
 
   // Load the robot model. This is needed by the worker threads.
-  model_loader_ptr_ = std::unique_ptr<robot_model_loader::RobotModelLoader>(new robot_model_loader::RobotModelLoader());
+  model_loader_ptr_ = std::unique_ptr<robot_model_loader::RobotModelLoader>(new robot_model_loader::RobotModelLoader);
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
@@ -174,10 +174,8 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
   if (parameters.collision_check)
   {
     // MoveIt Setup
-    robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
-
     // Wait for model_loader_ptr to be non-null.
-    while ( !model_loader_ptr )
+    while ( ros::ok() && !model_loader_ptr )
     {
       ROS_WARN_THROTTLE_NAMED(5, NODE_NAME, "Waiting for a non-null robot_model_loader pointer");
       ros::Duration(0.1).sleep();
@@ -244,14 +242,12 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
   // MoveIt Setup
   // Wait for model_loader_ptr to be non-null.
-  while ( !model_loader_ptr )
+  while ( ros::ok() && !model_loader_ptr )
   {
     ROS_WARN_THROTTLE_NAMED(5, NODE_NAME, "Waiting for a non-null robot_model_loader pointer");
     ros::Duration(0.1).sleep();
   }
-
   const robot_model::RobotModelPtr& kinematic_model = model_loader_ptr->getModel();
-
   kinematic_state_ = std::make_shared<robot_state::RobotState>(kinematic_model);
   kinematic_state_->setToDefaultValues();
 
@@ -299,7 +295,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   // Then free up the shared variable again.
   geometry_msgs::TwistStamped cartesian_deltas;
   jog_msgs::JogJoint joint_deltas;
-  while ((cartesian_deltas.header.stamp == ros::Time(0.)) && (joint_deltas.header.stamp == ros::Time(0.)))
+  while (ros::ok() && (cartesian_deltas.header.stamp == ros::Time(0.)) && (joint_deltas.header.stamp == ros::Time(0.)))
   {
     ros::Duration(0.05).sleep();
 
