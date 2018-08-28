@@ -46,7 +46,7 @@
 // They must be static because they are used as arguments in thread creation.
 jog_arm::jog_arm_parameters jog_arm::JogROSInterface::ros_parameters_;
 jog_arm::jog_arm_shared jog_arm::JogROSInterface::shared_variables_;
-robot_model_loader::RobotModelLoader *jog_arm::JogROSInterface::model_loader_ptr_ = NULL;
+std::unique_ptr<robot_model_loader::RobotModelLoader> jog_arm::JogROSInterface::model_loader_ptr_ = NULL;
 
 /////////////////////////////////////////////////////////////////////////////////
 // JogROSInterface handles ROS subscriptions and instantiates the worker threads.
@@ -77,8 +77,8 @@ JogROSInterface::JogROSInterface()
   // Read ROS parameters, typically from YAML file
   readParameters(n);
 
-  // Load the robot model
-  model_loader_ptr_ = new robot_model_loader::RobotModelLoader;
+  // Load the robot model. This is needed by the worker threads.
+  model_loader_ptr_ = std::unique_ptr<robot_model_loader::RobotModelLoader>(new robot_model_loader::RobotModelLoader());
 
   // Crunch the numbers in this thread
   pthread_t joggingThread;
@@ -168,7 +168,7 @@ void* JogROSInterface::collisionCheckThread(void*)
 }
 
 // Constructor for the class that handles collision checking
-collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, robot_model_loader::RobotModelLoader *model_loader_ptr)
+collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
 {
   // If user specified true in yaml file
   if (parameters.collision_check)
@@ -234,7 +234,7 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, robot_model_loader::RobotModelLoader *model_loader_ptr)
+JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
   : move_group_(parameters.move_group_name)
 {
   parameters_ = parameters;
