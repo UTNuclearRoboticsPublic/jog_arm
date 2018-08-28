@@ -571,7 +571,8 @@ void JogCalcs::haltCartesianJogging()
 void JogCalcs::insertRedundantPointsIntoTrajectory(trajectory_msgs::JointTrajectory& trajectory, int count) const
 {
   auto point = trajectory.points[0];
-  for (int i = 2; i < count; ++i)
+  // Start from 2 because we already have the first point. End at count+1 so total # == count
+  for (int i = 2; i < count+1; ++i)
   {
     point.time_from_start = ros::Duration(i * parameters_.publish_period);
     trajectory.points.push_back(point);
