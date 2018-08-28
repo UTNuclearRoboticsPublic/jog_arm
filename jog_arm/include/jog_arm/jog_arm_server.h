@@ -189,7 +189,7 @@ double LowPassFilter::filter(const double new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
+  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
 
 protected:
   ros::NodeHandle nh_;
@@ -270,7 +270,7 @@ protected:
 class collisionCheckThread
 {
 public:
-  collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
+  collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
 };
 
 }  // namespace jog_arm

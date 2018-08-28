@@ -168,7 +168,7 @@ void* JogROSInterface::collisionCheckThread(void*)
 }
 
 // Constructor for the class that handles collision checking
-collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
+collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
 {
   // If user specified true in yaml file
   if (parameters.collision_check)
@@ -232,7 +232,7 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
+JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
   : move_group_(parameters.move_group_name)
 {
   parameters_ = parameters;
