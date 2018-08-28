@@ -121,13 +121,15 @@ private:
   int readParameters(ros::NodeHandle& n);
 
   // Jogging calculation thread
-  static void* joggingPipeline(void* thread_id);
+  static void* jogCalcThread(void* thread_id);
 
   // Collision checking thread
-  static void* collisionCheck(void* thread_id);
+  static void* collisionCheckThread(void* thread_id);
 
   // Variables to share between threads
   static struct jog_arm_shared shared_variables_;
+
+  static robot_model_loader::RobotModelLoader *model_loader_ptr_;
 };
 
 /**
@@ -186,7 +188,7 @@ double LowPassFilter::filter(const double new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables);
+  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, robot_model_loader::RobotModelLoader *model_loader_ptr);
 
 protected:
   ros::NodeHandle nh_;
@@ -264,10 +266,10 @@ protected:
   jog_arm_parameters parameters_;
 };
 
-class CollisionCheck
+class collisionCheckThread
 {
 public:
-  CollisionCheck(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables);
+  collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, robot_model_loader::RobotModelLoader *model_loader_ptr);
 };
 
 }  // namespace jog_arm

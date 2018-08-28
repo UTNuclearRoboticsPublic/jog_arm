@@ -46,6 +46,7 @@
 // They must be static because they are used as arguments in thread creation.
 jog_arm::jog_arm_parameters jog_arm::JogROSInterface::ros_parameters_;
 jog_arm::jog_arm_shared jog_arm::JogROSInterface::shared_variables_;
+robot_model_loader::RobotModelLoader *jog_arm::JogROSInterface::model_loader_ptr_ = NULL;
 
 /////////////////////////////////////////////////////////////////////////////////
 // JogROSInterface handles ROS subscriptions and instantiates the worker threads.
@@ -76,9 +77,12 @@ JogROSInterface::JogROSInterface()
   // Read ROS parameters, typically from YAML file
   readParameters(n);
 
+  // Load the robot model
+  model_loader_ptr_ = new robot_model_loader::RobotModelLoader;
+
   // Crunch the numbers in this thread
   pthread_t joggingThread;
-  int rc = pthread_create(&joggingThread, nullptr, jog_arm::JogROSInterface::joggingPipeline, this);
+  int rc = pthread_create(&joggingThread, nullptr, jog_arm::JogROSInterface::jogCalcThread, this);
   if (rc)
   {
     ROS_FATAL_STREAM_NAMED(NODE_NAME, "Creating jog calculation thread failed");
@@ -87,7 +91,7 @@ JogROSInterface::JogROSInterface()
 
   // Check collisions in this thread
   pthread_t collisionThread;
-  rc = pthread_create(&collisionThread, nullptr, jog_arm::JogROSInterface::collisionCheck, this);
+  rc = pthread_create(&collisionThread, nullptr, jog_arm::JogROSInterface::collisionCheckThread, this);
   if (rc)
   {
     ROS_FATAL_STREAM_NAMED(NODE_NAME, "Creating collision check thread failed");
@@ -150,27 +154,35 @@ JogROSInterface::JogROSInterface()
 }
 
 // A separate thread for the heavy jogging calculations.
-void* JogROSInterface::joggingPipeline(void*)
+void* JogROSInterface::jogCalcThread(void*)
 {
-  jog_arm::JogCalcs ja(ros_parameters_, shared_variables_);
+  jog_arm::JogCalcs ja(ros_parameters_, shared_variables_, model_loader_ptr_);
   return nullptr;
 }
 
 // A separate thread for collision checking.
-void* JogROSInterface::collisionCheck(void*)
+void* JogROSInterface::collisionCheckThread(void*)
 {
-  jog_arm::CollisionCheck cc(ros_parameters_, shared_variables_);
+  jog_arm::collisionCheckThread cc(ros_parameters_, shared_variables_, model_loader_ptr_);
   return nullptr;
 }
 
 // Constructor for the class that handles collision checking
-CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables)
+collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, robot_model_loader::RobotModelLoader *model_loader_ptr)
 {
   // If user specified true in yaml file
   if (parameters.collision_check)
   {
+    // MoveIt Setup
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
-    const robot_model::RobotModelPtr& kinematic_model = robot_model_loader.getModel();
+
+    // Wait for model_loader_ptr to be non-null.
+    while ( !model_loader_ptr )
+    {
+      ROS_WARN_THROTTLE_NAMED(5, NODE_NAME, "Waiting for a non-null robot_model_loader pointer");
+      ros::Duration(0.1).sleep();
+    }
+    const robot_model::RobotModelPtr& kinematic_model = model_loader_ptr->getModel();
     planning_scene::PlanningScene planning_scene(kinematic_model);
     collision_detection::CollisionRequest collision_request;
     collision_request.group_name = parameters.move_group_name;
@@ -222,7 +234,7 @@ CollisionCheck::CollisionCheck(const jog_arm_parameters& parameters, jog_arm_sha
 }
 
 // Constructor for the class that handles jogging calculations
-JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables)
+JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, robot_model_loader::RobotModelLoader *model_loader_ptr)
   : move_group_(parameters.move_group_name)
 {
   parameters_ = parameters;
@@ -231,8 +243,14 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   warning_pub_ = nh_.advertise<std_msgs::Bool>(parameters_.warning_topic, 1);
 
   // MoveIt Setup
-  robot_model_loader::RobotModelLoader model_loader("robot_description");
-  const robot_model::RobotModelPtr& kinematic_model = model_loader.getModel();
+  // Wait for model_loader_ptr to be non-null.
+  while ( !model_loader_ptr )
+  {
+    ROS_WARN_THROTTLE_NAMED(5, NODE_NAME, "Waiting for a non-null robot_model_loader pointer");
+    ros::Duration(0.1).sleep();
+  }
+
+  const robot_model::RobotModelPtr& kinematic_model = model_loader_ptr->getModel();
 
   kinematic_state_ = std::make_shared<robot_state::RobotState>(kinematic_model);
   kinematic_state_->setToDefaultValues();
