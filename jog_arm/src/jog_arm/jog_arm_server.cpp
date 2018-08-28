@@ -42,7 +42,8 @@
 #include <jog_arm/jog_arm_server.h>
 #include <memory>
 
-// Initialize these static struct to hold ROS parameters
+// Initialize these static struct to hold ROS parameters.
+// They must be static because they are used as arguments in thread creation.
 jog_arm::jog_arm_parameters jog_arm::JogROSInterface::ros_parameters_;
 jog_arm::jog_arm_shared jog_arm::JogROSInterface::shared_variables_;
 
@@ -80,7 +81,7 @@ JogROSInterface::JogROSInterface()
   int rc = pthread_create(&joggingThread, nullptr, jog_arm::JogROSInterface::joggingPipeline, this);
   if (rc)
   {
-    ROS_FATAL_NAMED(NODE_NAME, "Creating pipeline thread failed", rc);
+    ROS_FATAL_STREAM_NAMED(NODE_NAME, "Creating jog calculation thread failed");
     return;
   }
 
@@ -89,7 +90,7 @@ JogROSInterface::JogROSInterface()
   rc = pthread_create(&collisionThread, nullptr, jog_arm::JogROSInterface::collisionCheck, this);
   if (rc)
   {
-    ROS_FATAL_NAMED(NODE_NAME, "Creating collision check thread failed", rc);
+    ROS_FATAL_STREAM_NAMED(NODE_NAME, "Creating collision check thread failed");
     return;
   }
 
