@@ -42,22 +42,16 @@
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H
 
-#include <cmath>
-#include <Eigen/Eigenvalues>
-#include <geometry_msgs/Twist.h>
 #include <jog_msgs/JogJoint.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
-#include <pthread.h>
-#include <ros/ros.h>
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
-#include <string>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
 

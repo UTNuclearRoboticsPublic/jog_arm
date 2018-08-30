@@ -33,7 +33,6 @@
 #ifndef JOG_API_EXAMPLE_H
 #define JOG_API_EXAMPLE_H
 
-#include <geometry_msgs/PoseStamped.h>
 #include <jog_api/jog_api.h>
 #include <ros/ros.h>
 

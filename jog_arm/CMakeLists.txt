@@ -7,14 +7,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
   jog_msgs
-  moveit_ros_manipulation
-  moveit_ros_move_group
   moveit_ros_planning_interface
   rosparam_shortcuts
-  roscpp
-  std_msgs
   tf
-  tf2_geometry_msgs
 )
 
 find_package(Eigen3 REQUIRED)
