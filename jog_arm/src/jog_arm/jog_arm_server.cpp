@@ -874,10 +874,40 @@ double JogCalcs::checkConditionNumber(const Eigen::MatrixXd& matrix) const
 void JogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
-  shared_variables_.command_deltas = *msg;
 
-  // Input frame determined by YAML file:
-  shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
+  // Scale incoming commands.
+  // if |u_vector| >> 0, scale = abs(u_i) / two_norm( u_vector )
+  // else if |u_vector|~0, scale = 1
+
+  // Scale translational components:
+  double two_norm = pow(
+    msg->twist.linear.x*msg->twist.linear.x +
+    msg->twist.linear.y*msg->twist.linear.y +
+    msg->twist.linear.z*msg->twist.linear.z, 0.5);
+  double scale = 1;
+  // Only adjust the scale if the inputs are non-zero.
+  // Otherwise, divide-by-zero situation.
+  if (two_norm >= 0.1)
+    scale = 1/two_norm;
+
+  shared_variables_.command_deltas.twist.linear.x = scale * fabs(msg->twist.linear.x) * msg->twist.linear.x;
+  shared_variables_.command_deltas.twist.linear.y = scale * fabs(msg->twist.linear.y) * msg->twist.linear.y;
+  shared_variables_.command_deltas.twist.linear.z = scale * fabs(msg->twist.linear.z) * msg->twist.linear.z;
+
+  // Scale rotational components
+  two_norm = pow(
+    msg->twist.angular.x*msg->twist.angular.x +
+    msg->twist.angular.y*msg->twist.angular.y +
+    msg->twist.angular.z*msg->twist.angular.z, 0.5);
+  scale = 1;
+  // Only adjust the scale if the inputs are non-zero.
+  // Otherwise, divide-by-zero situation.
+  if (two_norm >= 0.1)
+    scale = 1/two_norm;
+
+  shared_variables_.command_deltas.twist.angular.x = scale * fabs(msg->twist.angular.x) * msg->twist.angular.x;
+  shared_variables_.command_deltas.twist.angular.y = scale * fabs(msg->twist.angular.y) * msg->twist.angular.y;
+  shared_variables_.command_deltas.twist.angular.z = scale * fabs(msg->twist.angular.z) * msg->twist.angular.z;
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
@@ -969,6 +999,12 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_velocities", ros_parameters_.publish_joint_velocities);
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
+
+
+  // Set the input frame, as determined by YAML file:
+  pthread_mutex_lock(&shared_variables_.new_traj_mutex);
+  shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
+  pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
 
   // Input checking
   if (ros_parameters_.hard_stop_singularity_threshold < ros_parameters_.singularity_threshold)
