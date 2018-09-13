@@ -75,7 +75,8 @@ JogROSInterface::JogROSInterface()
   ros::NodeHandle n;
 
   // Read ROS parameters, typically from YAML file
-  readParameters(n);
+  if (!readParameters(n))
+    exit(EXIT_FAILURE);
 
   // Load the robot model. This is needed by the worker threads.
   model_loader_ptr_ = std::unique_ptr<robot_model_loader::RobotModelLoader>(new robot_model_loader::RobotModelLoader);
@@ -99,12 +100,12 @@ JogROSInterface::JogROSInterface()
   }
 
   // ROS subscriptions. Share the data with the worker threads
-  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.command_in_topic, 1, &JogROSInterface::deltaCmdCB, this);
+  ros::Subscriber cmd_sub = n.subscribe(ros_parameters_.cartesian_command_in_topic, 1, &JogROSInterface::deltaCmdCB, this);
   ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &JogROSInterface::jointsCB, this);
   ros::Subscriber joint_jog_cmd_sub =
       n.subscribe(ros_parameters_.joint_command_in_topic, 1, &JogROSInterface::deltaJointCmdCB, this);
   ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
-  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.command_in_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.cartesian_command_in_topic);
 
   // Publish freshly-calculated joints to the robot
   ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(ros_parameters_.command_out_topic, 1);
@@ -194,7 +195,7 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
     ROS_INFO_NAMED(NODE_NAME, "Received first joint msg.");
 
     ROS_INFO_NAMED(NODE_NAME, "Waiting for first command msg.");
-    ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters.command_in_topic);
+    ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters.cartesian_command_in_topic);
     ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
     ros::Rate collision_rate(100);
@@ -262,7 +263,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   ROS_INFO_NAMED(NODE_NAME, "Received first joint msg.");
 
   ROS_INFO_NAMED(NODE_NAME, "Waiting for first command msg.");
-  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters_.command_in_topic);
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters_.cartesian_command_in_topic);
   ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
   resetVelocityFilters();
@@ -402,12 +403,15 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
     return 0;
   }
 
-  // Check for |delta|>1 in the incoming command
-  if ((fabs(cmd.twist.linear.x) > 1) || (fabs(cmd.twist.linear.y) > 1) || (fabs(cmd.twist.linear.z) > 1) ||
-      (fabs(cmd.twist.angular.x) > 1) || (fabs(cmd.twist.angular.y) > 1) || (fabs(cmd.twist.angular.z) > 1))
+  // If incoming commands should be in the range [-1:1], check for |delta|>1
+  if (parameters_.command_in_type=="unitless")
   {
-    ROS_WARN_STREAM_NAMED(NODE_NAME, "Component of incoming command is >1. Skipping this datapoint.");
-    return 0;
+    if ((fabs(cmd.twist.linear.x) > 1) || (fabs(cmd.twist.linear.y) > 1) || (fabs(cmd.twist.linear.z) > 1) ||
+        (fabs(cmd.twist.angular.x) > 1) || (fabs(cmd.twist.angular.y) > 1) || (fabs(cmd.twist.angular.z) > 1))
+    {
+      ROS_WARN_STREAM_NAMED(NODE_NAME, "Component of incoming command is >1. Skipping this datapoint.");
+      return 0;
+    }
   }
 
   // Convert the cmd to the MoveGroup planning frame.
@@ -456,8 +460,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   twist_cmd.twist.linear = lin_vector.vector;
   twist_cmd.twist.angular = rot_vector.vector;
 
-  // Apply user-defined scaling
-  const Eigen::VectorXd delta_x = scaleCommand(twist_cmd);
+  const Eigen::VectorXd delta_x = scaleCartesianCommand(twist_cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
   orig_jts_ = jt_state_;
@@ -797,16 +800,32 @@ bool JogCalcs::updateJoints()
 }
 
 // Scale the incoming jog command
-Eigen::VectorXd JogCalcs::scaleCommand(const geometry_msgs::TwistStamped& command) const
+Eigen::VectorXd JogCalcs::scaleCartesianCommand(const geometry_msgs::TwistStamped& command) const
 {
   Eigen::VectorXd result(6);
 
-  result[0] = parameters_.linear_scale * command.twist.linear.x;
-  result[1] = parameters_.linear_scale * command.twist.linear.y;
-  result[2] = parameters_.linear_scale * command.twist.linear.z;
-  result[3] = parameters_.rotational_scale * command.twist.angular.x;
-  result[4] = parameters_.rotational_scale * command.twist.angular.y;
-  result[5] = parameters_.rotational_scale * command.twist.angular.z;
+  // Apply user-defined scaling if inputs are unitless [-1:1]
+  if (parameters_.command_in_type == "unitless")
+  {
+    result[0] = parameters_.linear_scale * command.twist.linear.x;
+    result[1] = parameters_.linear_scale * command.twist.linear.y;
+    result[2] = parameters_.linear_scale * command.twist.linear.z;
+    result[3] = parameters_.rotational_scale * command.twist.angular.x;
+    result[4] = parameters_.rotational_scale * command.twist.angular.y;
+    result[5] = parameters_.rotational_scale * command.twist.angular.z;
+  }
+  // No scaling needed
+  else if (parameters_.command_in_type == "speed_units")
+  {
+    result[0] = command.twist.linear.x;
+    result[1] = command.twist.linear.y;
+    result[2] = command.twist.linear.z;
+    result[3] = command.twist.angular.x;
+    result[4] = command.twist.angular.y;
+    result[5] = command.twist.angular.z;
+  }
+  else
+    ROS_ERROR_STREAM_NAMED(NODE_NAME, "Unexpected command_in_type");
 
   return result;
 }
@@ -827,7 +846,14 @@ Eigen::VectorXd JogCalcs::scaleJointCommand(const jog_msgs::JogJoint& command) c
     {
       if (command.joint_names[m] == jt_state_.name[c])
       {
-        result[c] = command.deltas[m] * parameters_.joint_scale;
+        // Apply user-defined scaling if inputs are unitless [-1:1]
+        if (parameters_.command_in_type == "unitless")
+          result[c] = command.deltas[m] * parameters_.joint_scale;
+        // No scaling needed
+        else if (parameters_.command_in_type == "speed_units")
+          result[c] = command.deltas[m];
+        else
+          ROS_ERROR_STREAM_NAMED(NODE_NAME, "Unexpected command_in_type");
         goto NEXT_JOINT;
       }
     }
@@ -875,39 +901,7 @@ void JogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
 
-  // Scale incoming commands.
-  // if |u_vector| >> 0, scale = abs(u_i) / two_norm( u_vector )
-  // else if |u_vector|~0, scale = 1
-
-  // Scale translational components:
-  double two_norm = pow(
-    msg->twist.linear.x*msg->twist.linear.x +
-    msg->twist.linear.y*msg->twist.linear.y +
-    msg->twist.linear.z*msg->twist.linear.z, 0.5);
-  double scale = 1;
-  // Only adjust the scale if the inputs are non-zero.
-  // Otherwise, divide-by-zero situation.
-  if (two_norm >= 0.1)
-    scale = 1/two_norm;
-
-  shared_variables_.command_deltas.twist.linear.x = scale * fabs(msg->twist.linear.x) * msg->twist.linear.x;
-  shared_variables_.command_deltas.twist.linear.y = scale * fabs(msg->twist.linear.y) * msg->twist.linear.y;
-  shared_variables_.command_deltas.twist.linear.z = scale * fabs(msg->twist.linear.z) * msg->twist.linear.z;
-
-  // Scale rotational components
-  two_norm = pow(
-    msg->twist.angular.x*msg->twist.angular.x +
-    msg->twist.angular.y*msg->twist.angular.y +
-    msg->twist.angular.z*msg->twist.angular.z, 0.5);
-  scale = 1;
-  // Only adjust the scale if the inputs are non-zero.
-  // Otherwise, divide-by-zero situation.
-  if (two_norm >= 0.1)
-    scale = 1/two_norm;
-
-  shared_variables_.command_deltas.twist.angular.x = scale * fabs(msg->twist.angular.x) * msg->twist.angular.x;
-  shared_variables_.command_deltas.twist.angular.y = scale * fabs(msg->twist.angular.y) * msg->twist.angular.y;
-  shared_variables_.command_deltas.twist.angular.z = scale * fabs(msg->twist.angular.z) * msg->twist.angular.z;
+  shared_variables_.command_deltas.twist = msg->twist;
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
@@ -955,7 +949,7 @@ void JogROSInterface::jointsCB(const sensor_msgs::JointStateConstPtr& msg)
 }
 
 // Read ROS parameters, typically from YAML file
-int JogROSInterface::readParameters(ros::NodeHandle& n)
+bool JogROSInterface::readParameters(ros::NodeHandle& n)
 {
   std::size_t error = 0;
 
@@ -967,7 +961,7 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" type=\"string\" value=\"left_jog_arm_server\" />");
-    return 1;
+    return 0;
   }
 
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
@@ -978,7 +972,8 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/low_pass_filter_coeff", ros_parameters_.low_pass_filter_coeff);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_topic", ros_parameters_.joint_topic);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_topic", ros_parameters_.command_in_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_in_type", ros_parameters_.command_in_type);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/cartesian_command_in_topic", ros_parameters_.cartesian_command_in_topic);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/joint_command_in_topic", ros_parameters_.joint_command_in_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
@@ -1011,30 +1006,35 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_singularity_threshold' "
                               "should be greater than 'singularity_threshold.'");
-    return 1;
+    return 0;
   }
   if ((ros_parameters_.hard_stop_singularity_threshold < 0.) || (ros_parameters_.singularity_threshold < 0.))
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_singularity_threshold' "
                               "and 'singularity_threshold' should be greater than zero.");
-    return 1;
+    return 0;
   }
   if (ros_parameters_.low_pass_filter_coeff < 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be greater than zero.");
-    return 1;
+    return 0;
   }
   if (ros_parameters_.joint_limit_margin > 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero.");
-    return 1;
+    return 0;
   }
   if (!ros_parameters_.publish_joint_positions && !ros_parameters_.publish_joint_velocities)
   {
     ROS_WARN_NAMED(NODE_NAME, "Publishing is not enabled for joint positions nor joint velocities.");
-    return 1;
+    return 0;
+  }
+  if (ros_parameters_.command_in_type != "unitless" && ros_parameters_.command_in_type != "speed_units")
+  {
+    ROS_WARN_NAMED(NODE_NAME, "command_in_type should be 'unitless' or 'speed_units'");
+    return 0;
   }
 
-  return 0;
+  return 1;
 }
 }  // namespace jog_arm
