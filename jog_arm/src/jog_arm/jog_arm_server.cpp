@@ -814,15 +814,15 @@ Eigen::VectorXd JogCalcs::scaleCartesianCommand(const geometry_msgs::TwistStampe
     result[4] = parameters_.rotational_scale * command.twist.angular.y;
     result[5] = parameters_.rotational_scale * command.twist.angular.z;
   }
-  // No scaling needed
+  // Otherwise, commands are in m/s and rad/s
   else if (parameters_.command_in_type == "speed_units")
   {
-    result[0] = command.twist.linear.x;
-    result[1] = command.twist.linear.y;
-    result[2] = command.twist.linear.z;
-    result[3] = command.twist.angular.x;
-    result[4] = command.twist.angular.y;
-    result[5] = command.twist.angular.z;
+    result[0] = command.twist.linear.x * parameters_.publish_period;
+    result[1] = command.twist.linear.y * parameters_.publish_period;
+    result[2] = command.twist.linear.z * parameters_.publish_period;
+    result[3] = command.twist.angular.x * parameters_.publish_period;
+    result[4] = command.twist.angular.y * parameters_.publish_period;
+    result[5] = command.twist.angular.z * parameters_.publish_period;
   }
   else
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "Unexpected command_in_type");
@@ -849,9 +849,9 @@ Eigen::VectorXd JogCalcs::scaleJointCommand(const jog_msgs::JogJoint& command) c
         // Apply user-defined scaling if inputs are unitless [-1:1]
         if (parameters_.command_in_type == "unitless")
           result[c] = command.deltas[m] * parameters_.joint_scale;
-        // No scaling needed
+        // Otherwise, commands are in m/s and rad/s
         else if (parameters_.command_in_type == "speed_units")
-          result[c] = command.deltas[m];
+          result[c] = command.deltas[m] * parameters_.publish_period;
         else
           ROS_ERROR_STREAM_NAMED(NODE_NAME, "Unexpected command_in_type");
         goto NEXT_JOINT;
