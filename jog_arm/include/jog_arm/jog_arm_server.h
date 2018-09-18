@@ -69,8 +69,8 @@ struct jog_arm_shared
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
-  bool imminent_collision;
-  pthread_mutex_t imminent_collision_mutex;
+  double collision_velocity_scale = 1;
+  pthread_mutex_t collision_velocity_scale_mutex;
 
   bool zero_trajectory_flag = true;
   pthread_mutex_t zero_trajectory_flag_mutex;
@@ -119,7 +119,7 @@ private:
   static void* jogCalcThread(void* thread_id);
 
   // Collision checking thread
-  static void* collisionCheckThread(void* thread_id);
+  static void* CollisionCheckThread(void* thread_id);
 
   // Variables to share between threads
   static struct jog_arm_shared shared_variables_;
@@ -234,7 +234,7 @@ protected:
                                        const Eigen::MatrixXd& new_jacobian,
                                        trajectory_msgs::JointTrajectory& new_jt_traj);
 
-  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
+  bool applyCollisionVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
 
   trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
                                                           const ros::Time& stamp) const;
@@ -262,10 +262,10 @@ protected:
   jog_arm_parameters parameters_;
 };
 
-class collisionCheckThread
+class CollisionCheckThread
 {
 public:
-  collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
+  CollisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
 };
 
 }  // namespace jog_arm
