@@ -200,6 +200,9 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
     ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
     double prev_distance_to_collision = 0;
+    jog_arm::LowPassFilter velocity_scale_filter(40);
+    // Assume no scaling, initially
+    velocity_scale_filter.reset( 1 );
     ros::Rate collision_rate(100);
 
     /////////////////////////////////////////////////
@@ -229,30 +232,29 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
       shared_variables.imminent_collision = collision_result.collision;
       pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
-      // Scale robot velocity according to collision proximity and user-defined thresholds
+      // Scale robot velocity according to collision proximity and user-defined thresholds.
+      // I scaled exponentially (cubic power) so velocity drops off quickly after the threshold.
       // Proximity decreasing --> decelerate
       double velocity_scale = 1;
-      if (collision_result.distance < prev_distance_to_collision)
+
+      // Ramp velocity down linearly when collision proximity is between lower_collision_proximity_threshold and
+      // hard_stop_collision_proximity_threshold
+      if ((collision_result.distance > parameters.hard_stop_collision_proximity_threshold) &&
+          (collision_result.distance < parameters.lower_collision_proximity_threshold))
       {
-        // Ramp velocity down linearly when collision proximity is between lower_collision_proximity_threshold and
-        // hard_stop_collision_proximity_threshold
-        if ((collision_result.distance > parameters.hard_stop_collision_proximity_threshold) &&
-            (collision_result.distance < parameters.lower_collision_proximity_threshold))
-        {
-          velocity_scale = 1. -
-                                  (parameters.lower_collision_proximity_threshold - collision_result.distance) /
-                                      (parameters.lower_collision_proximity_threshold - parameters.hard_stop_collision_proximity_threshold);
-
-        }
-
-        // Very close to collision, so halt.
-        else if (collision_result.distance < parameters.hard_stop_collision_proximity_threshold)
-        {
-          velocity_scale = 0;
-        }
+        // scale = k*(proximity-hard_stop_threshold)^3
+        velocity_scale = 64000.*pow( collision_result.distance - parameters.hard_stop_collision_proximity_threshold ,3);
       }
 
+      velocity_scale = velocity_scale_filter.filter( velocity_scale );
+      // Put a ceiling and  a floor on velocity_scale
+      if ( velocity_scale > 1 )
+        velocity_scale = 1;
+      else if ( velocity_scale < 0.01 )
+        velocity_scale = 0.01;
+
       ROS_INFO_STREAM( velocity_scale );
+
       prev_distance_to_collision = collision_result.distance;
       collision_rate.sleep();
     }

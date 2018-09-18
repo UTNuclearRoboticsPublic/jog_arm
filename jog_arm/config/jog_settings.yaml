@@ -13,7 +13,7 @@ joint_topic:  joint_states
 move_group_name:  arm  # Often 'manipulator' or 'arm'
 lower_singularity_threshold:  45  # Start decelerating when the condition number hits this (close to singularity)
 hard_stop_singularity_threshold: 50 # Stop when the condition number hits this
-lower_collision_proximity_threshold: 0.03 # Start decelerating when a collision is this far [m]
+lower_collision_proximity_threshold: 0.05 # Start decelerating when a collision is this far [m]
 hard_stop_collision_proximity_threshold: 0.005 # Stop when a collision is this far [m]
 command_out_topic: sia5_controller/command
 planning_frame: base_link  # The MoveIt! planning frame. Often 'base_link'
