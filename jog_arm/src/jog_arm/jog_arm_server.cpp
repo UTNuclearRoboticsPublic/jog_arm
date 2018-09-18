@@ -243,9 +243,18 @@ CollisionCheckThread::CollisionCheckThread(const jog_arm_parameters& parameters,
         velocity_scale = 0;
 
       velocity_scale = velocity_scale_filter.filter( velocity_scale );
-      // Put a ceiling on velocity_scale
+      // Put a ceiling and a floor on velocity_scale
       if ( velocity_scale > 1 )
         velocity_scale = 1;
+      else if (velocity_scale < 0.05)
+        velocity_scale = 0.05;
+
+      // Stop if actually in collision
+      if (collision_result.collision)
+      {
+        velocity_scale = 0;
+        ROS_WARN_STREAM_NAMED(NODE_NAME, "Robot is in collision. Halting.");
+      }
 
       pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
       shared_variables.collision_velocity_scale = velocity_scale;
@@ -509,20 +518,17 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
-  if (!verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_) ||
+  if (!verifyJacobianIsWellConditioned(jacobian) ||
       !checkIfJointsWithinBounds(new_traj_))
   {
-    avoidIssue(new_traj_);
+    halt(new_traj_);
     publishWarning(true);
   }
   else
     publishWarning(false);
 
   // If close to a collision or a singularity, decelerate
-  pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
-  double velocity_scale = shared_variables.collision_velocity_scale;
-  pthread_mutex_unlock(&shared_variables.collision_velocity_scale_mutex);
-  applyVelocityScaling( shared_variables, new_traj_ );
+  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian) );
 
   // If using Gazebo simulator, insert redundant points
   if (parameters_.gazebo)
@@ -571,7 +577,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
   // check if new joint state is valid
   if (!checkIfJointsWithinBounds(new_traj_))
   {
-    avoidIssue(new_traj_);
+    halt(new_traj_);
     publishWarning(true);
   }
   else
@@ -676,54 +682,63 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
   return new_jt_traj;
 }
 
-// If close to a collision, slow down.
-// Uses a shared variable from the collision-checking thread.
-bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj)
+// Apply velocity scaling for proximity of collisions and singularities.
+// Scale for collisions is read from a shared variable.
+// Key equation: new_velocity = collision_scale*singularity_scale*previous_velocity
+bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,  const Eigen::VectorXd& delta_theta, double singularity_scale)
 {
+  pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
+  double collision_scale = shared_variables.collision_velocity_scale;
+  pthread_mutex_unlock(&shared_variables.collision_velocity_scale_mutex);
 
-/*
   for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
   {
     if (parameters_.publish_joint_positions)
+    {
+      // If close to a singularity or joint limit, undo any change to the joint angles
       new_jt_traj.points[0].positions[i] =
-        new_jt_traj.points[0].positions[i] - velocity_scale * delta_theta[static_cast<long>(i)];
+        new_jt_traj.points[0].positions[i] - (1.-singularity_scale*collision_scale) * delta_theta[static_cast<long>(i)];
+    }
     if (parameters_.publish_joint_velocities)
-      new_jt_traj.points[0].velocities[i] *= velocity_scale;
+      new_jt_traj.points[0].velocities[i] *= singularity_scale*collision_scale;
   }
-*/
 
   return 1;
 }
 
-bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
-                                               const Eigen::MatrixXd& new_jacobian,
-                                               trajectory_msgs::JointTrajectory& new_jt_traj)
+// Calculate a velocity scaling factor, due to proximity of a singularity
+double JogCalcs::decelerateForSingularity(const Eigen::MatrixXd& new_jacobian)
 {
+  double velocity_scale = 1;
+
   // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
   // hard_stop_singularity_threshold
   double current_condition_number = checkConditionNumber( new_jacobian );
   if ((current_condition_number > parameters_.lower_singularity_threshold) &&
       (current_condition_number < parameters_.hard_stop_singularity_threshold))
   {
-    double velocity_scale = 1. -
+    velocity_scale = 1. -
                             (current_condition_number - parameters_.lower_singularity_threshold) /
                                 (parameters_.hard_stop_singularity_threshold - parameters_.lower_singularity_threshold);
-    for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
-    {
-			if (parameters_.publish_joint_positions)
-        new_jt_traj.points[0].positions[i] =
-          new_jt_traj.points[0].positions[i] - velocity_scale * delta_theta[static_cast<long>(i)];
-			if (parameters_.publish_joint_velocities)
-        new_jt_traj.points[0].velocities[i] *= velocity_scale;
-    }
   }
 
   // Very close to singularity, so halt.
   else if ( current_condition_number > parameters_.hard_stop_singularity_threshold )
   {
+    velocity_scale = 0;
+  }
+
+  return velocity_scale;
+}
+
+bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& new_jacobian)
+{
+  // Very close to singularity, so halt.
+  if ( checkConditionNumber( new_jacobian ) > parameters_.hard_stop_singularity_threshold )
+  {
     ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME, ros::this_node::getName() << " Close to a "
                                                                                 "singularity ("
-                                                                             << current_condition_number
+                                                                             << checkConditionNumber( new_jacobian )
                                                                              << "). Halting.");
     return 0;
   }
@@ -772,7 +787,7 @@ void JogCalcs::publishWarning(const bool active) const
 
 // Avoid a singularity or other issue.
 // Needs to be handled differently for position vs. velocity control
-void JogCalcs::avoidIssue(trajectory_msgs::JointTrajectory& jt_traj)
+void JogCalcs::halt(trajectory_msgs::JointTrajectory& jt_traj)
 {
   for (std::size_t i = 0; i < jt_state_.velocity.size(); ++i)
   {

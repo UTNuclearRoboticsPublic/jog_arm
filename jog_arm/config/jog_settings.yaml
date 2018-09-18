@@ -2,8 +2,8 @@ gazebo: true # Whether the robot is started in a Gazebo simulation environment
 collision_check: true # Check collisions?
 command_in_type: "unitless" # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
 scale: # Only used if command_in_type=="unitless"
-  linear:  0.004  # Max linear velocity. Meters per publish_period. Units is [m/s]
-  rotational:  0.008  # Max angular velocity. Rads per publish_period. Units is [rad/s]
+  linear:  0.003  # Max linear velocity. Meters per publish_period. Units is [m/s]
+  rotational:  0.006  # Max angular velocity. Rads per publish_period. Units is [rad/s]
   joint: 0.01  # Max joint angular/linear velocity. Rads or Meters per publish period. Units is [rad/s] or [m/s].
 cartesian_command_in_topic:  jog_arm_server/delta_jog_cmds # Topic for xyz commands
 joint_command_in_topic: jog_arm_server/joint_delta_jog_cmds # Topic for angle commands
@@ -11,9 +11,9 @@ command_frame:  base_link  # TF frame that incoming cmds are given in
 incoming_command_timeout:  5  # Stop jogging if X seconds elapse without a new cmd
 joint_topic:  joint_states
 move_group_name:  arm  # Often 'manipulator' or 'arm'
-lower_singularity_threshold:  45  # Start decelerating when the condition number hits this (close to singularity)
+lower_singularity_threshold:  40  # Start decelerating when the condition number hits this (close to singularity)
 hard_stop_singularity_threshold: 50 # Stop when the condition number hits this
-lower_collision_proximity_threshold: 0.05 # Start decelerating when a collision is this far [m]
+lower_collision_proximity_threshold: 0.1 # Start decelerating when a collision is this far [m]
 hard_stop_collision_proximity_threshold: 0.005 # Stop when a collision is this far [m]
 command_out_topic: sia5_controller/command
 planning_frame: base_link  # The MoveIt! planning frame. Often 'base_link'

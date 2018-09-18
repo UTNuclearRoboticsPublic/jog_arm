@@ -218,7 +218,7 @@ protected:
 
   // Avoid a singularity or other issue.
   // Needs to be handled differently for position vs. velocity control
-  void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
+  void halt(trajectory_msgs::JointTrajectory& jt_traj);
 
   void publishWarning(bool active) const;
 
@@ -230,11 +230,13 @@ protected:
    *  Stop if extremely close.
    * @return true if Jacobian is well conditioned, false if not
    */
-  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
-                                       const Eigen::MatrixXd& new_jacobian,
-                                       trajectory_msgs::JointTrajectory& new_jt_traj);
+  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& new_jacobian);
 
-  bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
+  // Calculate a velocity scaling factor, due to proximity of a singularity
+  double decelerateForSingularity(const Eigen::MatrixXd& new_jacobian);
+
+  // Apply velocity scaling for proximity of collisions and singularities
+  bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,  const Eigen::VectorXd& delta_theta, double singularity_scale);
 
   trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
                                                           const ros::Time& stamp) const;
