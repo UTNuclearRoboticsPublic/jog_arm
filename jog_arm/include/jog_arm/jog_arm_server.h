@@ -234,7 +234,7 @@ protected:
                                        const Eigen::MatrixXd& new_jacobian,
                                        trajectory_msgs::JointTrajectory& new_jt_traj);
 
-  bool applyCollisionVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
+  bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj);
 
   trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
                                                           const ros::Time& stamp) const;

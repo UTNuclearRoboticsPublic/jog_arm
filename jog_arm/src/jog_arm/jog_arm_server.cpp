@@ -518,8 +518,11 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   else
     publishWarning(false);
 
-  // If close to a collision, decelerate
-  applyCollisionVelocityScaling( shared_variables, new_traj_ );
+  // If close to a collision or a singularity, decelerate
+  pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
+  double velocity_scale = shared_variables.collision_velocity_scale;
+  pthread_mutex_unlock(&shared_variables.collision_velocity_scale_mutex);
+  applyVelocityScaling( shared_variables, new_traj_ );
 
   // If using Gazebo simulator, insert redundant points
   if (parameters_.gazebo)
@@ -675,11 +678,8 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
 
 // If close to a collision, slow down.
 // Uses a shared variable from the collision-checking thread.
-bool JogCalcs::applyCollisionVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj)
+bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj)
 {
-  pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
-  double velocity_scale = shared_variables.collision_velocity_scale;
-  pthread_mutex_unlock(&shared_variables.collision_velocity_scale_mutex);
 
 /*
   for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
@@ -718,26 +718,15 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
     }
   }
 
-/*
   // Very close to singularity, so halt.
-  else
+  else if ( current_condition_number > parameters_.hard_stop_singularity_threshold )
   {
-    double old_condition_number = checkConditionNumber( old_jacobian );
-    if ((current_condition_number > parameters_.lower_singularity_threshold) &&
-        (current_condition_number > old_condition_number))
-    {
-      if (current_condition_number > parameters_.hard_stop_singularity_threshold)
-      {
-        ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME, ros::this_node::getName() << " Close to a "
-                                                                                  "singularity ("
-                                                                               << current_condition_number
-                                                                               << "). Halting.");
-
-        return 0;
-      }
-    }
+    ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME, ros::this_node::getName() << " Close to a "
+                                                                                "singularity ("
+                                                                             << current_condition_number
+                                                                             << "). Halting.");
+    return 0;
   }
-*/
 
   return 1;
 }
