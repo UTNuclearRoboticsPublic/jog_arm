@@ -185,6 +185,7 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
     planning_scene::PlanningScene planning_scene(kinematic_model);
     collision_detection::CollisionRequest collision_request;
     collision_request.group_name = parameters.move_group_name;
+    collision_request.distance = true;
     collision_detection::CollisionResult collision_result;
     robot_state::RobotState& current_state = planning_scene.getCurrentStateNonConst();
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
@@ -198,6 +199,7 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
     ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters.cartesian_command_in_topic);
     ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
+    double prev_distance_to_collision = 0;
     ros::Rate collision_rate(100);
 
     /////////////////////////////////////////////////
@@ -227,6 +229,31 @@ collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters,
       shared_variables.imminent_collision = collision_result.collision;
       pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
 
+      // Scale robot velocity according to collision proximity and user-defined thresholds
+      // Proximity decreasing --> decelerate
+      double velocity_scale = 1;
+      if (collision_result.distance < prev_distance_to_collision)
+      {
+        // Ramp velocity down linearly when collision proximity is between lower_collision_proximity_threshold and
+        // hard_stop_collision_proximity_threshold
+        if ((collision_result.distance > parameters.hard_stop_collision_proximity_threshold) &&
+            (collision_result.distance < parameters.lower_collision_proximity_threshold))
+        {
+          velocity_scale = 1. -
+                                  (parameters.lower_collision_proximity_threshold - collision_result.distance) /
+                                      (parameters.lower_collision_proximity_threshold - parameters.hard_stop_collision_proximity_threshold);
+
+        }
+
+        // Very close to collision, so halt.
+        else if (collision_result.distance < parameters.hard_stop_collision_proximity_threshold)
+        {
+          velocity_scale = 0;
+        }
+      }
+
+      ROS_INFO_STREAM( velocity_scale );
+      prev_distance_to_collision = collision_result.distance;
       collision_rate.sleep();
     }
   }
@@ -665,15 +692,15 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
                                                const Eigen::MatrixXd& new_jacobian,
                                                trajectory_msgs::JointTrajectory& new_jt_traj)
 {
-  // Ramp velocity down linearly when the Jacobian condition is between singularity_threshold and
-  // hard_stop_singurality_threshold
+  // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
+  // hard_stop_singularity_threshold
   double current_condition_number = checkConditionNumber( new_jacobian );
-  if ((current_condition_number > parameters_.singularity_threshold) &&
+  if ((current_condition_number > parameters_.lower_singularity_threshold) &&
       (current_condition_number < parameters_.hard_stop_singularity_threshold))
   {
     double velocity_scale = 1. -
-                            (current_condition_number - parameters_.singularity_threshold) /
-                                (parameters_.hard_stop_singularity_threshold - parameters_.singularity_threshold);
+                            (current_condition_number - parameters_.lower_singularity_threshold) /
+                                (parameters_.hard_stop_singularity_threshold - parameters_.lower_singularity_threshold);
     for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
     {
 			if (parameters_.publish_joint_positions)
@@ -688,7 +715,7 @@ bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobi
   else
   {
     double old_condition_number = checkConditionNumber( old_jacobian );
-    if ((current_condition_number > parameters_.singularity_threshold) &&
+    if ((current_condition_number > parameters_.lower_singularity_threshold) &&
         (current_condition_number > old_condition_number))
     {
       if (current_condition_number > parameters_.hard_stop_singularity_threshold)
@@ -981,9 +1008,13 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
                                     ros_parameters_.incoming_command_timeout);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_topic", ros_parameters_.command_out_topic);
   error +=
-      !rosparam_shortcuts::get("", n, parameter_ns + "/singularity_threshold", ros_parameters_.singularity_threshold);
+      !rosparam_shortcuts::get("", n, parameter_ns + "/lower_singularity_threshold", ros_parameters_.lower_singularity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
                                     ros_parameters_.hard_stop_singularity_threshold);
+  error +=
+      !rosparam_shortcuts::get("", n, parameter_ns + "/lower_collision_proximity_threshold", ros_parameters_.lower_collision_proximity_threshold);
+  error +=
+      !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_collision_proximity_threshold", ros_parameters_.hard_stop_collision_proximity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/move_group_name", ros_parameters_.move_group_name);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
@@ -1002,16 +1033,28 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
 
   // Input checking
-  if (ros_parameters_.hard_stop_singularity_threshold < ros_parameters_.singularity_threshold)
+  if (ros_parameters_.hard_stop_singularity_threshold < ros_parameters_.lower_singularity_threshold)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_singularity_threshold' "
-                              "should be greater than 'singularity_threshold.'");
+                              "should be greater than 'lower_singularity_threshold.'");
     return 0;
   }
-  if ((ros_parameters_.hard_stop_singularity_threshold < 0.) || (ros_parameters_.singularity_threshold < 0.))
+  if ((ros_parameters_.hard_stop_singularity_threshold < 0.) || (ros_parameters_.lower_singularity_threshold < 0.))
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_singularity_threshold' "
-                              "and 'singularity_threshold' should be greater than zero.");
+                              "and 'lower_singularity_threshold' should be greater than zero.");
+    return 0;
+  }
+  if (ros_parameters_.hard_stop_collision_proximity_threshold >= ros_parameters_.lower_collision_proximity_threshold)
+  {
+    ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_collision_proximity_threshold' "
+                              "should be less than 'lower_collision_proximity_threshold.'");
+    return 0;
+  }
+  if ((ros_parameters_.hard_stop_collision_proximity_threshold < 0.) || (ros_parameters_.lower_collision_proximity_threshold < 0.))
+  {
+    ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_collision_proximity_threshold' "
+                              "and 'lower_collision_proximity_threshold' should be greater than zero.");
     return 0;
   }
   if (ros_parameters_.low_pass_filter_coeff < 0.)
