@@ -518,8 +518,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
-  if (!verifyJacobianIsWellConditioned(jacobian) ||
-      !checkIfJointsWithinBounds(new_traj_))
+  if (!checkIfJointsWithinBounds(new_traj_))
   {
     halt(new_traj_);
     publishWarning(true);
@@ -726,24 +725,10 @@ double JogCalcs::decelerateForSingularity(const Eigen::MatrixXd& new_jacobian)
   else if ( current_condition_number > parameters_.hard_stop_singularity_threshold )
   {
     velocity_scale = 0;
+    ROS_WARN_NAMED(NODE_NAME, "Close to a singularity. Halting.");
   }
 
   return velocity_scale;
-}
-
-bool JogCalcs::verifyJacobianIsWellConditioned(const Eigen::MatrixXd& new_jacobian)
-{
-  // Very close to singularity, so halt.
-  if ( checkConditionNumber( new_jacobian ) > parameters_.hard_stop_singularity_threshold )
-  {
-    ROS_WARN_STREAM_THROTTLE_NAMED(1, NODE_NAME, ros::this_node::getName() << " Close to a "
-                                                                                "singularity ("
-                                                                             << checkConditionNumber( new_jacobian )
-                                                                             << "). Halting.");
-    return 0;
-  }
-
-  return 1;
 }
 
 bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_jt_traj)

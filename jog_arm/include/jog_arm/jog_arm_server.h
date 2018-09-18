@@ -224,14 +224,6 @@ protected:
 
   bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
 
-  /**
-   *  Verify that the future Jacobian is well-conditioned before moving.
-   *  Slow down if very close to a singularity.
-   *  Stop if extremely close.
-   * @return true if Jacobian is well conditioned, false if not
-   */
-  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& new_jacobian);
-
   // Calculate a velocity scaling factor, due to proximity of a singularity
   double decelerateForSingularity(const Eigen::MatrixXd& new_jacobian);
 
