@@ -881,12 +881,12 @@ void JogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
-  shared_variables_.zero_trajectory_flag = false; //shared_variables_.command_deltas.twist.linear.x == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.linear.y == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.linear.z == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.angular.x == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.angular.y == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.angular.z == 0.0;
+  shared_variables_.zero_trajectory_flag = shared_variables_.command_deltas.twist.linear.x == 0.0 &&
+                                           shared_variables_.command_deltas.twist.linear.y == 0.0 &&
+                                           shared_variables_.command_deltas.twist.linear.z == 0.0 &&
+                                           shared_variables_.command_deltas.twist.angular.x == 0.0 &&
+                                           shared_variables_.command_deltas.twist.angular.y == 0.0 &&
+                                           shared_variables_.command_deltas.twist.angular.z == 0.0;
   pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
 
   // unlock mutex locked before all zero check
@@ -903,11 +903,11 @@ void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
   shared_variables_.joint_command_deltas.header.frame_id = ros_parameters_.command_frame;
 
   // Check if joint inputs is all zeros. Flag it if so to skip calculations/publication
-  bool all_zeros = false; // true;
-  // for (double delta : shared_variables_.joint_command_deltas.deltas)
-  // {
-  //   all_zeros &= (delta == 0.0);
-  // };
+  bool all_zeros = true;
+  for (double delta : shared_variables_.joint_command_deltas.deltas)
+  {
+    all_zeros &= (delta == 0.0);
+  };
   pthread_mutex_lock(&shared_variables_.zero_joint_trajectory_flag_mutex);
   shared_variables_.zero_joint_trajectory_flag = all_zeros;
   pthread_mutex_unlock(&shared_variables_.zero_joint_trajectory_flag_mutex);
