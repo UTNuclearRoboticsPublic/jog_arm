@@ -92,7 +92,7 @@ struct jog_arm_parameters
       warning_topic, joint_command_in_topic;
   double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
       low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
-  bool gazebo, collision_check, publish_joint_positions, publish_joint_velocities;
+  bool gazebo, collision_check, publish_joint_positions, publish_joint_velocities, calculate_with_zero_deltas;
 };
 
 /**

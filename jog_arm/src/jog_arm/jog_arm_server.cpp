@@ -879,15 +879,22 @@ void JogROSInterface::deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg)
   // Input frame determined by YAML file:
   shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
 
-  // Check if input is all zeros. Flag it if so to skip calculations/publication
-  pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
-  shared_variables_.zero_trajectory_flag = false; //shared_variables_.command_deltas.twist.linear.x == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.linear.y == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.linear.z == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.angular.x == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.angular.y == 0.0 &&
-                                          //  shared_variables_.command_deltas.twist.angular.z == 0.0;
-  pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
+  if (ros_parameters_.calculate_with_zero_deltas)
+  {
+    shared_variables_.zero_trajectory_flag = false;
+  }
+  else
+  {
+    // Check if input is all zeros. Flag it if so to skip calculations/publication
+    pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
+    shared_variables_.zero_trajectory_flag = shared_variables_.command_deltas.twist.linear.x == 0.0 &&
+                                             shared_variables_.command_deltas.twist.linear.y == 0.0 &&
+                                             shared_variables_.command_deltas.twist.linear.z == 0.0 &&
+                                             shared_variables_.command_deltas.twist.angular.x == 0.0 &&
+                                             shared_variables_.command_deltas.twist.angular.y == 0.0 &&
+                                             shared_variables_.command_deltas.twist.angular.z == 0.0;
+    pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
+  }
 
   // unlock mutex locked before all zero check
   pthread_mutex_unlock(&shared_variables_.command_deltas_mutex);
@@ -901,13 +908,22 @@ void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
   shared_variables_.joint_command_deltas = *msg;
   // Input frame determined by YAML file
   shared_variables_.joint_command_deltas.header.frame_id = ros_parameters_.command_frame;
+  bool all_zeros;
 
-  // Check if joint inputs is all zeros. Flag it if so to skip calculations/publication
-  bool all_zeros = false; // true;
-  // for (double delta : shared_variables_.joint_command_deltas.deltas)
-  // {
-  //   all_zeros &= (delta == 0.0);
-  // };
+  if (ros_parameters_.calculate_with_zero_deltas)
+  {
+    all_zeros = false;
+  }
+  else
+  {
+    // Check if joint inputs is all zeros. Flag it if so to skip calculations/publication
+    all_zeros = true;
+    for (double delta : shared_variables_.joint_command_deltas.deltas)
+    {
+      all_zeros &= (delta == 0.0);
+    }
+  }
+
   pthread_mutex_lock(&shared_variables_.zero_joint_trajectory_flag_mutex);
   shared_variables_.zero_joint_trajectory_flag = all_zeros;
   pthread_mutex_unlock(&shared_variables_.zero_joint_trajectory_flag_mutex);
@@ -967,6 +983,7 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_positions", ros_parameters_.publish_joint_positions);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_velocities", ros_parameters_.publish_joint_velocities);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/calculate_with_zero_deltas", ros_parameters_.calculate_with_zero_deltas);
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
