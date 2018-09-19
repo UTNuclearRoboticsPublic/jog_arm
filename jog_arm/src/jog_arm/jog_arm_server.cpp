@@ -199,7 +199,8 @@ CollisionCheckThread::CollisionCheckThread(const jog_arm_parameters& parameters,
     ros::topic::waitForMessage<geometry_msgs::TwistStamped>(parameters.cartesian_command_in_topic);
     ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
-    jog_arm::LowPassFilter velocity_scale_filter(40);
+    // A very low cutoff frequency
+    jog_arm::LowPassFilter velocity_scale_filter(20);
     // Assume no scaling, initially
     velocity_scale_filter.reset( 1 );
     ros::Rate collision_rate(100);
@@ -249,12 +250,9 @@ CollisionCheckThread::CollisionCheckThread(const jog_arm_parameters& parameters,
       else if (velocity_scale < 0.05)
         velocity_scale = 0.05;
 
-      // Stop if actually in collision
+      // Very slow if actually in collision
       if (collision_result.collision)
-      {
-        velocity_scale = 0;
-        ROS_WARN_STREAM_NAMED(NODE_NAME, "Robot is in collision. Halting.");
-      }
+        velocity_scale = 0.02;
 
       pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
       shared_variables.collision_velocity_scale = velocity_scale;
