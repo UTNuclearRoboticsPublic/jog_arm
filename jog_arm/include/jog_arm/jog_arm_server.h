@@ -88,8 +88,8 @@ struct jog_arm_shared
 // ROS params to be read
 struct jog_arm_parameters
 {
-  std::string move_group_name, joint_topic, cartesian_command_in_topic, command_frame, command_out_topic, planning_frame,
-      warning_topic, joint_command_in_topic, command_in_type;
+  std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
+      warning_topic, joint_command_in_topic;
   double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
       low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check, publish_joint_positions, publish_joint_velocities;
@@ -112,7 +112,7 @@ private:
   void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
   void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
-  bool readParameters(ros::NodeHandle& n);
+  int readParameters(ros::NodeHandle& n);
 
   // Jogging calculation thread
   static void* jogCalcThread(void* thread_id);
@@ -201,7 +201,7 @@ protected:
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
-  Eigen::VectorXd scaleCartesianCommand(const geometry_msgs::TwistStamped& command) const;
+  Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
 
   Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
