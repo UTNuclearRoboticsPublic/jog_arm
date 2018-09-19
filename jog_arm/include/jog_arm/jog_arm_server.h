@@ -69,8 +69,8 @@ struct jog_arm_shared
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
-  bool imminent_collision;
-  pthread_mutex_t imminent_collision_mutex;
+  double collision_velocity_scale = 1;
+  pthread_mutex_t collision_velocity_scale_mutex;
 
   bool zero_trajectory_flag = true;
   pthread_mutex_t zero_trajectory_flag_mutex;
@@ -90,8 +90,9 @@ struct jog_arm_parameters
 {
   std::string move_group_name, joint_topic, cartesian_command_in_topic, command_frame, command_out_topic, planning_frame,
       warning_topic, joint_command_in_topic, command_in_type;
-  double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
-      low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
+  double linear_scale, rotational_scale, joint_scale, lower_singularity_threshold, hard_stop_singularity_threshold,
+      lower_collision_proximity_threshold, hard_stop_collision_proximity_threshold, low_pass_filter_coeff,
+      publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check, publish_joint_positions, publish_joint_velocities;
 };
 
@@ -118,7 +119,7 @@ private:
   static void* jogCalcThread(void* thread_id);
 
   // Collision checking thread
-  static void* collisionCheckThread(void* thread_id);
+  static void* CollisionCheckThread(void* thread_id);
 
   // Variables to share between threads
   static struct jog_arm_shared shared_variables_;
@@ -217,23 +218,17 @@ protected:
 
   // Avoid a singularity or other issue.
   // Needs to be handled differently for position vs. velocity control
-  void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
+  void halt(trajectory_msgs::JointTrajectory& jt_traj);
 
   void publishWarning(bool active) const;
 
   bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
 
-  /**
-   *  Verify that the future Jacobian is well-conditioned before moving.
-   *  Slow down if very close to a singularity.
-   *  Stop if extremely close.
-   * @return true if Jacobian is well conditioned, false if not
-   */
-  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
-                                       const Eigen::MatrixXd& new_jacobian,
-                                       trajectory_msgs::JointTrajectory& new_jt_traj);
+  // Calculate a velocity scaling factor, due to proximity of a singularity
+  double decelerateForSingularity(const Eigen::MatrixXd& new_jacobian);
 
-  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
+  // Apply velocity scaling for proximity of collisions and singularities
+  bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,  const Eigen::VectorXd& delta_theta, double singularity_scale);
 
   trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
                                                           const ros::Time& stamp) const;
@@ -261,10 +256,10 @@ protected:
   jog_arm_parameters parameters_;
 };
 
-class collisionCheckThread
+class CollisionCheckThread
 {
 public:
-  collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
+  CollisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
 };
 
 }  // namespace jog_arm
