@@ -42,6 +42,7 @@
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H
 
+#include <Eigen/Eigenvalues>
 #include <jog_msgs/JogJoint.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
@@ -210,8 +211,6 @@ protected:
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
-  double checkConditionNumber(const Eigen::MatrixXd& matrix) const;
-
   // Reset the data stored in low-pass filters so the trajectory won't jump when
   // jogging is resumed.
   void resetVelocityFilters();
@@ -224,8 +223,8 @@ protected:
 
   bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
 
-  // Calculate a velocity scaling factor, due to proximity of a singularity
-  double decelerateForSingularity(const Eigen::MatrixXd& new_jacobian);
+  // Possibly calculate a velocity scaling factor, due to proximity of singularity and direction of motion
+  double decelerateForSingularity(const Eigen::MatrixXd& new_jacobian, const Eigen::VectorXd commanded_velocity);
 
   // Apply velocity scaling for proximity of collisions and singularities
   bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,  const Eigen::VectorXd& delta_theta, double singularity_scale);
