@@ -498,13 +498,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd old_jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::MatrixXd pseudo_inverse = pseudoInverse(old_jacobian);
-  Eigen::VectorXd delta_theta = pseudo_inverse * delta_x;
-
-  // Find the direction away from singularity.
-  // The last column of U from the SVD of the Jacobian points away from the singularity
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(old_jacobian, Eigen::ComputeThinU);
-  ROS_INFO_STREAM("Direction away from singularity: " << std::endl << svd.matrixU().col(5) << std::endl);
+  Eigen::VectorXd delta_theta = pseudoInverse(old_jacobian) * delta_x;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -531,7 +525,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
     publishWarning(false);
 
   // If close to a collision or a singularity, decelerate
-  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian) );
+  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian, delta_x) );
 
   // If using Gazebo simulator, insert redundant points
   if (parameters_.gazebo)
@@ -709,27 +703,37 @@ bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory
   return 1;
 }
 
-// Calculate a velocity scaling factor, due to proximity of a singularity
-double JogCalcs::decelerateForSingularity(const Eigen::MatrixXd& new_jacobian)
+// Possibly calculate a velocity scaling factor, due to proximity of singularity and direction of motion
+double JogCalcs::decelerateForSingularity(const Eigen::MatrixXd& new_jacobian, const Eigen::VectorXd commanded_velocity)
 {
   double velocity_scale = 1;
 
-  // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
-  // hard_stop_singularity_threshold
-  double current_condition_number = checkConditionNumber( new_jacobian );
-  if ((current_condition_number > parameters_.lower_singularity_threshold) &&
-      (current_condition_number < parameters_.hard_stop_singularity_threshold))
-  {
-    velocity_scale = 1. -
-                            (current_condition_number - parameters_.lower_singularity_threshold) /
-                                (parameters_.hard_stop_singularity_threshold - parameters_.lower_singularity_threshold);
-  }
+  // Find the direction away from nearest singularity.
+  // The last column of U from the SVD of the Jacobian points away from the singularity
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(new_jacobian, Eigen::ComputeThinU);
+  Eigen::VectorXd vector_away_from_singularity = svd.matrixU().col(5);
+  // If this dot product is positive, we're moving away from singularity ==> do not decelerate
+  double dot = vector_away_from_singularity.dot(commanded_velocity);
 
-  // Very close to singularity, so halt.
-  else if ( current_condition_number > parameters_.hard_stop_singularity_threshold )
+  if (dot<0)
   {
-    velocity_scale = 0;
-    ROS_WARN_NAMED(NODE_NAME, "Close to a singularity. Halting.");
+    // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
+    // hard_stop_singularity_threshold, and we're moving towards the singularity
+    double condition_number = svd.singularValues()(0)/svd.singularValues()(svd.singularValues().size()-1);
+    if ((condition_number > parameters_.lower_singularity_threshold) &&
+        (condition_number < parameters_.hard_stop_singularity_threshold))
+    {
+      velocity_scale = 1. -
+                              (condition_number - parameters_.lower_singularity_threshold) /
+                                  (parameters_.hard_stop_singularity_threshold - parameters_.lower_singularity_threshold);
+    }
+
+    // Very close to singularity, so halt.
+    else if ( condition_number > parameters_.hard_stop_singularity_threshold )
+    {
+      velocity_scale = 0;
+      ROS_WARN_NAMED(NODE_NAME, "Close to a singularity. Halting.");
+    }
   }
 
   return velocity_scale;
@@ -916,12 +920,6 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::
   }
 
   return 1;
-}
-
-// Calculate the condition number of the jacobian, to check for singularities
-double JogCalcs::checkConditionNumber(const Eigen::MatrixXd& matrix) const
-{
-  return pseudoInverse(matrix).norm() * matrix.norm();
 }
 
 // Listen to cartesian delta commands.
