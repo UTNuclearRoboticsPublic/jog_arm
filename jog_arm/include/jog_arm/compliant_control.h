@@ -47,9 +47,6 @@
  * wrench[i]/stiffness[i]
  */
 
-#include <float.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/WrenchStamped.h>
 #include <math.h>
 #include <ros/ros.h>

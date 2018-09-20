@@ -33,9 +33,6 @@
 #ifndef JOG_API_H
 #define JOG_API_H
 
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/Vector3Stamped.h>
-#include <geometry_msgs/WrenchStamped.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <ros/ros.h>
 #include <std_msgs/Float64.h>

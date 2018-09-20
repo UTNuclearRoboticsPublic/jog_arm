@@ -5,12 +5,7 @@ project(jog_api)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  moveit_ros_manipulation
-  moveit_ros_move_group
   moveit_ros_planning_interface
-  cmake_modules
-  tf
   tf2_geometry_msgs
 )
 
@@ -125,6 +120,7 @@ include_directories(
 
 ## Declare a C++ library
 add_library(jog_api src/${PROJECT_NAME}/jog_api.cpp)
+target_link_libraries(jog_api ${Eigen_LIBRARIES})
 
 add_executable(jog_api_example src/${PROJECT_NAME}/jog_api_example.cpp)
 add_dependencies(jog_api_example ${catkin_EXPORTED_TARGETS})

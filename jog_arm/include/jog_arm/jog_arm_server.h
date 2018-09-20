@@ -42,17 +42,13 @@
 #ifndef JOG_ARM_SERVER_H
 #define JOG_ARM_SERVER_H
 
-#include <cmath>
 #include <Eigen/Eigenvalues>
-#include <geometry_msgs/Twist.h>
 #include <jog_msgs/JogJoint.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene/planning_scene.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <moveit/robot_state/robot_state.h>
-#include <pthread.h>
-#include <ros/ros.h>
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
@@ -76,8 +72,8 @@ struct jog_arm_shared
   sensor_msgs::JointState joints;
   pthread_mutex_t joints_mutex;
 
-  bool imminent_collision;
-  pthread_mutex_t imminent_collision_mutex;
+  double collision_velocity_scale = 1;
+  pthread_mutex_t collision_velocity_scale_mutex;
 
   bool zero_trajectory_flag = true;
   pthread_mutex_t zero_trajectory_flag_mutex;
@@ -99,10 +95,11 @@ struct jog_arm_shared
 // ROS params to be read
 struct jog_arm_parameters
 {
-  std::string move_group_name, joint_topic, command_in_topic, command_frame, command_out_topic, planning_frame,
-      warning_topic, joint_command_in_topic;
-  double linear_scale, rotational_scale, joint_scale, singularity_threshold, hard_stop_singularity_threshold,
-      low_pass_filter_coeff, publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
+  std::string move_group_name, joint_topic, cartesian_command_in_topic, command_frame, command_out_topic, planning_frame,
+      warning_topic, joint_command_in_topic, command_in_type;
+  double linear_scale, rotational_scale, joint_scale, lower_singularity_threshold, hard_stop_singularity_threshold,
+      lower_collision_proximity_threshold, hard_stop_collision_proximity_threshold, low_pass_filter_coeff,
+      publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
   bool gazebo, collision_check, publish_joint_positions, publish_joint_velocities;
 };
 
@@ -123,16 +120,19 @@ private:
   void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
   void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
-  int readParameters(ros::NodeHandle& n);
+  bool readParameters(ros::NodeHandle& n);
 
   // Jogging calculation thread
-  static void* joggingPipeline(void* thread_id);
+  static void* jogCalcThread(void* thread_id);
 
   // Collision checking thread
-  static void* collisionCheck(void* thread_id);
+  static void* CollisionCheckThread(void* thread_id);
 
   // Variables to share between threads
   static struct jog_arm_shared shared_variables_;
+
+  //static robot_model_loader::RobotModelLoader *model_loader_ptr_;
+  static std::unique_ptr<robot_model_loader::RobotModelLoader> model_loader_ptr_;
 };
 
 /**
@@ -191,7 +191,7 @@ double LowPassFilter::filter(const double new_msrmt)
 class JogCalcs
 {
 public:
-  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables);
+  JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
 
 protected:
   ros::NodeHandle nh_;
@@ -209,7 +209,7 @@ protected:
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
-  Eigen::VectorXd scaleCommand(const geometry_msgs::TwistStamped& command) const;
+  Eigen::VectorXd scaleCartesianCommand(const geometry_msgs::TwistStamped& command) const;
 
   Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
@@ -217,31 +217,23 @@ protected:
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
-  double checkConditionNumber(const Eigen::MatrixXd& matrix) const;
-
   // Reset the data stored in low-pass filters so the trajectory won't jump when
   // jogging is resumed.
   void resetVelocityFilters();
 
   // Avoid a singularity or other issue.
   // Needs to be handled differently for position vs. velocity control
-  void avoidIssue(trajectory_msgs::JointTrajectory& jt_traj);
+  void halt(trajectory_msgs::JointTrajectory& jt_traj);
 
   void publishWarning(bool active) const;
 
   bool checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory_<std::allocator<void>>& new_jt_traj);
 
-  /**
-   *  Verify that the future Jacobian is well-conditioned before moving.
-   *  Slow down if very close to a singularity.
-   *  Stop if extremely close.
-   * @return true if Jacobian is well conditioned, false if not
-   */
-  bool verifyJacobianIsWellConditioned(const Eigen::MatrixXd& old_jacobian, const Eigen::VectorXd& delta_theta,
-                                       const Eigen::MatrixXd& new_jacobian,
-                                       trajectory_msgs::JointTrajectory& new_jt_traj);
+  // Possibly calculate a velocity scaling factor, due to proximity of singularity and direction of motion
+  double decelerateForSingularity(const Eigen::MatrixXd& new_jacobian, const Eigen::VectorXd commanded_velocity);
 
-  bool checkIfImminentCollision(jog_arm_shared& shared_variables);
+  // Apply velocity scaling for proximity of collisions and singularities
+  bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,  const Eigen::VectorXd& delta_theta, double singularity_scale);
 
   trajectory_msgs::JointTrajectory composeOutgoingMessage(sensor_msgs::JointState& joint_state,
                                                           const ros::Time& stamp) const;
@@ -269,10 +261,10 @@ protected:
   jog_arm_parameters parameters_;
 };
 
-class CollisionCheck
+class CollisionCheckThread
 {
 public:
-  CollisionCheck(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables);
+  CollisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
 };
 
 }  // namespace jog_arm
