@@ -498,7 +498,13 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd old_jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::VectorXd delta_theta = pseudoInverse(old_jacobian) * delta_x;
+  Eigen::MatrixXd pseudo_inverse = pseudoInverse(old_jacobian);
+  Eigen::VectorXd delta_theta = pseudo_inverse * delta_x;
+
+  // Find the direction away from singularity.
+  // The last column of U from the SVD of the Jacobian points away from the singularity
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(old_jacobian, Eigen::ComputeThinU);
+  ROS_INFO_STREAM("Direction away from singularity: " << std::endl << svd.matrixU().col(5) << std::endl);
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
