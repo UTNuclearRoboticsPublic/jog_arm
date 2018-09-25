@@ -721,32 +721,71 @@ bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory
 }
 
 // Possibly calculate a velocity scaling factor, due to proximity of singularity and direction of motion
-double JogCalcs::decelerateForSingularity(const Eigen::MatrixXd& new_jacobian, const Eigen::VectorXd commanded_velocity)
+double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity)
 {
   double velocity_scale = 1;
 
   // Find the direction away from nearest singularity.
   // The last column of U from the SVD of the Jacobian points away from the singularity
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(new_jacobian, Eigen::ComputeThinU);
-  Eigen::VectorXd vector_away_from_singularity = svd.matrixU().col(5);
-  // If this dot product is positive, we're moving away from singularity ==> do not decelerate
-  double dot = vector_away_from_singularity.dot(commanded_velocity);
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU);
+  Eigen::VectorXd vector_toward_singularity = svd.matrixU().col(5);
+  
+  double ini_condition = svd.singularValues()(0)/svd.singularValues()(svd.singularValues().size()-1);
 
-  if (dot<0)
+  // This singular vector tends to flip direction unpredictably. See R. Bro, "Resolving the Sign Ambiguity
+  // in the Singular Value Decomposition"
+  // Look ahead to see if the Jacobian's condition will decrease in this direction.
+  // Start with a scaled version of the singular vector
+  Eigen::VectorXd delta_x(6);
+  double scale = 100;
+  delta_x[0] = vector_toward_singularity[0]/scale;
+  delta_x[1] = vector_toward_singularity[1]/scale;
+  delta_x[2] = vector_toward_singularity[2]/scale;
+  delta_x[3] = vector_toward_singularity[3]/scale;
+  delta_x[4] = vector_toward_singularity[4]/scale;
+  delta_x[5] = vector_toward_singularity[5]/scale;
+
+  // Calculate a small change in joints
+  Eigen::VectorXd delta_theta = pseudoInverse( jacobian ) * delta_x;
+
+  double theta [6];
+  const double* prev_joints = kinematic_state_->getVariablePositions();
+  for (std::size_t i = 0, size = static_cast<std::size_t>(delta_theta.size()); i < size; ++i)
+    theta[i] = prev_joints[i]+delta_theta(i);
+
+  kinematic_state_->setVariablePositions( theta );
+  jacobian = kinematic_state_->getJacobian(joint_model_group_);
+  svd = Eigen::JacobiSVD<Eigen::MatrixXd> (jacobian);
+  double new_condition = svd.singularValues()(0)/svd.singularValues()(svd.singularValues().size()-1);
+  // If new_condition < ini_condition, the singular vector does point towards a singularity.
+  //  Otherwise, flip its direction.
+  if ( ini_condition >= new_condition )
+  {
+    vector_toward_singularity[0]*=-1;
+    vector_toward_singularity[1]*=-1;
+    vector_toward_singularity[2]*=-1;
+    vector_toward_singularity[3]*=-1;
+    vector_toward_singularity[4]*=-1;
+    vector_toward_singularity[5]*=-1;
+  }
+
+  // If this dot product is positive, we're moving toward singularity ==> decelerate
+  double dot = vector_toward_singularity.dot(commanded_velocity);
+
+  if (dot>0)
   {
     // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
     // hard_stop_singularity_threshold, and we're moving towards the singularity
-    double condition_number = svd.singularValues()(0)/svd.singularValues()(svd.singularValues().size()-1);
-    if ((condition_number > parameters_.lower_singularity_threshold) &&
-        (condition_number < parameters_.hard_stop_singularity_threshold))
+    if ((ini_condition > parameters_.lower_singularity_threshold) &&
+        (ini_condition < parameters_.hard_stop_singularity_threshold))
     {
       velocity_scale = 1. -
-                              (condition_number - parameters_.lower_singularity_threshold) /
+                              (ini_condition - parameters_.lower_singularity_threshold) /
                                   (parameters_.hard_stop_singularity_threshold - parameters_.lower_singularity_threshold);
     }
 
     // Very close to singularity, so halt.
-    else if ( condition_number > parameters_.hard_stop_singularity_threshold )
+    else if ( ini_condition > parameters_.hard_stop_singularity_threshold )
     {
       velocity_scale = 0;
       ROS_WARN_NAMED(NODE_NAME, "Close to a singularity. Halting.");
