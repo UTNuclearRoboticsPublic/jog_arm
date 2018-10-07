@@ -1,5 +1,6 @@
 gazebo: true # Whether the robot is started in a Gazebo simulation environment
 collision_check: true # Check collisions?
+allow_dropped_DOF: false # Drop a task-space degree of freedom when near singularity, possibly allowing motion to continue?
 command_in_type: "unitless" # "unitless"> in the range [-1:1], as if from joystick. "speed_units"> cmds are in m/s and rad/s
 scale: # Only used if command_in_type=="unitless"
   linear:  0.003  # Max linear velocity. Meters per publish_period. Units is [m/s]

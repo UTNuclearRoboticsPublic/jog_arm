@@ -505,7 +505,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   double singularity_scale = decelerateForSingularity(jacobian, delta_x);
   // If singularity_scale < 1, we're close to a singularity. Try dropping a DOF
   // and recalculating a trajectory with a reduced Jacobian.
-  if (singularity_scale < 1.)
+  if (singularity_scale < 1. && parameters_.allow_dropped_DOF)
   {
     int DOF_to_drop = dropDOF(jacobian);
 
@@ -1115,6 +1115,7 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check", ros_parameters_.collision_check);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/allow_dropped_DOF", ros_parameters_.allow_dropped_DOF);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", ros_parameters_.warning_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_positions", ros_parameters_.publish_joint_positions);
