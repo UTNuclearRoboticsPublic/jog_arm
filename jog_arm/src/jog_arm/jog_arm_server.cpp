@@ -497,8 +497,8 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   orig_jts_ = jt_state_;
 
   // Convert from cartesian commands to joint commands
-  Eigen::MatrixXd old_jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::VectorXd delta_theta = pseudoInverse(old_jacobian) * delta_x;
+  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
+  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -509,12 +509,11 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   lowPassFilterVelocities(joint_vel);
   lowPassFilterPositions();
 
-  // apply several checks to see if new joint state is valid
-  kinematic_state_->setVariableValues(jt_state_);
-  Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-
   const ros::Time next_time = ros::Time::now() + ros::Duration(parameters_.publish_period);
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
+
+  // If close to a collision or a singularity, decelerate
+  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian, delta_x) );
 
   if (!checkIfJointsWithinBounds(new_traj_))
   {
@@ -523,9 +522,6 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   }
   else
     publishWarning(false);
-
-  // If close to a collision or a singularity, decelerate
-  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian, delta_x) );
 
   // If using Gazebo simulator, insert redundant points
   if (parameters_.gazebo)
@@ -754,8 +750,7 @@ double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen:
 
   // If this dot product is positive, we're moving toward singularity ==> decelerate
   double dot = vector_toward_singularity.dot(commanded_velocity);
-
-  if (dot>0)
+  if ( dot>0 )
   {
     // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
     // hard_stop_singularity_threshold, and we're moving towards the singularity
