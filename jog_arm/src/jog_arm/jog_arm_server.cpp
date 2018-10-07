@@ -507,7 +507,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   // and recalculating a trajectory with a reduced Jacobian.
   if (singularity_scale < 1.)
   {
-    int DOF_to_drop = dropDOF(jacobian, delta_x);
+    int DOF_to_drop = dropDOF(jacobian);
 
     // Remove the corresponding DOF from the incoming Cartesian command
     Eigen::VectorXd reduced_delta_x(5);
@@ -516,7 +516,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
       if ( i < DOF_to_drop )
         reduced_delta_x(i) = delta_x(i);
       else if ( i > DOF_to_drop )
-        reduced_delta_x(i-1) = delta_x(i);
+        reduced_delta_x(i) = delta_x(i+1);
     }
 
     // Remove the corresponding column from the pseudoJacobian
@@ -526,7 +526,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
       if ( i < DOF_to_drop )
         reduced_pseudo_inverse.col(i) = pseudo_inverse.col(i);
       else if ( i > DOF_to_drop )
-        reduced_pseudo_inverse.col(i-1) = pseudo_inverse.col(i);
+        reduced_pseudo_inverse.col(i) = pseudo_inverse.col(i+1);
     }
     delta_theta = reduced_pseudo_inverse * reduced_delta_x;
   }
@@ -620,21 +620,34 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
 }
 
 // If close to a singularity, reduce task DOF by 1.
-int JogCalcs::dropDOF(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity)
+int JogCalcs::dropDOF(Eigen::MatrixXd& jacobian)
 {
-  // Sort delta_x by magnitude and drop the smallest.
-  double smallest_yet = fabs(commanded_velocity(0));
-  std::size_t smallest_index = 0;
-  for (std::size_t i=0; i<commanded_velocity.size(); ++i)
+  // Drop the column of largest magnitude
+  double largest_yet = 0;
+  std::size_t largest_index = 0;
+  for (std::size_t i=0; i<jacobian.cols(); ++i)
   {
-    if ( fabs(commanded_velocity(i)) < smallest_yet )
+    double col_magnitude = vectorMagnitude(jacobian.col(i));
+    if ( col_magnitude > largest_yet )
     {
-      smallest_yet = fabs(commanded_velocity(i));
-      smallest_index = i;
+      largest_yet = col_magnitude;
+      largest_index = i;
     }
   }
 
-  return smallest_index;
+  return largest_index;
+}
+
+// Calculate Euclidean norm of a vector
+double JogCalcs::vectorMagnitude(Eigen::VectorXd vec)
+{
+  double mag = 0;
+  for (std::size_t i=0; i<vec.size(); ++i)
+  {
+    mag += vec(i)*vec(i);
+  }
+  mag = pow(mag, 0.5);
+  return 0;
 }
 
 void JogCalcs::haltCartesianJogging()

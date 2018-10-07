@@ -199,7 +199,10 @@ protected:
   bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
   // If close to a singularity, reduce task DOF by 1.
-  int dropDOF(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity);
+  int dropDOF(Eigen::MatrixXd& jacobian);
+
+  // Calculate Euclidean norm of a vector
+  double vectorMagnitude(Eigen::VectorXd vec);
 
   void haltCartesianJogging();
 
