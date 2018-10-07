@@ -198,6 +198,9 @@ protected:
 
   bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
+  // If close to a singularity, reduce task DOF by 1.
+  int dropDOF(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity);
+
   void haltCartesianJogging();
 
   // Parse the incoming joint msg for the joints of our MoveGroup

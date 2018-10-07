@@ -498,7 +498,38 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::MatrixXd pseudo_inverse = pseudoInverse(jacobian);
+  Eigen::VectorXd delta_theta = pseudo_inverse * delta_x;
+
+  // Check proximity to singularity, and calculate a velocity scale based on that proximity
+  double singularity_scale = decelerateForSingularity(jacobian, delta_x);
+  // If singularity_scale < 1, we're close to a singularity. Try dropping a DOF
+  // and recalculating a trajectory with a reduced Jacobian.
+  if (singularity_scale < 1.)
+  {
+    int DOF_to_drop = dropDOF(jacobian, delta_x);
+
+    // Remove the corresponding DOF from the incoming Cartesian command
+    Eigen::VectorXd reduced_delta_x(5);
+    for (std::size_t i=0; i<reduced_delta_x.size(); ++i)
+    {
+      if ( i < DOF_to_drop )
+        reduced_delta_x(i) = delta_x(i);
+      else if ( i > DOF_to_drop )
+        reduced_delta_x(i-1) = delta_x(i);
+    }
+
+    // Remove the corresponding column from the pseudoJacobian
+    Eigen::MatrixXd reduced_pseudo_inverse ( pseudo_inverse.rows(), pseudo_inverse.cols()-1 );
+    for (std::size_t i=0; i<reduced_pseudo_inverse.cols(); ++i)
+    {
+      if ( i < DOF_to_drop )
+        reduced_pseudo_inverse.col(i) = pseudo_inverse.col(i);
+      else if ( i > DOF_to_drop )
+        reduced_pseudo_inverse.col(i-1) = pseudo_inverse.col(i);
+    }
+    delta_theta = reduced_pseudo_inverse * reduced_delta_x;
+  }
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -513,7 +544,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // If close to a collision or a singularity, decelerate
-  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian, delta_x) );
+  applyVelocityScaling( shared_variables, new_traj_, delta_theta, singularity_scale );
 
   if (!checkIfJointsWithinBounds(new_traj_))
   {
@@ -586,6 +617,24 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
 
   last_jts_ = jt_state_;  // save state for end of jog
   return 1;
+}
+
+// If close to a singularity, reduce task DOF by 1.
+int JogCalcs::dropDOF(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity)
+{
+  // Sort delta_x by magnitude and drop the smallest.
+  double smallest_yet = fabs(commanded_velocity(0));
+  std::size_t smallest_index = 0;
+  for (std::size_t i=0; i<commanded_velocity.size(); ++i)
+  {
+    if ( fabs(commanded_velocity(i)) < smallest_yet )
+    {
+      smallest_yet = fabs(commanded_velocity(i));
+      smallest_index = i;
+    }
+  }
+
+  return smallest_index;
 }
 
 void JogCalcs::haltCartesianJogging()
