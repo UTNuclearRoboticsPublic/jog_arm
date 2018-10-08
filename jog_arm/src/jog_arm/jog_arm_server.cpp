@@ -812,8 +812,9 @@ double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen:
 
   // If this dot product is positive, we're moving toward singularity ==> decelerate
   double dot = vector_toward_singularity.dot(commanded_velocity);
-  if ( dot>0 )
-  {
+  // This dot product approach leads to jerky motion when switching back & forth between positive & negative
+  //if ( dot > 0 )
+  //{
     // Ramp velocity down linearly when the Jacobian condition is between lower_singularity_threshold and
     // hard_stop_singularity_threshold, and we're moving towards the singularity
     if ((ini_condition > parameters_.lower_singularity_threshold) &&
@@ -830,7 +831,7 @@ double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen:
       velocity_scale = 0;
       ROS_WARN_NAMED(NODE_NAME, "Close to a singularity. Halting.");
     }
-  }
+  //}
 
   return velocity_scale;
 }
