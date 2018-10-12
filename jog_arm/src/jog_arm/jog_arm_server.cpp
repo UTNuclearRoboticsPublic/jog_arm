@@ -110,6 +110,12 @@ JogROSInterface::JogROSInterface()
   // Publish freshly-calculated joints to the robot
   ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(ros_parameters_.command_out_topic, 1);
 
+  //std::unique_ptr<Hardware> hardware(1 == userHwType ? new Hardware1() : 
+  //                                                   new Hardware2());
+
+  //std::unique_ptr<ros::Publisher> joint_trajectory_pub("trajectory_msgs/JointTrajectory" == "trajectory_msgs/JointTrajectory" ? new Hardware1() : 
+  //                                                   new Hardware2());
+
   // Wait for jog filters to stabilize
   ros::Duration(10 * ros_parameters_.publish_period).sleep();
 
@@ -1040,7 +1046,6 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_frame", ros_parameters_.command_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/incoming_command_timeout",
                                     ros_parameters_.incoming_command_timeout);
-  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_topic", ros_parameters_.command_out_topic);
   error +=
       !rosparam_shortcuts::get("", n, parameter_ns + "/lower_singularity_threshold", ros_parameters_.lower_singularity_threshold);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/hard_stop_singularity_threshold",
@@ -1055,11 +1060,12 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check", ros_parameters_.collision_check);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", ros_parameters_.warning_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_topic", ros_parameters_.command_out_topic);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_type", ros_parameters_.command_out_type);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_positions", ros_parameters_.publish_joint_positions);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_velocities", ros_parameters_.publish_joint_velocities);
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
-
 
   // Set the input frame, as determined by YAML file:
   pthread_mutex_lock(&shared_variables_.new_traj_mutex);

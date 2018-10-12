@@ -90,7 +90,7 @@ struct jog_arm_shared
 struct jog_arm_parameters
 {
   std::string move_group_name, joint_topic, cartesian_command_in_topic, command_frame, command_out_topic, planning_frame,
-      warning_topic, joint_command_in_topic, command_in_type;
+      warning_topic, joint_command_in_topic, command_in_type, command_out_type;
   double linear_scale, rotational_scale, joint_scale, lower_singularity_threshold, hard_stop_singularity_threshold,
       lower_collision_proximity_threshold, hard_stop_collision_proximity_threshold, low_pass_filter_coeff,
       publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
@@ -259,6 +259,16 @@ class CollisionCheckThread
 {
 public:
   CollisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
+};
+
+class JointTrajectoryPublisher: public ros::Publisher
+{
+public:
+};
+
+class Float64MultiArrayPublisher: public ros::Publisher
+{
+public:
 };
 
 }  // namespace jog_arm
