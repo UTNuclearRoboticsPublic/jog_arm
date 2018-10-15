@@ -108,15 +108,14 @@ JogROSInterface::JogROSInterface()
   ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.cartesian_command_in_topic);
 
   // Publish freshly-calculated joints to the robot
-  ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>(ros_parameters_.command_out_topic, 1);
+  // Put the outgoing msg in the right format (trajectory_msgs/JointTrajectory or std_msgs/Float64MultiArray).
+  ros::Publisher outgoing_cmd_pub;
+  if (ros_parameters_.command_out_type == "trajectory_msgs/JointTrajectory")
+    outgoing_cmd_pub = n.advertise<trajectory_msgs::JointTrajectory>(ros_parameters_.command_out_topic, 1);
+  else if (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
+    outgoing_cmd_pub = n.advertise<std_msgs::Float64MultiArray>(ros_parameters_.command_out_topic, 1);
 
-  //std::unique_ptr<Hardware> hardware(1 == userHwType ? new Hardware1() : 
-  //                                                   new Hardware2());
-
-  //std::unique_ptr<ros::Publisher> joint_trajectory_pub("trajectory_msgs/JointTrajectory" == "trajectory_msgs/JointTrajectory" ? new Hardware1() : 
-  //                                                   new Hardware2());
-
-  // Wait for jog filters to stabilize
+  // Wait for low pass filters to stabilize
   ros::Duration(10 * ros_parameters_.publish_period).sleep();
 
   ros::Rate main_rate(1. / ros_parameters_.publish_period);
@@ -135,12 +134,21 @@ JogROSInterface::JogROSInterface()
     // Check for stale cmds
     if (ros::Time::now() - shared_variables_.new_traj.header.stamp < ros::Duration(ros_parameters_.incoming_command_timeout))
     {
-	    // Publish the most recent trajectory, unless the jogging calculation thread
-	    // tells not to
+	    // Publish the most recent trajectory, unless the jogging calculation thread tells not to
 	    if ( ok_to_publish )
 	    {
-	      new_traj.header.stamp = ros::Time::now();
-	      joint_trajectory_pub.publish(new_traj);
+        // Put the outgoing msg in the right format (trajectory_msgs/JointTrajectory or std_msgs/Float64MultiArray).
+        if (ros_parameters_.command_out_type == "trajectory_msgs/JointTrajectory")
+        {
+	        new_traj.header.stamp = ros::Time::now();
+          outgoing_cmd_pub.publish(new_traj);
+        }
+        else if (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
+        {
+          std_msgs::Float64MultiArray joints;
+          joints.data = new_traj.points[0].velocities;
+          outgoing_cmd_pub.publish(joints);
+        }
 	    }
     }
     else
@@ -1115,6 +1123,11 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   if (ros_parameters_.command_in_type != "unitless" && ros_parameters_.command_in_type != "speed_units")
   {
     ROS_WARN_NAMED(NODE_NAME, "command_in_type should be 'unitless' or 'speed_units'");
+    return 0;
+  }
+  if (ros_parameters_.command_out_type != "trajectory_msgs/JointTrajectory" && ros_parameters_.command_out_type != "std_msgs/Float64MultiArray")
+  {
+    ROS_WARN_NAMED(NODE_NAME, "command_out_type should be 'trajectory_msgs/JointTrajectory' or 'std_msgs/Float64MultiArray'");
     return 0;
   }
 

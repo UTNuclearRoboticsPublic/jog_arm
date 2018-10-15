@@ -53,6 +53,7 @@
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Float64MultiArray.h>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
 
@@ -259,16 +260,6 @@ class CollisionCheckThread
 {
 public:
   CollisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr);
-};
-
-class JointTrajectoryPublisher: public ros::Publisher
-{
-public:
-};
-
-class Float64MultiArrayPublisher: public ros::Publisher
-{
-public:
 };
 
 }  // namespace jog_arm
