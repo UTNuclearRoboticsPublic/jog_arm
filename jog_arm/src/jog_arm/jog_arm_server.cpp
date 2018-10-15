@@ -792,11 +792,7 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
     // Halt if we're past a joint margin and joint velocity is moving even farther past
     if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin))
     {
-      ROS_ERROR_STREAM(std::endl << "velocity: " << kinematic_state_->getJointVelocities(joint)[0]);
-      ROS_ERROR_STREAM("position: " << kinematic_state_->getJointPositions(joint)[0]);
       const std::vector< moveit_msgs::JointLimits > limits = joint->getVariableBoundsMsg();
-      ROS_ERROR_STREAM("Lower bound: " << limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin);
-      ROS_ERROR_STREAM("Upper bound: " << limits[0].max_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin);
 
       if ( ( kinematic_state_->getJointVelocities(joint)[0]<0 && (kinematic_state_->getJointPositions(joint)[0] < (limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
         ||
