@@ -53,6 +53,7 @@
 #include <sensor_msgs/JointState.h>
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Float64MultiArray.h>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
 
@@ -90,7 +91,7 @@ struct jog_arm_shared
 struct jog_arm_parameters
 {
   std::string move_group_name, joint_topic, cartesian_command_in_topic, command_frame, command_out_topic, planning_frame,
-      warning_topic, joint_command_in_topic, command_in_type;
+      warning_topic, joint_command_in_topic, command_in_type, command_out_type;
   double linear_scale, rotational_scale, joint_scale, lower_singularity_threshold, hard_stop_singularity_threshold,
       lower_collision_proximity_threshold, hard_stop_collision_proximity_threshold, low_pass_filter_coeff,
       publish_period, publish_delay, incoming_command_timeout, joint_limit_margin;
@@ -110,7 +111,7 @@ public:
 
 private:
   // ROS subscriber callbacks
-  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
+  void deltaCartesianCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
   void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
   void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
@@ -198,8 +199,6 @@ protected:
 
   bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
-  void haltCartesianJogging();
-
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
@@ -242,7 +241,7 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
 
-  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
+  sensor_msgs::JointState jt_state_, orig_jts_;
   trajectory_msgs::JointTrajectory new_traj_;
 
   tf::TransformListener listener_;
