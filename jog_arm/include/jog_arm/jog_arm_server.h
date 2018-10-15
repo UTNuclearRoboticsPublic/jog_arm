@@ -111,7 +111,7 @@ public:
 
 private:
   // ROS subscriber callbacks
-  void deltaCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
+  void deltaCartesianCmdCB(const geometry_msgs::TwistStampedConstPtr& msg);
   void deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg);
   void jointsCB(const sensor_msgs::JointStateConstPtr& msg);
 
@@ -199,8 +199,6 @@ protected:
 
   bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
 
-  void haltCartesianJogging();
-
   // Parse the incoming joint msg for the joints of our MoveGroup
   bool updateJoints();
 
@@ -243,7 +241,7 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
 
-  sensor_msgs::JointState jt_state_, orig_jts_, last_jts_;
+  sensor_msgs::JointState jt_state_, orig_jts_;
   trajectory_msgs::JointTrajectory new_traj_;
 
   tf::TransformListener listener_;
