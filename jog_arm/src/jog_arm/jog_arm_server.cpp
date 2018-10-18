@@ -132,7 +132,7 @@ JogROSInterface::JogROSInterface()
 	  pthread_mutex_unlock(&shared_variables_.ok_to_publish_mutex);
 
     // Check for stale cmds
-    if (ros::Time::now() - shared_variables_.new_traj.header.stamp < ros::Duration(ros_parameters_.incoming_command_timeout))
+    if ( (ros::Time::now() - shared_variables_.new_traj.header.stamp) < ros::Duration(ros_parameters_.incoming_command_timeout))
     {
 	    // Publish the most recent trajectory, unless the jogging calculation thread tells not to
 	    if ( ok_to_publish )
@@ -968,6 +968,7 @@ void JogROSInterface::deltaCartesianCmdCB(const geometry_msgs::TwistStampedConst
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
 
   shared_variables_.command_deltas.twist = msg->twist;
+  shared_variables_.command_deltas.header.stamp = ros::Time::now();
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
