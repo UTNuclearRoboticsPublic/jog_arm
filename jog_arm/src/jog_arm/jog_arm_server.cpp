@@ -656,7 +656,7 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
 {
   trajectory_msgs::JointTrajectory new_jt_traj;
   new_jt_traj.header.frame_id = parameters_.planning_frame;
-  new_jt_traj.header.stamp = stamp;
+  new_jt_traj.header.stamp = ros::Time::now();
   new_jt_traj.joint_names = joint_state.name;
 
   trajectory_msgs::JointTrajectoryPoint point;
@@ -665,6 +665,14 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
     point.positions = joint_state.position;
   if (parameters_.publish_joint_velocities)
     point.velocities = joint_state.velocity;
+  if (parameters_.publish_joint_accelerations)
+  {
+    // I do not know of a robot that takes acceleration commands.
+    // However, some controllers check that this data is non-empty.
+    // Send all zeros, for now.
+    std::vector<double> acceleration( joint_state.velocity.size() );
+    point.accelerations = acceleration;
+  }
   new_jt_traj.points.push_back(point);
 
   return new_jt_traj;
@@ -1064,6 +1072,7 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/command_out_type", ros_parameters_.command_out_type);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_positions", ros_parameters_.publish_joint_positions);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_velocities", ros_parameters_.publish_joint_velocities);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_accelerations", ros_parameters_.publish_joint_accelerations);
 
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
@@ -1076,50 +1085,50 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   if (ros_parameters_.hard_stop_singularity_threshold < ros_parameters_.lower_singularity_threshold)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_singularity_threshold' "
-                              "should be greater than 'lower_singularity_threshold.'");
+                              "should be greater than 'lower_singularity_threshold.' Check yaml file.");
     return 0;
   }
   if ((ros_parameters_.hard_stop_singularity_threshold < 0.) || (ros_parameters_.lower_singularity_threshold < 0.))
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_singularity_threshold' "
-                              "and 'lower_singularity_threshold' should be greater than zero.");
+                              "and 'lower_singularity_threshold' should be greater than zero. Check yaml file.");
     return 0;
   }
   if (ros_parameters_.hard_stop_collision_proximity_threshold >= ros_parameters_.lower_collision_proximity_threshold)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_collision_proximity_threshold' "
-                              "should be less than 'lower_collision_proximity_threshold.'");
+                              "should be less than 'lower_collision_proximity_threshold.' Check yaml file.");
     return 0;
   }
   if ((ros_parameters_.hard_stop_collision_proximity_threshold < 0.) || (ros_parameters_.lower_collision_proximity_threshold < 0.))
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_collision_proximity_threshold' "
-                              "and 'lower_collision_proximity_threshold' should be greater than zero.");
+                              "and 'lower_collision_proximity_threshold' should be greater than zero. Check yaml file.");
     return 0;
   }
   if (ros_parameters_.low_pass_filter_coeff < 0.)
   {
-    ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be greater than zero.");
+    ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be greater than zero. Check yaml file.");
     return 0;
   }
   if (ros_parameters_.joint_limit_margin > 0.)
   {
-    ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero.");
-    return 0;
-  }
-  if (!ros_parameters_.publish_joint_positions && !ros_parameters_.publish_joint_velocities)
-  {
-    ROS_WARN_NAMED(NODE_NAME, "Publishing is not enabled for joint positions nor joint velocities.");
+    ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero. Check yaml file.");
     return 0;
   }
   if (ros_parameters_.command_in_type != "unitless" && ros_parameters_.command_in_type != "speed_units")
   {
-    ROS_WARN_NAMED(NODE_NAME, "command_in_type should be 'unitless' or 'speed_units'");
+    ROS_WARN_NAMED(NODE_NAME, "command_in_type should be 'unitless' or 'speed_units'. Check yaml file.");
     return 0;
   }
   if (ros_parameters_.command_out_type != "trajectory_msgs/JointTrajectory" && ros_parameters_.command_out_type != "std_msgs/Float64MultiArray")
   {
-    ROS_WARN_NAMED(NODE_NAME, "Parameter command_out_type should be 'trajectory_msgs/JointTrajectory' or 'std_msgs/Float64MultiArray'");
+    ROS_WARN_NAMED(NODE_NAME, "Parameter command_out_type should be 'trajectory_msgs/JointTrajectory' or 'std_msgs/Float64MultiArray'. Check yaml file.");
+    return 0;
+  }
+  if (!ros_parameters_.publish_joint_positions && !ros_parameters_.publish_joint_velocities && !ros_parameters_.publish_joint_accelerations)
+  {
+    ROS_WARN_NAMED(NODE_NAME, "At least one of publish_joint_positions / publish_joint_velocities / publish_joint_accelerations must be true. Check yaml file.");
     return 0;
   }
 
