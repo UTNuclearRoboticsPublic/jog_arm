@@ -132,7 +132,7 @@ JogROSInterface::JogROSInterface()
 	  pthread_mutex_unlock(&shared_variables_.ok_to_publish_mutex);
 
     // Check for stale cmds
-    if ( (ros::Time::now() - shared_variables_.new_traj.header.stamp) < ros::Duration(ros_parameters_.incoming_command_timeout))
+    if ((ros::Time::now() - shared_variables_.new_traj.header.stamp) < ros::Duration(ros_parameters_.incoming_command_timeout))
     {
 	    // Publish the most recent trajectory, unless the jogging calculation thread tells not to
 	    if ( ok_to_publish )
@@ -656,7 +656,7 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
 {
   trajectory_msgs::JointTrajectory new_jt_traj;
   new_jt_traj.header.frame_id = parameters_.planning_frame;
-  new_jt_traj.header.stamp = ros::Time::now();
+  new_jt_traj.header.stamp = stamp;
   new_jt_traj.joint_names = joint_state.name;
 
   trajectory_msgs::JointTrajectoryPoint point;
@@ -794,23 +794,38 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
           break;
         }
       }
-
     }
 
     // Halt if we're past a joint margin and joint velocity is moving even farther past
+    double joint_angle = 0;
+    for (std::size_t c = 0; c < new_jt_traj.joint_names.size(); ++c)
+    {
+      if (orig_jts_.name[c] == joint->getName()) {
+        joint_angle = orig_jts_.position.at(c);
+        break;
+      }
+    }
+
     if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin))
     {
       const std::vector< moveit_msgs::JointLimits > limits = joint->getVariableBoundsMsg();
 
-      if ( ( kinematic_state_->getJointVelocities(joint)[0]<0 && (kinematic_state_->getJointPositions(joint)[0] < (limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
-        ||
-        ( kinematic_state_->getJointVelocities(joint)[0]>0 && (kinematic_state_->getJointPositions(joint)[0] > (limits[0].min_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
-      )
+      // Joint limits are not defined for some joints. Skip them.
+      if (limits.size() > 0)
       {
-        ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
-                                                                             << " close to a "
-                                                                                " position limit. Halting.");
-        halting = true;
+        if ( ( kinematic_state_->getJointVelocities(joint)[0]<0 && (joint_angle < (limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
+          ||
+          ( kinematic_state_->getJointVelocities(joint)[0]>0 && (joint_angle > (limits[0].max_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
+        )
+        {
+          ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
+                                                                               << " close to a "
+                                                                                  " position limit. Halting.");
+          ROS_WARN_STREAM(joint_angle);
+          ROS_ERROR_STREAM(limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin);
+          ROS_ERROR_STREAM(limits[0].max_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin);
+          halting = true;
+        }
       }
     }
   }
@@ -976,7 +991,6 @@ void JogROSInterface::deltaCartesianCmdCB(const geometry_msgs::TwistStampedConst
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
 
   shared_variables_.command_deltas.twist = msg->twist;
-  shared_variables_.command_deltas.header.stamp = ros::Time::now();
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
