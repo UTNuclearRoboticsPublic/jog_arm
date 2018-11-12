@@ -146,7 +146,10 @@ JogROSInterface::JogROSInterface()
         else if (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
         {
           std_msgs::Float64MultiArray joints;
-          joints.data = new_traj.points[0].velocities;
+          if (ros_parameters_.publish_joint_positions)
+            joints.data = new_traj.points[0].positions;
+          else if (ros_parameters_.publish_joint_velocities)
+            joints.data = new_traj.points[0].velocities;
           outgoing_cmd_pub.publish(joints);
         }
 	    }
@@ -821,9 +824,6 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
           ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
                                                                                << " close to a "
                                                                                   " position limit. Halting.");
-          ROS_WARN_STREAM(joint_angle);
-          ROS_ERROR_STREAM(limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin);
-          ROS_ERROR_STREAM(limits[0].max_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin);
           halting = true;
         }
       }
@@ -1143,6 +1143,13 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   if (!ros_parameters_.publish_joint_positions && !ros_parameters_.publish_joint_velocities && !ros_parameters_.publish_joint_accelerations)
   {
     ROS_WARN_NAMED(NODE_NAME, "At least one of publish_joint_positions / publish_joint_velocities / publish_joint_accelerations must be true. Check yaml file.");
+    return 0;
+  }
+  if ( (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
+    && ros_parameters_.publish_joint_positions
+    && ros_parameters_.publish_joint_velocities)
+  {
+    ROS_WARN_NAMED(NODE_NAME, "When publishing a std_msgs/Float64MultiArray, you must select positions OR accelerations.");
     return 0;
   }
 
