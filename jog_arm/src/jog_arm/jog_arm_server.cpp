@@ -1149,7 +1149,7 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
     && ros_parameters_.publish_joint_positions
     && ros_parameters_.publish_joint_velocities)
   {
-    ROS_WARN_NAMED(NODE_NAME, "When publishing a std_msgs/Float64MultiArray, you must select positions OR accelerations.");
+    ROS_WARN_NAMED(NODE_NAME, "When publishing a std_msgs/Float64MultiArray, you must select positions OR velocities.");
     return 0;
   }
 
