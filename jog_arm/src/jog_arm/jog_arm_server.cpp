@@ -809,16 +809,16 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
       }
     }
 
-    if (!kinematic_state_->satisfiesPositionBounds(joint, jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin))
+    if (!kinematic_state_->satisfiesPositionBounds(joint, -jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin))
     {
       const std::vector< moveit_msgs::JointLimits > limits = joint->getVariableBoundsMsg();
 
       // Joint limits are not defined for some joints. Skip them.
       if (limits.size() > 0)
       {
-        if ( ( kinematic_state_->getJointVelocities(joint)[0]<0 && (joint_angle < (limits[0].min_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
+        if ( ( kinematic_state_->getJointVelocities(joint)[0]<0 && (joint_angle < (limits[0].min_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
           ||
-          ( kinematic_state_->getJointVelocities(joint)[0]>0 && (joint_angle > (limits[0].max_position+jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
+          ( kinematic_state_->getJointVelocities(joint)[0]>0 && (joint_angle > (limits[0].max_position-jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin) ))
         )
         {
           ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " " << joint->getName()
@@ -1125,9 +1125,9 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be greater than zero. Check yaml file.");
     return 0;
   }
-  if (ros_parameters_.joint_limit_margin > 0.)
+  if (ros_parameters_.joint_limit_margin < 0.)
   {
-    ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be less than zero. Check yaml file.");
+    ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be greater than zero. Check yaml file.");
     return 0;
   }
   if (ros_parameters_.command_in_type != "unitless" && ros_parameters_.command_in_type != "speed_units")
