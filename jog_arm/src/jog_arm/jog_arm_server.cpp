@@ -125,39 +125,45 @@ JogROSInterface::JogROSInterface()
     ros::spinOnce();
 
     trajectory_msgs::JointTrajectory new_traj = shared_variables_.new_traj;
-    bool ok_to_publish = shared_variables_.ok_to_publish;
 
     // Check for stale cmds
-    if ((ros::Time::now() - shared_variables_.new_traj.header.stamp) < ros::Duration(ros_parameters_.incoming_command_timeout))
+    if ((ros::Time::now() - shared_variables_.incoming_cmd_stamp) < ros::Duration(ros_parameters_.incoming_command_timeout))
     {
-	    // Publish the most recent trajectory, unless the jogging calculation thread tells not to
-	    if ( ok_to_publish )
-	    {
-        // Put the outgoing msg in the right format (trajectory_msgs/JointTrajectory or std_msgs/Float64MultiArray).
-        if (ros_parameters_.command_out_type == "trajectory_msgs/JointTrajectory")
-        {
-	        new_traj.header.stamp = ros::Time::now();
-          outgoing_cmd_pub.publish(new_traj);
-        }
-        else if (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
-        {
-          std_msgs::Float64MultiArray joints;
-          if (ros_parameters_.publish_joint_positions)
-            joints.data = new_traj.points[0].positions;
-          else if (ros_parameters_.publish_joint_velocities)
-            joints.data = new_traj.points[0].velocities;
-          outgoing_cmd_pub.publish(joints);
-        }
-	    }
+      // Mark that incoming commands are not stale
+      pthread_mutex_lock(&shared_variables_.command_is_stale_mutex);
+      shared_variables_.command_is_stale = false;
+      pthread_mutex_unlock(&shared_variables_.command_is_stale_mutex);
     }
     else
     {
-      ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale joint "
-                                                   "trajectory msg. Try a larger "
-                                                   "'incoming_command_timeout' parameter.");
-      ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Did input from the "
-                                                   "controller get interrupted? Are "
-                                                   "calculations taking too long?");
+      pthread_mutex_lock(&shared_variables_.command_is_stale_mutex);
+      shared_variables_.command_is_stale = true;
+      pthread_mutex_unlock(&shared_variables_.command_is_stale_mutex);
+    }
+
+    // Publish the most recent trajectory, unless the jogging calculation thread tells not to
+    if ( shared_variables_.ok_to_publish )
+    {
+      // Put the outgoing msg in the right format (trajectory_msgs/JointTrajectory or std_msgs/Float64MultiArray).
+      if (ros_parameters_.command_out_type == "trajectory_msgs/JointTrajectory")
+      {
+        new_traj.header.stamp = ros::Time::now();
+        outgoing_cmd_pub.publish(new_traj);
+      }
+      else if (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
+      {
+        std_msgs::Float64MultiArray joints;
+        if (ros_parameters_.publish_joint_positions)
+          joints.data = new_traj.points[0].positions;
+        else if (ros_parameters_.publish_joint_velocities)
+          joints.data = new_traj.points[0].velocities;
+        outgoing_cmd_pub.publish(joints);
+      }
+    }
+    else
+    {
+      ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale or zero command. "
+                                                   "Try a larger 'incoming_command_timeout' parameter?");
     }
 
     main_rate.sleep();
@@ -344,8 +350,12 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     joint_deltas = shared_variables.joint_command_deltas;
   }
 
+  // Track the number of cycles during which motion has not occurred.
+  // Will avoid re-publishing zero velocities endlessly.
+  int zero_velocity_count = 0;
+  int num_zero_cycles_to_publish = 4;
+
   // Now do jogging calcs
-  bool previous_was_zero_traj = false;
   while (ros::ok())
   {
     // If user commands are all zero, reset the low-pass filters
@@ -367,16 +377,16 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       ros::Duration(0.001).sleep();
     }
 
-    // If there have not been 2 consecutive cycles of all zeros and joint jogging commands are empty
-    if (!previous_was_zero_traj && zero_joint_traj_flag)
+    // If there have not been several consecutive cycles of all zeros and joint jogging commands are empty
+    if ((zero_velocity_count<=num_zero_cycles_to_publish) && zero_joint_traj_flag)
     {
       cartesian_deltas = shared_variables.command_deltas;
 
       if (!cartesianJogCalcs(cartesian_deltas, shared_variables))
         continue;
     }
-    // If there have not been 2 consecutive cycles of all zeros and joint jogging commands are empty
-    else if (!previous_was_zero_traj && !zero_joint_traj_flag)
+    // If there have not been several consecutive cycles of all zeros and joint jogging commands are not empty
+    else if ((zero_velocity_count<=num_zero_cycles_to_publish) && !zero_joint_traj_flag)
     {
       joint_deltas = shared_variables.joint_command_deltas;;
 
@@ -384,9 +394,17 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
         continue;
     }
 
-    // Have all inputs been zero for 2 cycles in a row?
+    // Halt if the command is stale or inputs are all zero, or commands were zero
+    if (shared_variables.command_is_stale || (zero_cartesian_traj_flag && zero_joint_traj_flag))
+    {
+      halt(new_traj_);
+      zero_cartesian_traj_flag = true;
+      zero_joint_traj_flag = true;
+    }
+
+    // Has the velocity command been zero for several cycles in a row?
     // If so, stop publishing so other controllers can take over
-    bool valid_nonzero_trajectory = !(previous_was_zero_traj && zero_cartesian_traj_flag && zero_joint_traj_flag);
+    bool valid_nonzero_trajectory = !((zero_velocity_count>num_zero_cycles_to_publish) && zero_cartesian_traj_flag && zero_joint_traj_flag);
 
     // Send the newest target joints
     if (!new_traj_.joint_names.empty())
@@ -401,14 +419,18 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
         pthread_mutex_unlock(&shared_variables.new_traj_mutex);
         pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
       }
-      // Skip the jogging publication if all inputs have been zero for 2 cycles in a row.
-      else
+      // Skip the jogging publication if all inputs have been zero for several cycles in a row
+      else if (zero_velocity_count > num_zero_cycles_to_publish)
       {
 				shared_variables.ok_to_publish = false;
       }
 
-      // Store last traj message flag to prevent superfluous warnings
-      previous_was_zero_traj = zero_cartesian_traj_flag && zero_joint_traj_flag;
+      // Store last zero-velocity message flag to prevent superfluous warnings.
+      // Cartesian and joint commands must both be zero.
+      if (zero_cartesian_traj_flag && zero_joint_traj_flag)
+        zero_velocity_count += 1;
+      else
+        zero_velocity_count = 0;
     }
 
     // Add a small sleep to avoid 100% CPU usage
@@ -972,8 +994,11 @@ void JogROSInterface::deltaCartesianCmdCB(const geometry_msgs::TwistStampedConst
                                            shared_variables_.command_deltas.twist.angular.z == 0.0;
   pthread_mutex_unlock(&shared_variables_.zero_cartesian_cmd_flag_mutex);
 
-  // unlock mutex locked before all zero check
   pthread_mutex_unlock(&shared_variables_.command_deltas_mutex);
+
+  pthread_mutex_lock(&shared_variables_.incoming_cmd_stamp_mutex);
+  shared_variables_.incoming_cmd_stamp = msg->header.stamp;
+  pthread_mutex_unlock(&shared_variables_.incoming_cmd_stamp_mutex);
 }
 
 // Listen to joint delta commands.
@@ -995,7 +1020,12 @@ void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
   pthread_mutex_lock(&shared_variables_.zero_joint_cmd_flag_mutex);
   shared_variables_.zero_joint_cmd_flag = all_zeros;
   pthread_mutex_unlock(&shared_variables_.zero_joint_cmd_flag_mutex);
+
   pthread_mutex_unlock(&shared_variables_.joint_command_deltas_mutex);
+
+  pthread_mutex_lock(&shared_variables_.incoming_cmd_stamp_mutex);
+  shared_variables_.incoming_cmd_stamp = msg->header.stamp;
+  pthread_mutex_unlock(&shared_variables_.incoming_cmd_stamp_mutex);
 }
 
 // Listen to joint angles.
