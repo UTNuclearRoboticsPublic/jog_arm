@@ -74,11 +74,13 @@ struct jog_arm_shared
   double collision_velocity_scale = 1;
   pthread_mutex_t collision_velocity_scale_mutex;
 
-  bool zero_trajectory_flag = true;
-  pthread_mutex_t zero_trajectory_flag_mutex;
+  // Indicates that an incoming Cartesian command is all zeros
+  bool zero_cartesian_cmd_flag = true;
+  pthread_mutex_t zero_cartesian_cmd_flag_mutex;
 
-  bool zero_joint_trajectory_flag = true;
-  pthread_mutex_t zero_joint_trajectory_flag_mutex;
+  // Indicates that an incoming joint angle command is all zeros
+  bool zero_joint_cmd_flag = true;
+  pthread_mutex_t zero_joint_cmd_flag_mutex;
 
   trajectory_msgs::JointTrajectory new_traj;
   pthread_mutex_t new_traj_mutex;
@@ -241,7 +243,7 @@ protected:
 
   robot_state::RobotStatePtr kinematic_state_;
 
-  sensor_msgs::JointState jt_state_, orig_jts_;
+  sensor_msgs::JointState jt_state_, original_jts_;
   trajectory_msgs::JointTrajectory new_traj_;
 
   tf::TransformListener listener_;

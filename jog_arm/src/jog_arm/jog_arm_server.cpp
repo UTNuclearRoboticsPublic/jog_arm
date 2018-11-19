@@ -350,8 +350,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   {
     // If user commands are all zero, reset the low-pass filters
     // when commands resume
-    bool zero_cartesian_traj_flag = shared_variables.zero_trajectory_flag;
-    bool zero_joint_traj_flag = shared_variables.zero_joint_trajectory_flag;
+    bool zero_cartesian_traj_flag = shared_variables.zero_cartesian_cmd_flag;
+    bool zero_joint_traj_flag = shared_variables.zero_joint_cmd_flag;
 
     if (zero_cartesian_traj_flag && zero_joint_traj_flag)
       // Reset low-pass filters
@@ -487,7 +487,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   const Eigen::VectorXd delta_x = scaleCartesianCommand(twist_cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
-  orig_jts_ = jt_state_;
+  original_jts_ = jt_state_;
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
@@ -541,7 +541,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
   const Eigen::VectorXd delta = scaleJointCommand(cmd);
 
   kinematic_state_->setVariableValues(jt_state_);
-  orig_jts_ = jt_state_;
+  original_jts_ = jt_state_;
 
   if (!addJointIncrements(jt_state_, delta))
     return 0;
@@ -604,7 +604,7 @@ void JogCalcs::lowPassFilterPositions()
     // Check for nan's
     if (std::isnan(jt_state_.position[i]))
     {
-      jt_state_.position[i] = orig_jts_.position[i];
+      jt_state_.position[i] = original_jts_.position[i];
       jt_state_.velocity[i] = 0.;
     }
   }
@@ -619,7 +619,7 @@ void JogCalcs::lowPassFilterVelocities(const Eigen::VectorXd& joint_vel)
     // Check for nan's
     if (std::isnan(jt_state_.velocity[static_cast<long>(i)]))
     {
-      jt_state_.position[i] = orig_jts_.position[i];
+      jt_state_.position[i] = original_jts_.position[i];
       jt_state_.velocity[i] = 0.;
       ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in velocity filter");
     }
@@ -773,8 +773,8 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
     double joint_angle = 0;
     for (std::size_t c = 0; c < new_jt_traj.joint_names.size(); ++c)
     {
-      if (orig_jts_.name[c] == joint->getName()) {
-        joint_angle = orig_jts_.position.at(c);
+      if (original_jts_.name[c] == joint->getName()) {
+        joint_angle = original_jts_.position.at(c);
         break;
       }
     }
@@ -818,7 +818,7 @@ void JogCalcs::halt(trajectory_msgs::JointTrajectory& jt_traj)
   {
     // For position-controlled robots, can reset the joints to a known, good state
     if(parameters_.publish_joint_positions)
-      jt_traj.points[0].positions[i] = orig_jts_.position[i];
+      jt_traj.points[0].positions[i] = original_jts_.position[i];
 
     // For velocity-controlled robots, stop
     if(parameters_.publish_joint_velocities)
@@ -963,14 +963,14 @@ void JogROSInterface::deltaCartesianCmdCB(const geometry_msgs::TwistStampedConst
   shared_variables_.command_deltas.twist = msg->twist;
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
-  pthread_mutex_lock(&shared_variables_.zero_trajectory_flag_mutex);
-  shared_variables_.zero_trajectory_flag = shared_variables_.command_deltas.twist.linear.x == 0.0 &&
+  pthread_mutex_lock(&shared_variables_.zero_cartesian_cmd_flag_mutex);
+  shared_variables_.zero_cartesian_cmd_flag = shared_variables_.command_deltas.twist.linear.x == 0.0 &&
                                            shared_variables_.command_deltas.twist.linear.y == 0.0 &&
                                            shared_variables_.command_deltas.twist.linear.z == 0.0 &&
                                            shared_variables_.command_deltas.twist.angular.x == 0.0 &&
                                            shared_variables_.command_deltas.twist.angular.y == 0.0 &&
                                            shared_variables_.command_deltas.twist.angular.z == 0.0;
-  pthread_mutex_unlock(&shared_variables_.zero_trajectory_flag_mutex);
+  pthread_mutex_unlock(&shared_variables_.zero_cartesian_cmd_flag_mutex);
 
   // unlock mutex locked before all zero check
   pthread_mutex_unlock(&shared_variables_.command_deltas_mutex);
@@ -992,9 +992,9 @@ void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
   {
     all_zeros &= (delta == 0.0);
   };
-  pthread_mutex_lock(&shared_variables_.zero_joint_trajectory_flag_mutex);
-  shared_variables_.zero_joint_trajectory_flag = all_zeros;
-  pthread_mutex_unlock(&shared_variables_.zero_joint_trajectory_flag_mutex);
+  pthread_mutex_lock(&shared_variables_.zero_joint_cmd_flag_mutex);
+  shared_variables_.zero_joint_cmd_flag = all_zeros;
+  pthread_mutex_unlock(&shared_variables_.zero_joint_cmd_flag_mutex);
   pthread_mutex_unlock(&shared_variables_.joint_command_deltas_mutex);
 }
 
