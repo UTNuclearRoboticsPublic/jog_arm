@@ -124,12 +124,8 @@ JogROSInterface::JogROSInterface()
   {
     ros::spinOnce();
 
-    pthread_mutex_lock(&shared_variables_.new_traj_mutex);
-    pthread_mutex_lock(&shared_variables_.ok_to_publish_mutex);
     trajectory_msgs::JointTrajectory new_traj = shared_variables_.new_traj;
     bool ok_to_publish = shared_variables_.ok_to_publish;
-    pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
-	  pthread_mutex_unlock(&shared_variables_.ok_to_publish_mutex);
 
     // Check for stale cmds
     if ((ros::Time::now() - shared_variables_.new_traj.header.stamp) < ros::Duration(ros_parameters_.incoming_command_timeout))
@@ -227,9 +223,7 @@ CollisionCheckThread::CollisionCheckThread(const jog_arm_parameters& parameters,
     /////////////////////////////////////////////////
     while (ros::ok())
     {
-      pthread_mutex_lock(&shared_variables.joints_mutex);
       sensor_msgs::JointState jts = shared_variables.joints;
-      pthread_mutex_unlock(&shared_variables.joints_mutex);
 
       for (std::size_t i = 0; i < jts.position.size(); ++i)
         current_state.setJointPositions(jts.name[i], &jts.position[i]);
@@ -331,9 +325,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   // Initialize the position filters to initial robot joints
   while (!updateJoints() && ros::ok())
   {
-    pthread_mutex_lock(&shared_variables.joints_mutex);
     incoming_jts_ = shared_variables.joints;
-    pthread_mutex_unlock(&shared_variables.joints_mutex);
     ros::Duration(0.001).sleep();
   }
   for (std::size_t i = 0; i < jt_state_.name.size(); ++i)
@@ -348,13 +340,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   {
     ros::Duration(0.05).sleep();
 
-    pthread_mutex_lock(&shared_variables.command_deltas_mutex);
     cartesian_deltas = shared_variables.command_deltas;
-    pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
-
-    pthread_mutex_lock(&shared_variables.joint_command_deltas_mutex);
     joint_deltas = shared_variables.joint_command_deltas;
-    pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
   }
 
   // Now do jogging calcs
@@ -363,38 +350,27 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   {
     // If user commands are all zero, reset the low-pass filters
     // when commands resume
-    pthread_mutex_lock(&shared_variables.zero_trajectory_flag_mutex);
     bool zero_cartesian_traj_flag = shared_variables.zero_trajectory_flag;
-    pthread_mutex_unlock(&shared_variables.zero_trajectory_flag_mutex);
-
-    pthread_mutex_lock(&shared_variables.zero_joint_trajectory_flag_mutex);
     bool zero_joint_traj_flag = shared_variables.zero_joint_trajectory_flag;
-    pthread_mutex_unlock(&shared_variables.zero_joint_trajectory_flag_mutex);
 
     if (zero_cartesian_traj_flag && zero_joint_traj_flag)
       // Reset low-pass filters
       resetVelocityFilters();
 
     // Pull data from the shared variables.
-    pthread_mutex_lock(&shared_variables.joints_mutex);
     incoming_jts_ = shared_variables.joints;
-    pthread_mutex_unlock(&shared_variables.joints_mutex);
 
     // Initialize the position filters to initial robot joints
     while (!updateJoints() && ros::ok())
     {
-      pthread_mutex_lock(&shared_variables.joints_mutex);
       incoming_jts_ = shared_variables.joints;
-      pthread_mutex_unlock(&shared_variables.joints_mutex);
       ros::Duration(0.001).sleep();
     }
 
     // If there have not been 2 consecutive cycles of all zeros and joint jogging commands are empty
     if (!previous_was_zero_traj && zero_joint_traj_flag)
     {
-      pthread_mutex_lock(&shared_variables.command_deltas_mutex);
       cartesian_deltas = shared_variables.command_deltas;
-      pthread_mutex_unlock(&shared_variables.command_deltas_mutex);
 
       if (!cartesianJogCalcs(cartesian_deltas, shared_variables))
         continue;
@@ -402,9 +378,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     // If there have not been 2 consecutive cycles of all zeros and joint jogging commands are empty
     else if (!previous_was_zero_traj && !zero_joint_traj_flag)
     {
-      pthread_mutex_lock(&shared_variables.joint_command_deltas_mutex);
-      joint_deltas = shared_variables.joint_command_deltas;
-      pthread_mutex_unlock(&shared_variables.joint_command_deltas_mutex);
+      joint_deltas = shared_variables.joint_command_deltas;;
 
       if (!jointJogCalcs(joint_deltas, shared_variables))
         continue;
@@ -420,19 +394,17 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 			// If everything normal, share the new traj to be published
       if (valid_nonzero_trajectory)
       {
-				pthread_mutex_lock(&shared_variables.new_traj_mutex);
-				pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
+        pthread_mutex_lock(&shared_variables.new_traj_mutex);
+        pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
         shared_variables.new_traj = new_traj_;
         shared_variables.ok_to_publish = true;
-				pthread_mutex_unlock(&shared_variables.new_traj_mutex);
-				pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
+        pthread_mutex_unlock(&shared_variables.new_traj_mutex);
+        pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
       }
       // Skip the jogging publication if all inputs have been zero for 2 cycles in a row.
       else
       {
-				pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
 				shared_variables.ok_to_publish = false;
-				pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
       }
 
       // Store last traj message flag to prevent superfluous warnings
@@ -686,9 +658,7 @@ trajectory_msgs::JointTrajectory JogCalcs::composeOutgoingMessage(sensor_msgs::J
 // Key equation: new_velocity = collision_scale*singularity_scale*previous_velocity
 bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,  const Eigen::VectorXd& delta_theta, double singularity_scale)
 {
-  pthread_mutex_lock(&shared_variables.collision_velocity_scale_mutex);
   double collision_scale = shared_variables.collision_velocity_scale;
-  pthread_mutex_unlock(&shared_variables.collision_velocity_scale_mutex);
 
   for (size_t i = 0; i < jt_state_.velocity.size(); ++i)
   {
