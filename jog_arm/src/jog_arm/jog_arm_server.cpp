@@ -269,8 +269,8 @@ CollisionCheckThread::CollisionCheckThread(
         velocity_scale =
             64000. * pow(collision_result.distance - parameters.hard_stop_collision_proximity_threshold, 3);
       }
-      else if (collision_result.distance < parameters.hard_stop_collision_proximity_threshold)
-        velocity_scale = 0;
+      //else if (collision_result.distance < parameters.hard_stop_collision_proximity_threshold)
+      //  velocity_scale = 0;
 
       velocity_scale = velocity_scale_filter.filter(velocity_scale);
       // Put a ceiling and a floor on velocity_scale
