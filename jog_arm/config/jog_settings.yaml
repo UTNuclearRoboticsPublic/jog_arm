@@ -1,5 +1,6 @@
 gazebo: true # Whether the robot is started in a Gazebo simulation environment
 collision_check: true # Check collisions?
+collision_check_synchronous: false # Check collisions in the jogging thread in order to avoid them.
 command_in_topic:  jog_arm_server/delta_jog_cmds
 joint_command_in_topic: jog_arm_server/joint_delta_jog_cmds
 command_frame:  base_link  # TF frame that incoming cmds are given in

@@ -171,7 +171,7 @@ void* JogROSInterface::collisionCheckThread(void*)
 collisionCheckThread::collisionCheckThread(const jog_arm_parameters& parameters, jog_arm_shared& shared_variables, const std::unique_ptr<robot_model_loader::RobotModelLoader> &model_loader_ptr)
 {
   // If user specified true in yaml file
-  if (parameters.collision_check)
+  if (parameters.collision_check && !parameters.collision_check_synchronous)
   {
     // MoveIt Setup
     // Wait for model_loader_ptr to be non-null.
@@ -250,6 +250,10 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   const robot_model::RobotModelPtr& kinematic_model = model_loader_ptr->getModel();
   kinematic_state_ = std::make_shared<robot_state::RobotState>(kinematic_model);
   kinematic_state_->setToDefaultValues();
+
+  planning_scene_ = std::make_shared<planning_scene::PlanningScene>(kinematic_model);
+
+  collision_request_.group_name = parameters_.move_group_name;
 
   joint_model_group_ = kinematic_model->getJointModelGroup(parameters_.move_group_name);
 
@@ -484,7 +488,8 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   if (!checkIfImminentCollision(shared_variables) ||
       !verifyJacobianIsWellConditioned(old_jacobian, delta_theta, jacobian, new_traj_) ||
-      !checkIfJointsWithinBounds(new_traj_))
+      !checkIfJointsWithinBounds(new_traj_) ||
+      (parameters_.collision_check && parameters_.collision_check_synchronous && !checkIfSolutionCollides(jt_state_)))
   {
     avoidIssue(new_traj_);
     publishWarning(true);
@@ -537,7 +542,8 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // apply several checks if new joint state is valid
-  if (!checkIfImminentCollision(shared_variables) || !checkIfJointsWithinBounds(new_traj_))
+  if (!checkIfImminentCollision(shared_variables) || !checkIfJointsWithinBounds(new_traj_) ||
+      (parameters_.collision_check && parameters_.collision_check_synchronous && !checkIfSolutionCollides(jt_state_)))
   {
     avoidIssue(new_traj_);
     publishWarning(true);
@@ -650,6 +656,30 @@ bool JogCalcs::checkIfImminentCollision(jog_arm_shared& shared_variables)
   bool collision = shared_variables.imminent_collision;
   pthread_mutex_unlock(&shared_variables.imminent_collision_mutex);
   if (collision)
+  {
+    ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " Close to a collision. "
+                                                                              "Halting.");
+    return 0;
+  }
+  return 1;
+}
+
+bool JogCalcs::checkIfSolutionCollides(sensor_msgs::JointState joint_state)
+{
+  robot_state::RobotState& current_state = planning_scene_->getCurrentStateNonConst();
+  for (std::size_t i=0; i< joint_state.position.size(); i++)
+  {
+    current_state.setJointPositions(joint_state.name[i], &joint_state.position[i]);
+  }
+  // process collision objects in scene
+  std::map<std::string, moveit_msgs::CollisionObject> c_objects_map = planning_scene_interface_.getObjects();
+  for (auto& kv : c_objects_map)
+  {
+    planning_scene_->processCollisionObjectMsg(kv.second);
+  }
+  collision_result_.clear();
+  planning_scene_->checkCollision(collision_request_, collision_result_, current_state);
+  if (collision_result_.collision)
   {
     ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, ros::this_node::getName() << " Close to a collision. "
                                                                               "Halting.");
@@ -979,6 +1009,7 @@ int JogROSInterface::readParameters(ros::NodeHandle& n)
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/planning_frame", ros_parameters_.planning_frame);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/gazebo", ros_parameters_.gazebo);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check", ros_parameters_.collision_check);
+  error += !rosparam_shortcuts::get("", n, parameter_ns + "/collision_check_synchronous", ros_parameters_.collision_check_synchronous);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/warning_topic", ros_parameters_.warning_topic);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/joint_limit_margin", ros_parameters_.joint_limit_margin);
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_joint_positions", ros_parameters_.publish_joint_positions);
