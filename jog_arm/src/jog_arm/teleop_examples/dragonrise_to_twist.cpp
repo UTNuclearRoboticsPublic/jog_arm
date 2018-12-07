@@ -43,7 +43,8 @@ private:
 
     // Joint jogging
     jog_msgs::JogJoint joint_deltas;
-    // This example is for a Phoenix hexapod : "femur_joint_r1" is the R1 femur joint (move leg up/down)
+    // This example is for a Phoenix hexapod : "femur_joint_r1" is the R1 femur
+    // joint (move leg up/down)
     joint_deltas.joint_names.push_back("femur_joint_r1");
     joint_deltas.deltas.push_back(msg->buttons[5] - msg->buttons[7]);  // buttons R2 R1
     joint_deltas.header.stamp = ros::Time::now();

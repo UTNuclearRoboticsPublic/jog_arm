@@ -17,8 +17,6 @@ find_package(Eigen3 REQUIRED)
 catkin_package(
   INCLUDE_DIRS
     include
-  LIBRARIES
-    compliant_control
   CATKIN_DEPENDS
     roscpp
     moveit_ros_manipulation
@@ -32,8 +30,6 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
 )
-
-add_library(compliant_control src/jog_arm/compliant_control/compliant_control.cpp)
 
 add_executable(jog_arm_server src/jog_arm/jog_arm_server.cpp)
 add_dependencies(jog_arm_server ${catkin_EXPORTED_TARGETS})
@@ -51,22 +47,11 @@ add_executable(dragonrise_to_twist src/jog_arm/teleop_examples/dragonrise_to_twi
 add_dependencies(dragonrise_to_twist ${catkin_EXPORTED_TARGETS})
 target_link_libraries(dragonrise_to_twist ${catkin_LIBRARIES} ${Eigen_LIBRARIES})
 
+install(TARGETS jog_arm_server spacenav_to_twist xbox_to_twist dragonrise_to_twist
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   FILES_MATCHING PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
 )
-
-install(TARGETS compliant_control
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION})
-
-if(CATKIN_ENABLE_TESTING)
-  find_package(rostest)
-  set(UTEST_SRC_FILES test/utest.cpp
-      test/compliant_control.cpp)
-
-  add_rostest_gtest(compliant_control_utest test/launch/utest.launch ${UTEST_SRC_FILES})
-  target_link_libraries(compliant_control_utest ${catkin_LIBRARIES} ${Boost_LIBRARIES} compliant_control)
-endif()
