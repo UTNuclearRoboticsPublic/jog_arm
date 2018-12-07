@@ -25,7 +25,8 @@ private:
   ros::AsyncSpinner spinner_;
 
   // Convert incoming joy commands to TwistStamped commands for jogging.
-  // The TwistStamped component goes to jogging, while buttons 0 & 1 control joints directly.
+  // The TwistStamped component goes to jogging, while buttons 0 & 1 control
+  // joints directly.
   void joyCallback(const sensor_msgs::Joy::ConstPtr& msg)
   {
     // Cartesian jogging with the axes
