@@ -356,7 +356,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   geometry_msgs::TwistStamped cartesian_deltas;
   jog_msgs::JogJoint joint_deltas;
 
-  while (ros::ok() && (cartesian_deltas.header.stamp == ros::Time(0.)))// && (joint_deltas.header.stamp == ros::Time(0.)))
+  while (ros::ok() && cartesian_deltas.header.stamp == ros::Time(0.) && joint_deltas.header.stamp == ros::Time(0.))
   {
     ros::Duration(0.05).sleep();
 
