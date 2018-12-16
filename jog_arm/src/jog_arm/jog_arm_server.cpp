@@ -127,9 +127,12 @@ JogROSInterface::JogROSInterface()
   {
     ros::spinOnce();
 
+    pthread_mutex_lock(&shared_variables_.new_traj_mutex);
     trajectory_msgs::JointTrajectory new_traj = shared_variables_.new_traj;
+    pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
 
     // Check for stale cmds
+    pthread_mutex_lock(&shared_variables_.incoming_cmd_stamp_mutex);
     if ((ros::Time::now() - shared_variables_.incoming_cmd_stamp) <
         ros::Duration(ros_parameters_.incoming_command_timeout))
     {
@@ -144,9 +147,11 @@ JogROSInterface::JogROSInterface()
       shared_variables_.command_is_stale = true;
       pthread_mutex_unlock(&shared_variables_.command_is_stale_mutex);
     }
+    pthread_mutex_unlock(&shared_variables_.incoming_cmd_stamp_mutex);
 
     // Publish the most recent trajectory, unless the jogging calculation thread
     // tells not to
+    pthread_mutex_lock(&shared_variables_.ok_to_publish_mutex);
     if (shared_variables_.ok_to_publish)
     {
       // Put the outgoing msg in the right format
@@ -171,6 +176,7 @@ JogROSInterface::JogROSInterface()
       ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale or zero command. "
                                                    "Try a larger 'incoming_command_timeout' parameter?");
     }
+    pthread_mutex_unlock(&shared_variables_.ok_to_publish_mutex);
 
     main_rate.sleep();
   }
@@ -442,7 +448,9 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
       // cycles in a row
       else if (zero_velocity_count > num_zero_cycles_to_publish)
       {
+        pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
         shared_variables.ok_to_publish = false;
+        pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
       }
 
       // Store last zero-velocity message flag to prevent superfluous warnings.
@@ -1056,11 +1064,11 @@ void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
   {
     all_zeros &= (delta == 0.0);
   };
+  pthread_mutex_unlock(&shared_variables_.joint_command_deltas_mutex);
+
   pthread_mutex_lock(&shared_variables_.zero_joint_cmd_flag_mutex);
   shared_variables_.zero_joint_cmd_flag = all_zeros;
   pthread_mutex_unlock(&shared_variables_.zero_joint_cmd_flag_mutex);
-
-  pthread_mutex_unlock(&shared_variables_.joint_command_deltas_mutex);
 
   pthread_mutex_lock(&shared_variables_.incoming_cmd_stamp_mutex);
   shared_variables_.incoming_cmd_stamp = msg->header.stamp;
@@ -1137,9 +1145,9 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   rosparam_shortcuts::shutdownIfError(parameter_ns, error);
 
   // Set the input frame, as determined by YAML file:
-  pthread_mutex_lock(&shared_variables_.new_traj_mutex);
+  pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
   shared_variables_.command_deltas.header.frame_id = ros_parameters_.command_frame;
-  pthread_mutex_unlock(&shared_variables_.new_traj_mutex);
+  pthread_mutex_unlock(&shared_variables_.command_deltas_mutex);
 
   // Input checking
   if (ros_parameters_.hard_stop_singularity_threshold < ros_parameters_.lower_singularity_threshold)
