@@ -160,11 +160,13 @@ JogROSInterface::JogROSInterface()
         outgoing_cmd_pub.publish(joints);
       }
     }
+    /*
     else
     {
       ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale or zero command. "
                                                    "Try a larger 'incoming_command_timeout' parameter?");
     }
+    */
 
     main_rate.sleep();
   }
@@ -289,6 +291,11 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   // Publish collision status
   warning_pub_ = nh_.advertise<std_msgs::Bool>(parameters_.warning_topic, 1);
 
+  last_S_values_.resize(6);
+  last_U_matrix_.resize(6,6);
+  towards_singularity_U_matrix_.resize(6,6);
+  last_ee_command_.resize(6);
+
   // MoveIt Setup
   // Wait for model_loader_ptr to be non-null.
   while ( ros::ok() && !model_loader_ptr )
@@ -320,6 +327,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   jt_state_.position.resize(jt_state_.name.size());
   jt_state_.velocity.resize(jt_state_.name.size());
   jt_state_.effort.resize(jt_state_.name.size());
+  confidences_.resize(6);
+  confidences_(5) = 1.5;
 
   // Low-pass filters for the joint positions & velocities
   for (size_t i = 0; i < jt_state_.name.size(); ++i)
@@ -436,6 +445,13 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     // Add a small sleep to avoid 100% CPU usage
     ros::Duration(0.005).sleep();
   }
+
+/*
+  Eigen::MatrixXd zeros(6,6);
+  last_U_matrix_ = zeros;
+  ROS_INFO_STREAM("last_U_matrix_ = " << last_U_matrix_);
+*/
+
 }
 
 // Perform the jogging calculations
@@ -513,7 +529,16 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
+  Eigen::Affine3d EE_transform = kinematic_state_->getGlobalLinkTransform(parameters_.command_frame);
   Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+
+  Eigen::MatrixXd ee_rotation_matrix;
+  ee_rotation_matrix.setZero(6,6);
+  ee_rotation_matrix.block<3,3>(0,0) = EE_transform.rotation().transpose();
+  ee_rotation_matrix.block<3,3>(3,3) = EE_transform.rotation().transpose();
+
+  Eigen::MatrixXd transformed_jacobian = ee_rotation_matrix * jacobian;
+  test_singular_avoidance(transformed_jacobian, cmd);
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -545,6 +570,110 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   }
 
   return 1;
+}
+
+void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd)
+{
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jac, Eigen::ComputeThinU);
+
+  ROS_INFO_STREAM(svd.matrixU());
+
+  Eigen::VectorXd scaled_command(6);
+
+  // Apply user-defined scaling if inputs are unitless [-1:1]
+  if (parameters_.command_in_type == "unitless")
+  {
+    scaled_command[0] = parameters_.linear_scale * ee_frame_cmd.twist.linear.x;
+    scaled_command[1] = parameters_.linear_scale * ee_frame_cmd.twist.linear.y;
+    scaled_command[2] = parameters_.linear_scale * ee_frame_cmd.twist.linear.z;
+    scaled_command[3] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.x;
+    scaled_command[4] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.y;
+    scaled_command[5] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.z;
+  }
+
+  Eigen::VectorXd column_dot_products(6);
+  Eigen::VectorXd sing_diffs(6);
+  Eigen::VectorXd last_jog_U_dotted(6);
+
+
+  for(int i=5; i<6; i++)
+  {
+    ROS_INFO_STREAM("Singular Values: [" << svd.singularValues()(0) << ", " << svd.singularValues()(1) << ", " << 
+        svd.singularValues()(2) << ", " << svd.singularValues()(3) << ", " << 
+        svd.singularValues()(4) << ", " << svd.singularValues()(5) << "]");
+    column_dot_products(i) = svd.matrixU().col(i).dot(towards_singularity_U_matrix_.col(i));
+    ROS_INFO_STREAM("Current U dotted with Towards Singular U: " << column_dot_products[i]);
+    if(column_dot_products[i] < 0.95)
+    {
+      ROS_INFO_STREAM("Calculated U Vectors Flipped: " << column_dot_products[i]);
+    } 
+    sing_diffs(i) = svd.singularValues()(i) - last_S_values_(i);
+    ROS_INFO_STREAM("Singular Value Difference: " << sing_diffs(i));
+
+    last_jog_U_dotted(i) = towards_singularity_U_matrix_.col(i).dot(last_ee_command_);
+    ROS_INFO_STREAM("Last U (towards) dotted with last jog command: " << last_jog_U_dotted(i));
+
+    if(column_dot_products(i) < 0)
+    {
+      confidences_(i) = 1 + 0.2*svd.singularValues()(i);
+    }
+
+    if(last_jog_U_dotted(i) > 0)
+    {
+      if(sing_diffs(i) <= 0)
+      { 
+        // We think we moved towards the singularity, and the singular value got smaller, INCREASED confidence
+        confidences_(i) += last_jog_U_dotted(i) - sing_diffs(i);
+      }
+      else
+      {
+        // We think we moved towards the singularity, BUT the singular value got bigger, DECREASED confidence
+        confidences_(i) -= (last_jog_U_dotted(i) + sing_diffs(i));
+      }
+    }
+    else if (last_jog_U_dotted(i) < 0)
+    {
+      if(sing_diffs(i) < 0)
+      {
+        // We think we moved away from singularity, BUT singular value got smaller, DECREASED confidence
+        confidences_(i) += last_jog_U_dotted(i) + sing_diffs(i);
+      }
+      else
+      {
+        // We think we moved away from singularity, and singular value got bigger, INCREASED confidence
+        confidences_(i) += -1*(last_jog_U_dotted(i) + sing_diffs(i));
+      }
+    }
+
+    ROS_INFO_STREAM("Confidence: " << confidences_(i));
+
+    if(confidences_(i) >= 1) // We are confident we are pointing TOWARDS singular
+    {
+      // Keep pointing in the same direction, even if the calculated vector flips
+      towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * svd.matrixU().col(i);
+      ROS_INFO_STREAM("KEEP direction");
+    }
+    else // We are not confident, and think we are actually pointing AWAY from singular
+    {
+      // Flip which way we are pointing
+      towards_singularity_U_matrix_.col(i) = -1 * get_sign(column_dot_products[i]) * svd.matrixU().col(i);
+      ROS_ERROR_STREAM("FLIP direction");
+    }
+
+    ROS_INFO_STREAM("Pointing Towards singularity:\n" << towards_singularity_U_matrix_.col(i));
+  }
+
+  // Set the calculated matrix to be the last U calculated
+  last_U_matrix_ = svd.matrixU();
+  last_S_values_ = svd.singularValues();
+  last_ee_command_ = scaled_command;
+}
+
+int JogCalcs::get_sign(double value)
+{
+  if(value < 0) return -1;
+  if(value > 0) return 1;
+  return 0;
 }
 
 bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables)

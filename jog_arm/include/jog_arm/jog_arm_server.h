@@ -206,6 +206,14 @@ protected:
 
   sensor_msgs::JointState incoming_jts_;
 
+  Eigen::MatrixXd last_U_matrix_, towards_singularity_U_matrix_;
+  Eigen::VectorXd last_S_values_;
+  Eigen::VectorXd last_ee_command_;
+  Eigen::VectorXd confidences_;
+
+  void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd);
+  int get_sign(double value);
+
   bool cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
 
   bool jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables);
