@@ -295,6 +295,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   last_U_matrix_.resize(6,6);
   towards_singularity_U_matrix_.resize(6,6);
   last_ee_command_.resize(6);
+  last_position_twist_.resize(6);
 
   // MoveIt Setup
   // Wait for model_loader_ptr to be non-null.
@@ -537,8 +538,17 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   ee_rotation_matrix.block<3,3>(0,0) = EE_transform.rotation().transpose();
   ee_rotation_matrix.block<3,3>(3,3) = EE_transform.rotation().transpose();
 
+  Eigen::Quaterniond quat(EE_transform.rotation());
+  tf::Quaternion q(quat.coeffs()(0), quat.coeffs()(1), quat.coeffs()(2), quat.coeffs()(3));
+  tf::Matrix3x3 m(q);
+  double roll, pitch, yaw;
+  m.getRPY(roll, pitch, yaw);
+  Eigen::VectorXd current_position_twist(6);
+  current_position_twist(5) = yaw; current_position_twist(4) = pitch; current_position_twist(3) = roll;
+  current_position_twist.head(3) = EE_transform.translation();
+
   Eigen::MatrixXd transformed_jacobian = ee_rotation_matrix * jacobian;
-  test_singular_avoidance(transformed_jacobian, cmd);
+  test_singular_avoidance(transformed_jacobian, cmd, current_position_twist);
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -572,11 +582,17 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   return 1;
 }
 
-void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd)
+void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position)
 {
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(jac, Eigen::ComputeThinU);
 
-  ROS_INFO_STREAM(svd.matrixU());
+  if(towards_singularity_U_matrix_.isZero())
+  {
+    towards_singularity_U_matrix_ = svd.matrixU();
+    last_U_matrix_ = svd.matrixU();
+    last_position_twist_ = current_position;
+    return;
+  }
 
   Eigen::VectorXd scaled_command(6);
 
@@ -595,13 +611,14 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
   Eigen::VectorXd sing_diffs(6);
   Eigen::VectorXd last_jog_U_dotted(6);
 
+  Eigen::VectorXd delta_position = current_position - last_position_twist_;
 
   for(int i=5; i<6; i++)
   {
     ROS_INFO_STREAM("Singular Values: [" << svd.singularValues()(0) << ", " << svd.singularValues()(1) << ", " << 
         svd.singularValues()(2) << ", " << svd.singularValues()(3) << ", " << 
         svd.singularValues()(4) << ", " << svd.singularValues()(5) << "]");
-    column_dot_products(i) = svd.matrixU().col(i).dot(towards_singularity_U_matrix_.col(i));
+    column_dot_products(i) = svd.matrixU().col(i).dot(last_U_matrix_.col(i));
     ROS_INFO_STREAM("Current U dotted with Towards Singular U: " << column_dot_products[i]);
     if(column_dot_products[i] < 0.95)
     {
@@ -610,7 +627,7 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
     sing_diffs(i) = svd.singularValues()(i) - last_S_values_(i);
     ROS_INFO_STREAM("Singular Value Difference: " << sing_diffs(i));
 
-    last_jog_U_dotted(i) = towards_singularity_U_matrix_.col(i).dot(last_ee_command_);
+    last_jog_U_dotted(i) = last_U_matrix_.col(i).dot(delta_position);
     ROS_INFO_STREAM("Last U (towards) dotted with last jog command: " << last_jog_U_dotted(i));
 
     if(column_dot_products(i) < 0)
@@ -623,12 +640,16 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
       if(sing_diffs(i) <= 0)
       { 
         // We think we moved towards the singularity, and the singular value got smaller, INCREASED confidence
-        confidences_(i) += last_jog_U_dotted(i) - sing_diffs(i);
+        //confidences_(i) += last_jog_U_dotted(i) - sing_diffs(i);
+        towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * svd.matrixU().col(i);
+        ROS_INFO_STREAM("Multiplying current U by: " << get_sign(column_dot_products[i]));
       }
       else
       {
         // We think we moved towards the singularity, BUT the singular value got bigger, DECREASED confidence
-        confidences_(i) -= (last_jog_U_dotted(i) + sing_diffs(i));
+        //confidences_(i) -= (last_jog_U_dotted(i) + sing_diffs(i));
+        towards_singularity_U_matrix_.col(i) = -1 * get_sign(column_dot_products[i]) * svd.matrixU().col(i);
+        ROS_INFO_STREAM("Multiplying current U by: " << -1*get_sign(column_dot_products[i]));
       }
     }
     else if (last_jog_U_dotted(i) < 0)
@@ -636,17 +657,21 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
       if(sing_diffs(i) < 0)
       {
         // We think we moved away from singularity, BUT singular value got smaller, DECREASED confidence
-        confidences_(i) += last_jog_U_dotted(i) + sing_diffs(i);
+        //confidences_(i) += last_jog_U_dotted(i) + sing_diffs(i);
+        towards_singularity_U_matrix_.col(i) = -1 * get_sign(column_dot_products[i]) * svd.matrixU().col(i);
+        ROS_INFO_STREAM("Multiplying current U by: " << -1*get_sign(column_dot_products[i]));
       }
       else
       {
         // We think we moved away from singularity, and singular value got bigger, INCREASED confidence
-        confidences_(i) += -1*(last_jog_U_dotted(i) + sing_diffs(i));
+        //confidences_(i) += -1*(last_jog_U_dotted(i) + sing_diffs(i));
+        towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * svd.matrixU().col(i);
+        ROS_INFO_STREAM("Multiplying current U by: " << get_sign(column_dot_products[i]));
       }
     }
 
-    ROS_INFO_STREAM("Confidence: " << confidences_(i));
-
+    //ROS_INFO_STREAM("Confidence: " << confidences_(i));
+    /*
     if(confidences_(i) >= 1) // We are confident we are pointing TOWARDS singular
     {
       // Keep pointing in the same direction, even if the calculated vector flips
@@ -659,6 +684,7 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
       towards_singularity_U_matrix_.col(i) = -1 * get_sign(column_dot_products[i]) * svd.matrixU().col(i);
       ROS_ERROR_STREAM("FLIP direction");
     }
+    */
 
     ROS_INFO_STREAM("Pointing Towards singularity:\n" << towards_singularity_U_matrix_.col(i));
   }
@@ -667,6 +693,7 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
   last_U_matrix_ = svd.matrixU();
   last_S_values_ = svd.singularValues();
   last_ee_command_ = scaled_command;
+  last_position_twist_ = current_position;
 }
 
 int JogCalcs::get_sign(double value)

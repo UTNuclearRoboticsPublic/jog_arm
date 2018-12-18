@@ -54,6 +54,7 @@
 #include <sensor_msgs/Joy.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float64MultiArray.h>
+#include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
 #include <trajectory_msgs/JointTrajectory.h>
 
@@ -210,8 +211,9 @@ protected:
   Eigen::VectorXd last_S_values_;
   Eigen::VectorXd last_ee_command_;
   Eigen::VectorXd confidences_;
+  Eigen::VectorXd last_position_twist_;
 
-  void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd);
+  void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position);
   int get_sign(double value);
 
   bool cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
