@@ -300,7 +300,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   for(int i=0; i<6; i++)
   {
     multiplier_filters_.push_back(LowPassFilter(6));
-    multiplier_filters_[i].reset(0); // Assume we start pointing in the correct direction
+    multiplier_filters_[i].reset(1); // Assume we start pointing in the correct direction
     single_values_filters_.push_back(LowPassFilter(6));
     jog_dotted_u_filters_.push_back(LowPassFilter(6));
   }
@@ -697,13 +697,10 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
     else ROS_ERROR_STREAM("Sign Direction: " << sign_direction);
     towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * get_sign(sign_direction) * svd.matrixU().col(i);
   
-    /*
-    if(multiplier < 0)
+    if(sign_direction < 0)
     {
-      multiplier_filters_[i].reset(5);
-    }
-    */
-    
+      multiplier_filters_[i].reset(0);
+    }    
 
     /*
     if(multiplier >= 0) // We are confident we are pointing TOWARDS singular
