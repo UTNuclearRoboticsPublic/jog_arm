@@ -213,6 +213,8 @@ protected:
   Eigen::VectorXd confidences_;
   Eigen::VectorXd last_position_twist_;
   std::vector<jog_arm::LowPassFilter> multiplier_filters_;
+  std::vector<jog_arm::LowPassFilter> single_values_filters_;
+  std::vector<jog_arm::LowPassFilter> jog_dotted_u_filters_;
 
   void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position);
   int get_sign(double value);

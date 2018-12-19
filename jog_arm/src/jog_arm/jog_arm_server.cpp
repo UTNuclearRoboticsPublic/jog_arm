@@ -299,8 +299,10 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
   for(int i=0; i<6; i++)
   {
-    multiplier_filters_.push_back(LowPassFilter(2));
-    multiplier_filters_[i].reset(4); // Assume we start pointing in the correct direction
+    multiplier_filters_.push_back(LowPassFilter(6));
+    multiplier_filters_[i].reset(0); // Assume we start pointing in the correct direction
+    single_values_filters_.push_back(LowPassFilter(6));
+    jog_dotted_u_filters_.push_back(LowPassFilter(6));
   }
 
   // MoveIt Setup
@@ -453,12 +455,6 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
     ros::Duration(0.005).sleep();
   }
 
-/*
-  Eigen::MatrixXd zeros(6,6);
-  last_U_matrix_ = zeros;
-  ROS_INFO_STREAM("last_U_matrix_ = " << last_U_matrix_);
-*/
-
 }
 
 // Perform the jogging calculations
@@ -597,6 +593,9 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
     towards_singularity_U_matrix_ = svd.matrixU();
     last_U_matrix_ = svd.matrixU();
     last_position_twist_ = current_position;
+    last_S_values_ = svd.singularValues();
+    single_values_filters_[5].reset(0);
+    jog_dotted_u_filters_[5].reset(0);
     return;
   }
 
@@ -631,16 +630,24 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
       ROS_INFO_STREAM("Calculated U Vectors Flipped: " << column_dot_products[i]);
     } 
     sing_diffs(i) = svd.singularValues()(i) - last_S_values_(i);
-    ROS_INFO_STREAM("Singular Value Difference: " << sing_diffs(i));
+    double single_value_diff = single_values_filters_[i].filter(sing_diffs(i));
+    ROS_INFO_STREAM("Singular Value Difference: " << sing_diffs(i) << ". Filtered value: " << single_value_diff);
 
-    last_jog_U_dotted(i) = last_U_matrix_.col(i).dot(delta_position);
-    ROS_INFO_STREAM("Last U (towards) dotted with last jog command: " << last_jog_U_dotted(i));
+    last_jog_U_dotted(i) = towards_singularity_U_matrix_.col(i).dot(delta_position);
+    double jog_dotted_u = jog_dotted_u_filters_[i].filter(last_jog_U_dotted(i));
+    if(std::abs(jog_dotted_u) > 10000)
+    {
+      jog_dotted_u_filters_[i].reset(0);
+      jog_dotted_u = jog_dotted_u_filters_[i].filter(last_jog_U_dotted(i));
+    }
+    ROS_INFO_STREAM("Last U (towards) dotted with last jog command: " << last_jog_U_dotted(i) << ". Filtered value: " << jog_dotted_u);
 
     if(column_dot_products(i) < 0)
     {
       confidences_(i) = 1 + 0.2*svd.singularValues()(i);
     }
 
+    /*
     double multiplier;
     if(last_jog_U_dotted(i) > 0)
     {
@@ -649,15 +656,15 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
         // We think we moved towards the singularity, and the singular value got smaller, INCREASED confidence
         //confidences_(i) += last_jog_U_dotted(i) - sing_diffs(i);
         //towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * svd.matrixU().col(i);
-        ROS_INFO_STREAM("Multiplying current U by: 1");
-        multiplier = multiplier_filters_[i].filter(1);
+        //ROS_INFO_STREAM("Multiplying current U by: 1");
+        multiplier = multiplier_filters_[i].filter(5);
       }
       else
       {
         // We think we moved towards the singularity, BUT the singular value got bigger, DECREASED confidence
         //confidences_(i) -= (last_jog_U_dotted(i) + sing_diffs(i));
         //towards_singularity_U_matrix_.col(i) = -1 * get_sign(column_dot_products[i]) * svd.matrixU().col(i);
-        ROS_ERROR_STREAM("Multiplying current U by: -1");
+        //ROS_ERROR_STREAM("Multiplying current U by: -1");
         multiplier = multiplier_filters_[i].filter(-1);
       }
     }
@@ -668,7 +675,7 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
         // We think we moved away from singularity, BUT singular value got smaller, DECREASED confidence
         //confidences_(i) += last_jog_U_dotted(i) + sing_diffs(i);
         //towards_singularity_U_matrix_.col(i) = -1 * get_sign(column_dot_products[i]) * svd.matrixU().col(i);
-        ROS_ERROR_STREAM("Multiplying current U by: -1");
+        //ROS_ERROR_STREAM("Multiplying current U by: -1");
         multiplier = multiplier_filters_[i].filter(-1);
       }
       else
@@ -676,17 +683,27 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
         // We think we moved away from singularity, and singular value got bigger, INCREASED confidence
         //confidences_(i) += -1*(last_jog_U_dotted(i) + sing_diffs(i));
         //towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * svd.matrixU().col(i);
-        ROS_INFO_STREAM("Multiplying current U by: 1");
-        multiplier = multiplier_filters_[i].filter(1);
+        //ROS_INFO_STREAM("Multiplying current U by: 1");
+        multiplier = multiplier_filters_[i].filter(5);
       }
     }
+    */
 
-    ROS_INFO_STREAM("Multiplier: " << multiplier);
-    towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * get_sign(multiplier) * svd.matrixU().col(i);
+    //ROS_INFO_STREAM("Multiplier: " << multiplier);
+    //towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * get_sign(multiplier) * svd.matrixU().col(i);
+    double sign_direction = multiplier_filters_[i].filter(-1 * get_sign(last_jog_U_dotted(i)) * get_sign(sing_diffs(i)));
+    ROS_INFO_STREAM(-1 * get_sign(last_jog_U_dotted(i)) * get_sign(sing_diffs(i)));
+    if(sign_direction > 0) ROS_INFO_STREAM("Sign Direction: " << sign_direction);
+    else ROS_ERROR_STREAM("Sign Direction: " << sign_direction);
+    towards_singularity_U_matrix_.col(i) = get_sign(column_dot_products[i]) * get_sign(sign_direction) * svd.matrixU().col(i);
+  
+    /*
     if(multiplier < 0)
     {
-      multiplier_filters_[i].reset(1);
+      multiplier_filters_[i].reset(5);
     }
+    */
+    
 
     /*
     if(multiplier >= 0) // We are confident we are pointing TOWARDS singular
@@ -716,7 +733,7 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
 int JogCalcs::get_sign(double value)
 {
   if(value < 0) return -1;
-  if(value > 0) return 1;
+  if(value >= 0) return 1;
   return 0;
 }
 
