@@ -299,7 +299,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
   for(int i=0; i<6; i++)
   {
-    multiplier_filters_.push_back(LowPassFilter(6));
+    multiplier_filters_.push_back(LowPassFilter(20));
     multiplier_filters_[i].reset(1); // Assume we start pointing in the correct direction
     single_values_filters_.push_back(LowPassFilter(6));
     jog_dotted_u_filters_.push_back(LowPassFilter(6));
@@ -550,7 +550,8 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   current_position_twist.head(3) = EE_transform.translation();
 
   Eigen::MatrixXd transformed_jacobian = ee_rotation_matrix * jacobian;
-  test_singular_avoidance(transformed_jacobian, cmd, current_position_twist);
+  //test_singular_avoidance(transformed_jacobian, cmd, current_position_twist);
+  Eigen::MatrixXd test_directioned_U = calculateUVectorDirections(jacobian, current_position_twist);
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -582,6 +583,68 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   }
 
   return 1;
+}
+
+Eigen::MatrixXd JogCalcs::calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen::VectorXd current_position)
+{
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jac, Eigen::ComputeThinU);
+  if(towards_singularity_U_matrix_.isZero())
+  {
+    towards_singularity_U_matrix_ = svd.matrixU();
+    last_position_twist_ = current_position;
+    last_S_values_ = svd.singularValues();
+    return towards_singularity_U_matrix_;
+  }
+
+  Eigen::VectorXd delta_position = current_position - last_position_twist_;
+
+  double current_guess_vs_current_U;
+  double delta_singular_value;
+  double last_dx_vs_last_working_U;
+  double sign_direction;
+
+  // Go thru the each dimension (U-vector)
+  for(int i=0; i<6; i++)
+  {
+    // Later used to make sure the just-calculated U vector points in the direction we want
+    current_guess_vs_current_U = svd.matrixU().col(i).dot(towards_singularity_U_matrix_.col(i));
+
+    // Used to see if we got more or less singular
+    delta_singular_value = svd.singularValues()[i] - last_S_values_[i];
+    //ROS_INFO_STREAM("Delta Sings: " << delta_singular_value);
+
+    // Used to see if we expected to move towards or away from singular
+    last_dx_vs_last_working_U = towards_singularity_U_matrix_.col(i).dot(delta_position);
+    if(std::abs(last_dx_vs_last_working_U) > 100) last_dx_vs_last_working_U = 0.0001;
+    //ROS_INFO_STREAM("Dx vs Working: " << last_dx_vs_last_working_U);
+
+    // If "delta_singular_value" and "last_dx_vs_last_working_U" have opposite signs, our working U was correct. Else, it was wrong
+    // If we were correct, keep pointing in the same direction, else flip
+    sign_direction = -1 * delta_singular_value * last_dx_vs_last_working_U;
+    //ROS_INFO_STREAM("Directionallity: " << sign_direction);
+
+    if(sign_direction >= 0) sign_direction = multiplier_filters_[i].filter(10*sign_direction);
+    else sign_direction = multiplier_filters_[i].filter(sign_direction);
+    
+    //ROS_INFO_STREAM("Filtered directionallity: " << sign_direction);
+
+    if(sign_direction < 0)
+    {
+      ROS_ERROR_STREAM("Switching Working Direction, and resetting filter for column " << i+1);
+      multiplier_filters_[i].reset(0);
+    }
+
+    // Use the two directionallity correctors and the just-calculated U to find the new U with the correct direction
+    towards_singularity_U_matrix_.col(i) = get_sign(current_guess_vs_current_U) * get_sign(sign_direction) * svd.matrixU().col(i);
+  }
+
+  //ROS_INFO_STREAM("New U (pointing towards singular):\n" << towards_singularity_U_matrix_);
+
+  // Set the calculated matrix to be the last U calculated
+  last_S_values_ = svd.singularValues();
+  last_position_twist_ = current_position;
+
+  return towards_singularity_U_matrix_;
 }
 
 void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position)
@@ -730,8 +793,7 @@ void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs
 int JogCalcs::get_sign(double value)
 {
   if(value < 0) return -1;
-  if(value >= 0) return 1;
-  return 0;
+  else return 1;
 }
 
 bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables)

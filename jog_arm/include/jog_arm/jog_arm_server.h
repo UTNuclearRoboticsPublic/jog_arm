@@ -217,6 +217,8 @@ protected:
   std::vector<jog_arm::LowPassFilter> jog_dotted_u_filters_;
 
   void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position);
+  Eigen::MatrixXd calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen::VectorXd current_position);
+
   int get_sign(double value);
 
   bool cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm_shared& shared_variables);
