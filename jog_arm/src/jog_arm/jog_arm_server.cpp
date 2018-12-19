@@ -603,6 +603,8 @@ Eigen::MatrixXd JogCalcs::calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen
   double last_dx_vs_last_working_U;
   double sign_direction;
 
+  Eigen::MatrixXd weighted_directioned_U_matrix(6,6);
+
   // Go thru the each dimension (U-vector)
   for(int i=0; i<6; i++)
   {
@@ -636,6 +638,7 @@ Eigen::MatrixXd JogCalcs::calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen
 
     // Use the two directionallity correctors and the just-calculated U to find the new U with the correct direction
     towards_singularity_U_matrix_.col(i) = get_sign(current_guess_vs_current_U) * get_sign(sign_direction) * svd.matrixU().col(i);
+    weighted_directioned_U_matrix.col(i) = towards_singularity_U_matrix_.col(i)/svd.singularValues()[i];
   }
 
   //ROS_INFO_STREAM("New U (pointing towards singular):\n" << towards_singularity_U_matrix_);
@@ -644,7 +647,41 @@ Eigen::MatrixXd JogCalcs::calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen
   last_S_values_ = svd.singularValues();
   last_position_twist_ = current_position;
 
-  return towards_singularity_U_matrix_;
+  return weighted_directioned_U_matrix;
+}
+
+void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::MatrixXd jacobian_ee_frame, Eigen::MatrixXd U_weighted_ee_frame)
+{
+  Eigen::VectorXd scaled_command(6);
+  if (parameters_.command_in_type == "unitless")
+  {
+    scaled_command[0] = parameters_.linear_scale * ee_frame_cmd.twist.linear.x;
+    scaled_command[1] = parameters_.linear_scale * ee_frame_cmd.twist.linear.y;
+    scaled_command[2] = parameters_.linear_scale * ee_frame_cmd.twist.linear.z;
+    scaled_command[3] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.x;
+    scaled_command[4] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.y;
+    scaled_command[5] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.z;
+  }
+
+  Eigen::VectorXd singular_command_overlap = scaled_command * U_weighted_ee_frame;
+  if(singular_command_overlap.sum() <= 0)
+  {
+    // We are trying to go away from singularity: let it
+    ROS_INFO_STREAM("Moving away from singularity");
+    // Go to enforce joint velocity limits
+  }
+  else // We are trying to go towards singular - damn user
+  {
+    Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(6,1,1);
+    Eigen::VectorXd singular_dimension_weights = (U_weighted_ee_frame * ones).transpose();
+    Eigen::VectorXd jogging_weights = scaled_command.cwiseQuotient(singular_dimension_weights) / 0.1; // Instead of 0.1, do each dims max vel
+
+    // Use "jogging_weights", along with the desired jog to determine which dimension to drop:
+    // If we are closer to maximum linear move, drop the minimum of ("jogging_weights")[0:2], or the linear parts of the that. Vise Versa for rotations
+
+    // Don't forget to enforce joint velocity limits
+  }
+
 }
 
 void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position)
