@@ -301,7 +301,7 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
 
   for(int i=0; i<6; i++)
   {
-    multiplier_filters_.push_back(LowPassFilter(20));
+    multiplier_filters_.push_back(LowPassFilter(30));
     multiplier_filters_[i].reset(1); // Assume we start pointing in the correct direction
     single_values_filters_.push_back(LowPassFilter(6));
     jog_dotted_u_filters_.push_back(LowPassFilter(6));
@@ -535,7 +535,14 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
   Eigen::Affine3d EE_transform = kinematic_state_->getGlobalLinkTransform(parameters_.command_frame);
-  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU);
+  double ini_condition = svd.singularValues()(0)/svd.singularValues()(svd.singularValues().size()-1);
+
+
+
+
+  
 
   Eigen::MatrixXd ee_rotation_matrix;
   ee_rotation_matrix.setZero(6,6);
@@ -556,7 +563,21 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   Eigen::MatrixXd test_directioned_U = calculateUVectorDirections(jacobian, current_position_twist);
   Eigen::MatrixXd ee_frame_weighted_U = ee_rotation_matrix * test_directioned_U;
   Eigen::MatrixXd ee_frame_jacobian = ee_rotation_matrix * jacobian;
-  testDroppingDims(cmd, ee_frame_jacobian, ee_frame_weighted_U);
+
+
+  Eigen::VectorXd delta_theta;
+  if(ini_condition < parameters_.lower_singularity_threshold) // Jacobian well conditioned
+  {
+    // Perform normal jog
+    delta_theta = pseudoInverse(jacobian) * delta_x;
+  }
+  else // Jacobian poorly conditioned
+  {
+    delta_theta = testDroppingDims(cmd, ee_frame_jacobian, ee_frame_weighted_U);
+  }
+
+  enforceJointVelocityLimits(delta_theta);
+  
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -571,7 +592,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   new_traj_ = composeOutgoingMessage(jt_state_, next_time);
 
   // If close to a collision or a singularity, decelerate
-  applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian, delta_x) );
+  //applyVelocityScaling( shared_variables, new_traj_, delta_theta, decelerateForSingularity(jacobian, delta_x) );
 
   if (!checkIfJointsWithinBounds(new_traj_))
   {
@@ -630,7 +651,7 @@ Eigen::MatrixXd JogCalcs::calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen
     sign_direction = -1 * delta_singular_value * last_dx_vs_last_working_U;
     //ROS_INFO_STREAM("Directionallity: " << sign_direction);
 
-    if(sign_direction >= 0) sign_direction = multiplier_filters_[i].filter(10*sign_direction);
+    if(sign_direction >= 0) sign_direction = multiplier_filters_[i].filter(50*sign_direction);
     else sign_direction = multiplier_filters_[i].filter(sign_direction);
     
     //ROS_INFO_STREAM("Filtered directionallity: " << sign_direction);
@@ -655,7 +676,7 @@ Eigen::MatrixXd JogCalcs::calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen
   return weighted_directioned_U_matrix;
 }
 
-void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::MatrixXd jacobian_ee_frame, Eigen::MatrixXd U_weighted_ee_frame)
+Eigen::VectorXd JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::MatrixXd jacobian_ee_frame, Eigen::MatrixXd U_weighted_ee_frame)
 {
   Eigen::VectorXd scaled_command(6);
   if (parameters_.command_in_type == "unitless")
@@ -674,8 +695,9 @@ void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd,
   if(singular_command_overlap.sum() <= 0)
   {
     // We are trying to go away from singularity: let it
-    ROS_INFO_STREAM("Moving away from singularity");
-    // Go to enforce joint velocity limits
+    // Allow move but make sure to enforce joint velocity limits later
+    Eigen::VectorXd delta_theta = pseudoInverse(jacobian_ee_frame) * scaled_command;
+    return delta_theta;
   }
   else // We are trying to go towards singular - damn user
   {
@@ -683,13 +705,11 @@ void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd,
     Eigen::VectorXd singular_dimension_weights = U_weighted_ee_frame * ones; // 6x1 in 6 DOF space, sum of rows of U. 
 
     Eigen::VectorXd jogging_weights = scaled_command.cwiseQuotient(singular_dimension_weights) / 0.1; // Instead of 0.1, do each dims max vel
-    ROS_INFO_STREAM("Jogging Weights:\n" << jogging_weights);
 
     // Find the input ratio: are we closer to max linear or max angular?
     double linear_ratio = scaled_command.head(3).norm() / linear_velocity_max_norm_;
     double angular_ratio = scaled_command.tail(3).norm() / angular_velocity_max_norm_;
     double velocity_ratio = linear_ratio / angular_ratio;
-    ROS_INFO_STREAM("Linear Ratio: " << linear_ratio << ". Angular Ratio: " << angular_ratio << ". Velocity Ratio: " << velocity_ratio);
 
     std::ptrdiff_t iptr;
     double minimum_of_jogging;
@@ -700,8 +720,46 @@ void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd,
     else // More angular command
     {
       minimum_of_jogging = jogging_weights.tail(3).minCoeff(&iptr);
+      iptr += 3;
     }
     ROS_INFO_STREAM("Minimum jogging weight is: " << minimum_of_jogging << ", and we are dropping dimension " << iptr);
+
+    // Its time to remove the correct dimension and calculate the psuedo inverse
+    /*
+    Eigen::MatrixXd smaller_jacobian(jacobian_ee_frame.rows()-1, jacobian_ee_frame.cols());
+    Eigen::VectorXd smaller_command(scaled_command.size()-1);
+    if(iptr == 0)
+    {
+      smaller_jacobian = jacobian_ee_frame.bottomRows(jacobian_ee_frame.rows()-1);
+      smaller_command = smaller_command.bottomRows(smaller_command.rows()-1);
+    }
+    else if(iptr == jacobian_ee_frame.rows())
+    {
+      smaller_jacobian = jacobian_ee_frame.topRows(jacobian_ee_frame.rows()-1);
+      smaller_command = smaller_command.topRows(smaller_command.rows()-1);
+    }
+    else
+    {
+      smaller_jacobian.block(0,0,iptr,jacobian_ee_frame.cols()) = jacobian_ee_frame.topRows(iptr);
+      smaller_jacobian.block(,0,,jacobian_ee_frame.cols()) = 
+    }
+    */
+
+
+
+    unsigned int numRows = jacobian_ee_frame.rows()-1;
+    unsigned int numCols = jacobian_ee_frame.cols();
+
+    if( iptr < numRows )
+        jacobian_ee_frame.block(iptr,0,numRows-iptr,numCols) = jacobian_ee_frame.bottomRows(numRows-iptr);
+        scaled_command.segment(iptr, numRows-iptr) = scaled_command.tail(numRows-iptr);
+        //scaled_command.block(iptr,0,numRows-iptr,1) = jacobian_ee_frame.bottomRows(numRows-iptr);
+
+    jacobian_ee_frame.conservativeResize(numRows,numCols);
+    scaled_command.conservativeResize(numRows);
+
+    Eigen::VectorXd delta_theta = pseudoInverse(jacobian_ee_frame) * scaled_command;
+    return delta_theta;
 
     // Use "jogging_weights", along with the desired jog to determine which dimension to drop:
     // If we are closer to maximum linear move, drop the minimum of ("jogging_weights")[0:2], or the linear parts of the that. Vise Versa for rotations
@@ -709,6 +767,16 @@ void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd,
     // Don't forget to enforce joint velocity limits
   }
 
+}
+
+void JogCalcs::enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel)
+{
+  double maximum_joint_vel = calculated_joint_vel.cwiseAbs().maxCoeff();
+  if(maximum_joint_vel > parameters_.joint_scale)
+  {
+    // Scale the entire joint velocity vector so that each joint velocity is below min, and the output movement is scaled uniformly to match expected motion
+    calculated_joint_vel = calculated_joint_vel * parameters_.joint_scale / maximum_joint_vel;
+  }
 }
 
 void JogCalcs::test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position)

@@ -219,7 +219,8 @@ protected:
 
   void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position);
   Eigen::MatrixXd calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen::VectorXd current_position);
-  void testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::MatrixXd jacobian_ee_frame, Eigen::MatrixXd U_weighted_ee_frame);
+  Eigen::VectorXd testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::MatrixXd jacobian_ee_frame, Eigen::MatrixXd U_weighted_ee_frame);
+  void enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel);
 
   int get_sign(double value);
 
