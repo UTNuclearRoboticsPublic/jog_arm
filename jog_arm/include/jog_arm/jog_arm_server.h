@@ -215,6 +215,7 @@ protected:
   std::vector<jog_arm::LowPassFilter> multiplier_filters_;
   std::vector<jog_arm::LowPassFilter> single_values_filters_;
   std::vector<jog_arm::LowPassFilter> jog_dotted_u_filters_;
+  double linear_velocity_max_norm_, angular_velocity_max_norm_;
 
   void test_singular_avoidance(Eigen::MatrixXd& jac, const geometry_msgs::TwistStamped& ee_frame_cmd, Eigen::VectorXd current_position);
   Eigen::MatrixXd calculateUVectorDirections(Eigen::MatrixXd& jac, Eigen::VectorXd current_position);

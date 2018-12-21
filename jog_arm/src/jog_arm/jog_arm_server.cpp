@@ -296,6 +296,8 @@ JogCalcs::JogCalcs(const jog_arm_parameters& parameters, jog_arm_shared& shared_
   towards_singularity_U_matrix_.resize(6,6);
   last_ee_command_.resize(6);
   last_position_twist_.resize(6);
+  linear_velocity_max_norm_ = std::pow(3 * std::pow(parameters_.linear_scale, 2), 0.5);
+  angular_velocity_max_norm_ = std::pow(3 * std::pow(parameters_.rotational_scale, 2), 0.5);
 
   for(int i=0; i<6; i++)
   {
@@ -552,6 +554,9 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   Eigen::MatrixXd transformed_jacobian = ee_rotation_matrix * jacobian;
   //test_singular_avoidance(transformed_jacobian, cmd, current_position_twist);
   Eigen::MatrixXd test_directioned_U = calculateUVectorDirections(jacobian, current_position_twist);
+  Eigen::MatrixXd ee_frame_weighted_U = ee_rotation_matrix * test_directioned_U;
+  Eigen::MatrixXd ee_frame_jacobian = ee_rotation_matrix * jacobian;
+  testDroppingDims(cmd, ee_frame_jacobian, ee_frame_weighted_U);
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -663,7 +668,9 @@ void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd,
     scaled_command[5] = parameters_.rotational_scale * ee_frame_cmd.twist.angular.z;
   }
 
-  Eigen::VectorXd singular_command_overlap = scaled_command * U_weighted_ee_frame;
+  Eigen::MatrixXd singular_command_overlap = (scaled_command.transpose() * U_weighted_ee_frame).transpose(); // 6x1 column in 6 DOF space
+  ROS_INFO_STREAM("Moving to or away from singular: " << singular_command_overlap.sum());
+  
   if(singular_command_overlap.sum() <= 0)
   {
     // We are trying to go away from singularity: let it
@@ -673,8 +680,28 @@ void JogCalcs::testDroppingDims(const geometry_msgs::TwistStamped& ee_frame_cmd,
   else // We are trying to go towards singular - damn user
   {
     Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(6,1,1);
-    Eigen::VectorXd singular_dimension_weights = (U_weighted_ee_frame * ones).transpose();
+    Eigen::VectorXd singular_dimension_weights = U_weighted_ee_frame * ones; // 6x1 in 6 DOF space, sum of rows of U. 
+
     Eigen::VectorXd jogging_weights = scaled_command.cwiseQuotient(singular_dimension_weights) / 0.1; // Instead of 0.1, do each dims max vel
+    ROS_INFO_STREAM("Jogging Weights:\n" << jogging_weights);
+
+    // Find the input ratio: are we closer to max linear or max angular?
+    double linear_ratio = scaled_command.head(3).norm() / linear_velocity_max_norm_;
+    double angular_ratio = scaled_command.tail(3).norm() / angular_velocity_max_norm_;
+    double velocity_ratio = linear_ratio / angular_ratio;
+    ROS_INFO_STREAM("Linear Ratio: " << linear_ratio << ". Angular Ratio: " << angular_ratio << ". Velocity Ratio: " << velocity_ratio);
+
+    std::ptrdiff_t iptr;
+    double minimum_of_jogging;
+    if(velocity_ratio >= 1) // More linear command
+    {
+      minimum_of_jogging = jogging_weights.head(3).minCoeff(&iptr);
+    }
+    else // More angular command
+    {
+      minimum_of_jogging = jogging_weights.tail(3).minCoeff(&iptr);
+    }
+    ROS_INFO_STREAM("Minimum jogging weight is: " << minimum_of_jogging << ", and we are dropping dimension " << iptr);
 
     // Use "jogging_weights", along with the desired jog to determine which dimension to drop:
     // If we are closer to maximum linear move, drop the minimum of ("jogging_weights")[0:2], or the linear parts of the that. Vise Versa for rotations
