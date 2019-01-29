@@ -87,8 +87,8 @@ namespace jog_arm {
 
     tf::TransformListener listener_;
 
-    std::vector <jog_arm::LowPassFilter> velocity_filters_;
-    std::vector <jog_arm::LowPassFilter> position_filters_;
+    std::vector <LowPassFilter> velocity_filters_;
+    std::vector <LowPassFilter> position_filters_;
 
     ros::Publisher warning_pub_;
 

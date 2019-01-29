@@ -46,7 +46,7 @@ CollisionCheckThread::CollisionCheckThread(
     ROS_INFO_NAMED(NODE_NAME, "Received first command msg.");
 
     // A very low cutoff frequency
-    jog_arm::LowPassFilter velocity_scale_filter(20);
+    LowPassFilter velocity_scale_filter(20);
     // Assume no scaling, initially
     velocity_scale_filter.reset(1);
     ros::Rate collision_rate(parameters.collision_check_rate);

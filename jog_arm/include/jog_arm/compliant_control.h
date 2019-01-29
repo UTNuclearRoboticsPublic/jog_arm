@@ -54,6 +54,7 @@
 #include <std_msgs/Float64.h>
 #include <string>
 #include <vector>
+#include "low_pass_filter.h"
 
 namespace compliant_control
 {
@@ -79,8 +80,6 @@ enum ExitCondition
   POSE_ACHIEVED = 4       // The target pose was reached within tolerances.
 };
 
-class CompliantControl;
-class LowPassFilter;
 
 class CompliantControl
 {
@@ -126,29 +125,9 @@ public:
   std::vector<double> bias_;
   // Quit if these forces/torques are exceeded
   double safe_force_limit_, safe_torque_limit_;
-  std::vector<compliant_control::LowPassFilter> vectorOfFilters_;
+  std::vector<LowPassFilter> vectorOfFilters_;
 
 private:
-};
-
-class LowPassFilter
-{
-public:
-  explicit LowPassFilter(double filter_param);
-  double filter(double new_msrmt);
-
-  void reset(double data);
-
-private:
-  std::vector<double> prev_msrmts_ = { 0., 0., 0. };
-  std::vector<double> prev_filtered_msrmts_ = { 0., 0. };
-
-  // Related to the cutoff frequency of the filter.
-  // filter_param=1 results in a cutoff at 1/4 of the sampling rate.
-  // See bitbucket.org/AndyZe/pid for slightly more sophistication.
-  // Larger filter_param --> trust the filtered data more, trust the measurements
-  // less, i.e. higher cutoff frequency.
-  double filter_param_ = 4.;
 };
 }
 #endif
