@@ -241,7 +241,7 @@ protected:
 
   // Possibly calculate a velocity scaling factor, due to proximity of
   // singularity and direction of motion
-  double decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity);
+  double decelerateForSingularity(Eigen::MatrixXd jacobian, Eigen::VectorXd commanded_velocity);
 
   // Apply velocity scaling for proximity of collisions and singularities
   bool applyVelocityScaling(jog_arm_shared& shared_variables, trajectory_msgs::JointTrajectory& new_jt_traj,

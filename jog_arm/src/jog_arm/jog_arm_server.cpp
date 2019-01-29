@@ -46,7 +46,7 @@
 // They must be static because they are used as arguments in thread creation.
 jog_arm::jog_arm_parameters jog_arm::JogROSInterface::ros_parameters_;
 jog_arm::jog_arm_shared jog_arm::JogROSInterface::shared_variables_;
-std::unique_ptr<robot_model_loader::RobotModelLoader> jog_arm::JogROSInterface::model_loader_ptr_ = NULL;
+std::unique_ptr<robot_model_loader::RobotModelLoader> jog_arm::JogROSInterface::model_loader_ptr_ = nullptr;
 
 /////////////////////////////////////////////////////////////////////////////////
 // JogROSInterface handles ROS subscriptions and instantiates the worker
@@ -133,18 +133,11 @@ JogROSInterface::JogROSInterface()
 
     // Check for stale cmds
     pthread_mutex_lock(&shared_variables_.incoming_cmd_stamp_mutex);
-    if ((ros::Time::now() - shared_variables_.incoming_cmd_stamp) <
-        ros::Duration(ros_parameters_.incoming_command_timeout))
     {
       // Mark that incoming commands are not stale
       pthread_mutex_lock(&shared_variables_.command_is_stale_mutex);
-      shared_variables_.command_is_stale = false;
-      pthread_mutex_unlock(&shared_variables_.command_is_stale_mutex);
-    }
-    else
-    {
-      pthread_mutex_lock(&shared_variables_.command_is_stale_mutex);
-      shared_variables_.command_is_stale = true;
+      shared_variables_.command_is_stale = !((ros::Time::now() - shared_variables_.incoming_cmd_stamp) <
+                                             ros::Duration(ros_parameters_.incoming_command_timeout));
       pthread_mutex_unlock(&shared_variables_.command_is_stale_mutex);
     }
     pthread_mutex_unlock(&shared_variables_.incoming_cmd_stamp_mutex);
@@ -474,7 +467,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
       std::isnan(cmd.twist.angular.x) || std::isnan(cmd.twist.angular.y) || std::isnan(cmd.twist.angular.z))
   {
     ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
-    return 0;
+    return false;
   }
 
   // If incoming commands should be in the range [-1:1], check for |delta|>1
@@ -484,7 +477,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
         (fabs(cmd.twist.angular.x) > 1) || (fabs(cmd.twist.angular.y) > 1) || (fabs(cmd.twist.angular.z) > 1))
     {
       ROS_WARN_STREAM_NAMED(NODE_NAME, "Component of incoming command is >1. Skipping this datapoint.");
-      return 0;
+      return false;
     }
   }
 
@@ -496,7 +489,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   catch (const tf::TransformException& ex)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << ": " << ex.what());
-    return 0;
+    return false;
   }
   // To transform, these vectors need to be stamped. See answers.ros.org
   // Q#199376
@@ -511,7 +504,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   catch (const tf::TransformException& ex)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << ": " << ex.what());
-    return 0;
+    return false;
   }
 
   geometry_msgs::Vector3Stamped rot_vector;
@@ -524,7 +517,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   catch (const tf::TransformException& ex)
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << ": " << ex.what());
-    return 0;
+    return false;
   }
 
   // Put these components back into a TwistStamped
@@ -546,7 +539,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   enforceJointVelocityLimits(delta_theta);
   if (!addJointIncrements(jt_state_, delta_theta))
-    return 0;
+    return false;
 
   // Include a velocity estimate for velocity-controlled robots
   Eigen::VectorXd joint_vel(delta_theta / parameters_.publish_period);
@@ -574,18 +567,17 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
     insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
 
-  return 1;
+  return true;
 }
 
 bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shared_variables)
 {
   // Check for nan's or |delta|>1 in the incoming command
-  for (std::size_t i = 0; i < cmd.deltas.size(); ++i)
-  {
-    if (std::isnan(cmd.deltas[i]) || (fabs(cmd.deltas[i]) > 1))
+  for (const double delta : cmd.deltas) {
+    if (std::isnan(delta) || (fabs(delta) > 1))
     {
       ROS_WARN_STREAM_NAMED(NODE_NAME, "nan in incoming command. Skipping this datapoint.");
-      return 0;
+      return false;
     }
   }
 
@@ -596,7 +588,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
   original_jts_ = jt_state_;
 
   if (!addJointIncrements(jt_state_, delta))
-    return 0;
+    return false;
 
   // Include a velocity estimate for velocity-controlled robots
   Eigen::VectorXd joint_vel(delta / parameters_.publish_period);
@@ -627,7 +619,7 @@ bool JogCalcs::jointJogCalcs(const jog_msgs::JogJoint& cmd, jog_arm_shared& shar
     insertRedundantPointsIntoTrajectory(new_traj_, GAZEBO_REDUNTANT_MESSAGE_COUNT);
   }
 
-  return 1;
+  return true;
 }
 
 // Spam several redundant points into the trajectory. The first few may be
@@ -729,7 +721,7 @@ bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory
       new_jt_traj.points[0].velocities[i] *= singularity_scale * collision_scale;
   }
 
-  return 1;
+  return true;
 }
 
 
@@ -863,7 +855,7 @@ bool JogCalcs::checkIfJointsWithinBounds(trajectory_msgs::JointTrajectory& new_j
       const std::vector<moveit_msgs::JointLimits> limits = joint->getVariableBoundsMsg();
 
       // Joint limits are not defined for some joints. Skip them.
-      if (limits.size() > 0)
+      if (!limits.empty())
       {
         if ((kinematic_state_->getJointVelocities(joint)[0] < 0 &&
              (joint_angle < (limits[0].min_position + jog_arm::JogROSInterface::ros_parameters_.joint_limit_margin))) ||
@@ -922,7 +914,7 @@ bool JogCalcs::updateJoints()
 
   // Check that the msg contains enough joints
   if (incoming_jts_.name.size() < jt_state_.name.size())
-    return 0;
+    return false;
 
   // Store joints in a member variable
   for (std::size_t m = 0; m < incoming_jts_.name.size(); ++m)
@@ -1032,11 +1024,11 @@ bool JogCalcs::addJointIncrements(sensor_msgs::JointState& output, const Eigen::
     {
       ROS_ERROR_STREAM_NAMED(NODE_NAME, ros::this_node::getName() << " Lengths of output and "
                                                                      "increments do not match.");
-      return 0;
+      return false;
     }
   }
 
-  return 1;
+  return true;
 }
 
 // Listen to cartesian delta commands.
@@ -1111,13 +1103,13 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   // from this namespace.
   std::string parameter_ns;
   ros::param::get("~parameter_ns", parameter_ns);
-  if (parameter_ns == "")
+  if (parameter_ns.empty())
   {
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
     ROS_ERROR_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" "
                                       "type=\"string\" "
                                       "value=\"left_jog_arm_server\" />");
-    return 0;
+    return false;
   }
 
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
@@ -1173,21 +1165,21 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_singularity_threshold' "
                               "should be greater than 'lower_singularity_threshold.' "
                               "Check yaml file.");
-    return 0;
+    return false;
   }
   if ((ros_parameters_.hard_stop_singularity_threshold < 0.) || (ros_parameters_.lower_singularity_threshold < 0.))
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_singularity_threshold' "
                               "and 'lower_singularity_threshold' should be "
                               "greater than zero. Check yaml file.");
-    return 0;
+    return false;
   }
   if (ros_parameters_.hard_stop_collision_proximity_threshold >= ros_parameters_.lower_collision_proximity_threshold)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'hard_stop_collision_proximity_threshold' "
                               "should be less than 'lower_collision_proximity_threshold.' "
                               "Check yaml file.");
-    return 0;
+    return false;
   }
   if ((ros_parameters_.hard_stop_collision_proximity_threshold < 0.) ||
       (ros_parameters_.lower_collision_proximity_threshold < 0.))
@@ -1195,25 +1187,25 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
     ROS_WARN_NAMED(NODE_NAME, "Parameters 'hard_stop_collision_proximity_threshold' "
                               "and 'lower_collision_proximity_threshold' should be "
                               "greater than zero. Check yaml file.");
-    return 0;
+    return false;
   }
   if (ros_parameters_.low_pass_filter_coeff < 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'low_pass_filter_coeff' should be "
                               "greater than zero. Check yaml file.");
-    return 0;
+    return false;
   }
   if (ros_parameters_.joint_limit_margin < 0.)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'joint_limit_margin' should be "
                               "greater than zero. Check yaml file.");
-    return 0;
+    return false;
   }
   if (ros_parameters_.command_in_type != "unitless" && ros_parameters_.command_in_type != "speed_units")
   {
     ROS_WARN_NAMED(NODE_NAME, "command_in_type should be 'unitless' or "
                               "'speed_units'. Check yaml file.");
-    return 0;
+    return false;
   }
   if (ros_parameters_.command_out_type != "trajectory_msgs/JointTrajectory" &&
       ros_parameters_.command_out_type != "std_msgs/Float64MultiArray")
@@ -1221,7 +1213,7 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
     ROS_WARN_NAMED(NODE_NAME, "Parameter command_out_type should be "
                               "'trajectory_msgs/JointTrajectory' or "
                               "'std_msgs/Float64MultiArray'. Check yaml file.");
-    return 0;
+    return false;
   }
   if (!ros_parameters_.publish_joint_positions && !ros_parameters_.publish_joint_velocities &&
       !ros_parameters_.publish_joint_accelerations)
@@ -1230,22 +1222,22 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
                               "publish_joint_velocities / "
                               "publish_joint_accelerations must be true. Check "
                               "yaml file.");
-    return 0;
+    return false;
   }
   if ((ros_parameters_.command_out_type == "std_msgs/Float64MultiArray") && ros_parameters_.publish_joint_positions &&
       ros_parameters_.publish_joint_velocities)
   {
     ROS_WARN_NAMED(NODE_NAME, "When publishing a std_msgs/Float64MultiArray, "
                               "you must select positions OR velocities.");
-    return 0;
+    return false;
   }
   if (ros_parameters_.collision_check_rate < 0)
   {
     ROS_WARN_NAMED(NODE_NAME, "Parameter 'collision_check_rate' should be "
                               "greater than zero. Check yaml file.");
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 }  // namespace jog_arm
