@@ -100,7 +100,7 @@ namespace jog_arm {
 
       // If there have not been several consecutive cycles of all zeros and joint
       // jogging commands are empty
-      if ((zero_velocity_count <= num_zero_cycles_to_publish) && zero_joint_traj_flag) {
+      if ((zero_velocity_count <= num_zero_cycles_to_publish) && zero_cartesian_traj_flag) {
         cartesian_deltas = shared_variables.command_deltas;
 
         if (!cartesianJogCalcs(cartesian_deltas, shared_variables))
@@ -108,7 +108,7 @@ namespace jog_arm {
       }
         // If there have not been several consecutive cycles of all zeros and joint
         // jogging commands are not empty
-      else if ((zero_velocity_count <= num_zero_cycles_to_publish) && !zero_joint_traj_flag) {
+      else if ((zero_velocity_count <= num_zero_cycles_to_publish) && zero_joint_traj_flag) {
         joint_deltas = shared_variables.joint_command_deltas;;
 
         if (!jointJogCalcs(joint_deltas, shared_variables))
