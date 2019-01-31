@@ -222,6 +222,7 @@ protected:
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& U_matrix, const Eigen::MatrixXd& V_matrix, const Eigen::MatrixXd& S_diagonals) const;
 
+  void enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel);
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
   // Reset the data stored in low-pass filters so the trajectory won't jump when

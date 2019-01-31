@@ -545,6 +545,7 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
   //Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
   Eigen::VectorXd delta_theta = pseudoInverse(svd.matrixU(), svd.matrixV(), svd.singularValues().asDiagonal()) * delta_x;
 
+  enforceJointVelocityLimits(delta_theta);
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
 
@@ -730,6 +731,17 @@ bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory
   }
 
   return 1;
+}
+
+
+void JogCalcs::enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel)
+{
+  double maximum_joint_vel = calculated_joint_vel.cwiseAbs().maxCoeff();
+  if(maximum_joint_vel > parameters_.joint_scale)
+  {
+    // Scale the entire joint velocity vector so that each joint velocity is below min, and the output movement is scaled uniformly to match expected motion
+    calculated_joint_vel = calculated_joint_vel * parameters_.joint_scale / maximum_joint_vel;
+  }
 }
 
 // Possibly calculate a velocity scaling factor, due to proximity of singularity
