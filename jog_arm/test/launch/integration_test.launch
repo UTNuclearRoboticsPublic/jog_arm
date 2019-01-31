@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="type" default="tools"/>
+  <arg name="object_to_test" default="measurement_tool"/>
+
+  <!-- send urdf to param server -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro --inorder '$(find jog_arm)/test/urdf/test_six_dof_arm.xacro'"/>
+
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="tool_state_publisher">
+    <param name="publish_frequency" type="double" value="50.0"/>
+  </node>
+
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <param name="use_gui" value="true"/>
+  </node>
+
+
+  <node pkg="rviz" type="rviz" args="-d $(find jog_arm)/test/config/six_dof_arm.rviz" name="test_jog_arm" required="true">
+  </node>
+
+</launch>
