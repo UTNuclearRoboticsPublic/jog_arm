@@ -220,6 +220,7 @@ protected:
   Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& U_matrix, const Eigen::MatrixXd& V_matrix, const Eigen::MatrixXd& S_diagonals) const;
 
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 

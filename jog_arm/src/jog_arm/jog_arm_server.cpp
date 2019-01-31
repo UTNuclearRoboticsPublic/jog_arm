@@ -541,7 +541,9 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  //Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::VectorXd delta_theta = pseudoInverse(svd.matrixU(), svd.matrixV(), svd.singularValues().asDiagonal()) * delta_x;
 
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
@@ -739,7 +741,7 @@ double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen:
   // Find the direction away from nearest singularity.
   // The last column of U from the SVD of the Jacobian points away from the
   // singularity
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU);
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU | Eigen::ComputeThinV);
   Eigen::VectorXd vector_toward_singularity = svd.matrixU().col(5);
 
   double ini_condition = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
@@ -760,6 +762,7 @@ double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen:
   delta_x[5] = vector_toward_singularity[5] / scale;
 
   // Calculate a small change in joints
+  //Eigen::VectorXd delta_theta = pseudoInverse(svd.matrixU(), svd.matrixV(), svd.singularValues().asDiagonal()) * delta_x;
   Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
 
   double theta[6];
@@ -999,6 +1002,11 @@ Eigen::VectorXd JogCalcs::scaleJointCommand(const jog_msgs::JogJoint& command) c
 Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& J) const
 {
   return J.transpose() * (J * J.transpose()).inverse();
+}
+
+Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& U_matrix, const Eigen::MatrixXd& V_matrix, const Eigen::MatrixXd& S_diagonals) const
+{
+  return V_matrix * S_diagonals.inverse() * U_matrix.transpose();
 }
 
 // Add the deltas to each joint
