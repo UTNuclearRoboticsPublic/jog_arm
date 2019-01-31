@@ -220,7 +220,9 @@ protected:
   Eigen::VectorXd scaleJointCommand(const jog_msgs::JogJoint& command) const;
 
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
-  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& U_matrix, const Eigen::MatrixXd& V_matrix, const Eigen::MatrixXd& S_diagonals) const;
+
+  // This pseudoinverse calculation is more stable near stabilities. See Golub, 1965, "Calculating the Singular Values..."
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& u_matrix, const Eigen::MatrixXd& v_matrix, const Eigen::MatrixXd& s_diagonals) const;
 
   void enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel);
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
