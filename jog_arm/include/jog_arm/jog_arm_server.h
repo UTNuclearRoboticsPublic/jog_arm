@@ -221,6 +221,10 @@ protected:
 
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J) const;
 
+  // This pseudoinverse calculation is more stable near stabilities. See Golub, 1965, "Calculating the Singular Values..."
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& u_matrix, const Eigen::MatrixXd& v_matrix, const Eigen::MatrixXd& s_diagonals) const;
+
+  void enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel);
   bool addJointIncrements(sensor_msgs::JointState& output, const Eigen::VectorXd& increments) const;
 
   // Reset the data stored in low-pass filters so the trajectory won't jump when

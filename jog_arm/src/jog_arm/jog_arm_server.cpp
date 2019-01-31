@@ -541,8 +541,10 @@ bool JogCalcs::cartesianJogCalcs(const geometry_msgs::TwistStamped& cmd, jog_arm
 
   // Convert from cartesian commands to joint commands
   Eigen::MatrixXd jacobian = kinematic_state_->getJacobian(joint_model_group_);
-  Eigen::VectorXd delta_theta = pseudoInverse(jacobian) * delta_x;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  Eigen::VectorXd delta_theta = pseudoInverse(svd.matrixU(), svd.matrixV(), svd.singularValues().asDiagonal()) * delta_x;
 
+  enforceJointVelocityLimits(delta_theta);
   if (!addJointIncrements(jt_state_, delta_theta))
     return 0;
 
@@ -730,6 +732,17 @@ bool JogCalcs::applyVelocityScaling(jog_arm_shared& shared_variables, trajectory
   return 1;
 }
 
+
+void JogCalcs::enforceJointVelocityLimits(Eigen::VectorXd& calculated_joint_vel)
+{
+  double maximum_joint_vel = calculated_joint_vel.cwiseAbs().maxCoeff();
+  if(maximum_joint_vel > parameters_.joint_scale)
+  {
+    // Scale the entire joint velocity vector so that each joint velocity is below min, and the output movement is scaled uniformly to match expected motion
+    calculated_joint_vel = calculated_joint_vel * parameters_.joint_scale / maximum_joint_vel;
+  }
+}
+
 // Possibly calculate a velocity scaling factor, due to proximity of singularity
 // and direction of motion
 double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen::VectorXd commanded_velocity)
@@ -739,7 +752,7 @@ double JogCalcs::decelerateForSingularity(Eigen::MatrixXd jacobian, const Eigen:
   // Find the direction away from nearest singularity.
   // The last column of U from the SVD of the Jacobian points away from the
   // singularity
-  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU);
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU | Eigen::ComputeThinV);
   Eigen::VectorXd vector_toward_singularity = svd.matrixU().col(5);
 
   double ini_condition = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() - 1);
@@ -999,6 +1012,11 @@ Eigen::VectorXd JogCalcs::scaleJointCommand(const jog_msgs::JogJoint& command) c
 Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& J) const
 {
   return J.transpose() * (J * J.transpose()).inverse();
+}
+
+Eigen::MatrixXd JogCalcs::pseudoInverse(const Eigen::MatrixXd& u_matrix, const Eigen::MatrixXd& v_matrix, const Eigen::MatrixXd& s_diagonals) const
+{
+  return v_matrix * s_diagonals.inverse() * u_matrix.transpose();
 }
 
 // Add the deltas to each joint
