@@ -89,6 +89,7 @@ JogROSInterface::JogROSInterface() :
     // Publish the most recent trajectory, unless the jogging calculation thread
     // tells not to
     pthread_mutex_lock(&shared_variables_.ok_to_publish_mutex);
+    pthread_mutex_lock(&shared_variables_.command_is_stale_mutex);
     if (shared_variables_.ok_to_publish)
     {
       // Put the outgoing msg in the right format
@@ -108,11 +109,15 @@ JogROSInterface::JogROSInterface() :
         outgoing_cmd_pub.publish(joints);
       }
     }
-    else
+    else if (shared_variables_.command_is_stale)
     {
-      ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale or zero command. "
+      ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale command. "
                                                    "Try a larger 'incoming_command_timeout' parameter?");
     }
+    else {
+      ROS_DEBUG_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Zero command.");
+    }
+    pthread_mutex_unlock(&shared_variables_.command_is_stale_mutex);
     pthread_mutex_unlock(&shared_variables_.ok_to_publish_mutex);
 
     main_rate.sleep();
