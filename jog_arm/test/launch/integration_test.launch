@@ -1,11 +1,10 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="type" default="tools"/>
-  <arg name="object_to_test" default="measurement_tool"/>
-
   <!-- send urdf to param server -->
   <param name="robot_description"
-         command="$(find xacro)/xacro --inorder '$(find jog_arm)/test/urdf/test_six_dof_arm.xacro'"/>
+  command="$(find xacro)/xacro --inorder '$(find jog_arm)/test/arm_setup/urdf/test_six_dof_arm.xacro'"/>
+
+  <include file="$(find jog_arm)/test/arm_setup/launch/move_group.launch"/>
 
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="tool_state_publisher">
     <param name="publish_frequency" type="double" value="50.0"/>
@@ -15,8 +14,17 @@
     <param name="use_gui" value="true"/>
   </node>
 
-
-  <node pkg="rviz" type="rviz" args="-d $(find jog_arm)/test/config/six_dof_arm.rviz" name="test_jog_arm" required="true">
+  <node pkg="rviz" type="rviz" args="-d $(find jog_arm)/test/arm_setup/config/six_dof_arm.rviz" name="test_jog_arm"
+        required="true">
   </node>
+
+  <group ns="jog_arm_server_gui">
+    <rosparam command="load" file="$(find jog_arm)/test/arm_setup/config/jog_settings.yaml"/>
+  </group>
+
+  <!--<node name="jog_arm_server" pkg="jog_arm" type="jog_arm_server" output="screen">
+    <param name="parameter_ns" type="string" value="jog_arm_server"/>
+    <rosparam command="load" file="$(find jog_arm)/test/arm_setup/config/jog_settings.yaml"/>
+  </node>-->
 
 </launch>

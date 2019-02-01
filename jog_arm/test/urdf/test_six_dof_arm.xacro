@@ -1,5 +1,0 @@
-<?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="6dof_arm" >
-    <xacro:include filename="$(find jog_arm)/test/urdf/test_six_dof_arm_macro.xacro"/>
-    <xacro:six_dof_arm prefix=""/>
-</robot>
