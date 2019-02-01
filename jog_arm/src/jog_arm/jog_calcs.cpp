@@ -9,7 +9,10 @@ namespace jog_arm {
 // Constructor for the class that handles jogging calculations
   JogCalcs::JogCalcs(const JogArmParameters &parameters, JogArmShared &shared_variables,
                      std::shared_ptr <robot_model_loader::RobotModelLoader> model_loader_ptr)
-    : move_group_(parameters.move_group_name) {
+    : move_group_(
+      parameters.move_group_name,
+      boost::shared_ptr<tf::Transformer>(),
+      ros::WallDuration(MOVE_GROUP_WAIT_TIMEOUT_S, 0)) {
     parameters_ = parameters;
 
     // Publish collision status
