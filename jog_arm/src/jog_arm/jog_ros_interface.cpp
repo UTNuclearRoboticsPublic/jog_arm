@@ -46,8 +46,6 @@ JogROSInterface::JogROSInterface() :
   ros::Subscriber joints_sub = n.subscribe(ros_parameters_.joint_topic, 1, &JogROSInterface::jointsCB, this);
   ros::Subscriber joint_jog_cmd_sub =
       n.subscribe(ros_parameters_.joint_command_in_topic, 1, &JogROSInterface::deltaJointCmdCB, this);
-  ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
-  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.cartesian_command_in_topic);
 
   // Publish freshly-calculated joints to the robot
   // Put the outgoing msg in the right format (trajectory_msgs/JointTrajectory
@@ -57,6 +55,12 @@ JogROSInterface::JogROSInterface() :
     outgoing_cmd_pub = n.advertise<trajectory_msgs::JointTrajectory>(ros_parameters_.command_out_topic, 1);
   else if (ros_parameters_.command_out_type == "std_msgs/Float64MultiArray")
     outgoing_cmd_pub = n.advertise<std_msgs::Float64MultiArray>(ros_parameters_.command_out_topic, 1);
+
+  // Wait for JointStates and clients to appear
+  ROS_DEBUG_NAMED(NODE_NAME, "Waiting for JointState topic");
+  ros::topic::waitForMessage<sensor_msgs::JointState>(ros_parameters_.joint_topic);
+  ROS_DEBUG_NAMED(NODE_NAME, "Waiting for Cartesian command topic");
+  ros::topic::waitForMessage<geometry_msgs::TwistStamped>(ros_parameters_.cartesian_command_in_topic);
 
   // Wait for low pass filters to stabilize
   ros::Duration(10 * ros_parameters_.publish_period).sleep();
