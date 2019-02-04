@@ -54,6 +54,7 @@ namespace jog_arm
   static const char* const NODE_NAME = "jog_arm_server";
   static const int GAZEBO_REDUNTANT_MESSAGE_COUNT = 30;
   static const int MOVE_GROUP_WAIT_TIMEOUT_S = 30;
+  static const int NUM_ZERO_CYCLES_TO_PUBLISH = 4;
 
   // Variables to share between threads, and their mutexes
 struct JogArmShared

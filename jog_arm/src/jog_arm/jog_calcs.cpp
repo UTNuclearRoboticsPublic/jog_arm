@@ -79,16 +79,27 @@ namespace jog_arm {
     // Track the number of cycles during which motion has not occurred.
     // Will avoid re-publishing zero velocities endlessly.
     int zero_velocity_count = 0;
-    int num_zero_cycles_to_publish = 4;
+
+    // sleep between calcs
+    const double jog_calc_sleep_time = parameters_.publish_period / 2;
+    const int num_real_zero_cycles = NUM_ZERO_CYCLES_TO_PUBLISH * 2;
 
     // Now do jogging calcs
     while (ros::ok()) {
+      // Add a small sleep to avoid 100% CPU usage
+      ros::Duration(jog_calc_sleep_time).sleep();
+
       // If user commands are all zero, reset the low-pass filters
       // when commands resume
       bool zero_cartesian_traj_flag = shared_variables.zero_cartesian_cmd_flag;
       bool zero_joint_traj_flag = shared_variables.zero_joint_cmd_flag;
+      if (shared_variables.command_is_stale) {
+        zero_cartesian_traj_flag = true;
+        zero_joint_traj_flag = true;
+      }
+      const bool zero_trajectory = zero_cartesian_traj_flag && zero_joint_traj_flag;
 
-      if (zero_cartesian_traj_flag && zero_joint_traj_flag)
+      if (zero_trajectory)
         // Reset low-pass filters
         resetVelocityFilters();
 
@@ -103,7 +114,7 @@ namespace jog_arm {
 
       // If there have not been several consecutive cycles of all zeros and joint
       // jogging commands are empty
-      if ((zero_velocity_count <= num_zero_cycles_to_publish) && zero_cartesian_traj_flag) {
+      if (!zero_cartesian_traj_flag) {
         cartesian_deltas = shared_variables.command_deltas;
 
         if (!cartesianJogCalcs(cartesian_deltas, shared_variables))
@@ -111,55 +122,49 @@ namespace jog_arm {
       }
         // If there have not been several consecutive cycles of all zeros and joint
         // jogging commands are not empty
-      else if ((zero_velocity_count <= num_zero_cycles_to_publish) && zero_joint_traj_flag) {
-        joint_deltas = shared_variables.joint_command_deltas;;
+      else if (!zero_joint_traj_flag) {
+        joint_deltas = shared_variables.joint_command_deltas;
 
         if (!jointJogCalcs(joint_deltas, shared_variables))
           continue;
       }
 
+      // if not traj has been calculated so far, try again
+      if (new_traj_.joint_names.empty())
+        continue;
+
       // Halt if the command is stale or inputs are all zero, or commands were
       // zero
-      if (shared_variables.command_is_stale || (zero_cartesian_traj_flag && zero_joint_traj_flag)) {
+      if (zero_trajectory) {
         halt(new_traj_);
-        zero_cartesian_traj_flag = true;
-        zero_joint_traj_flag = true;
       }
-
-      // Has the velocity command been zero for several cycles in a row?
-      // If so, stop publishing so other controllers can take over
-      bool valid_nonzero_trajectory =
-        !((zero_velocity_count > num_zero_cycles_to_publish) && zero_cartesian_traj_flag && zero_joint_traj_flag);
 
       // Send the newest target joints
-      if (!new_traj_.joint_names.empty()) {
-        // If everything normal, share the new traj to be published
-        if (valid_nonzero_trajectory) {
-          pthread_mutex_lock(&shared_variables.new_traj_mutex);
-          pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
-          shared_variables.new_traj = new_traj_;
-          shared_variables.ok_to_publish = true;
-          pthread_mutex_unlock(&shared_variables.new_traj_mutex);
-          pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
-        }
-          // Skip the jogging publication if all inputs have been zero for several
-          // cycles in a row
-        else if (zero_velocity_count > num_zero_cycles_to_publish) {
-          pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
-          shared_variables.ok_to_publish = false;
-          pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
-        }
-
-        // Store last zero-velocity message flag to prevent superfluous warnings.
-        // Cartesian and joint commands must both be zero.
-        if (zero_cartesian_traj_flag && zero_joint_traj_flag)
-          zero_velocity_count += 1;
-        else
-          zero_velocity_count = 0;
+      // If everything normal, share the new traj to be published
+      if (!zero_trajectory || (zero_velocity_count <= num_real_zero_cycles)) {
+        pthread_mutex_lock(&shared_variables.new_traj_mutex);
+        pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
+        shared_variables.new_traj = new_traj_;
+        shared_variables.ok_to_publish = true;
+        pthread_mutex_unlock(&shared_variables.new_traj_mutex);
+        pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
+      }
+        // Skip the jogging publication if all inputs have been zero for several
+        // cycles in a row
+      else {
+        pthread_mutex_lock(&shared_variables.ok_to_publish_mutex);
+        shared_variables.ok_to_publish = false;
+        pthread_mutex_unlock(&shared_variables.ok_to_publish_mutex);
       }
 
-      // Add a small sleep to avoid 100% CPU usage
-      ros::Duration(0.005).sleep();
+      // Store last zero-velocity message flag to prevent superfluous warnings.
+      // Cartesian and joint commands must both be zero.
+      if (zero_trajectory) {
+        if (zero_velocity_count <= num_real_zero_cycles) {
+          zero_velocity_count += 1;
+        }
+      } else
+        zero_velocity_count = 0;
     }
   }
 
