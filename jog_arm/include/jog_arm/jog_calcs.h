@@ -83,6 +83,7 @@ namespace jog_arm {
     robot_state::RobotStatePtr kinematic_state_;
 
     sensor_msgs::JointState jt_state_, original_jts_;
+    std::map <std::string, std::size_t> jt_state_name_map_;
     trajectory_msgs::JointTrajectory new_traj_;
 
     tf::TransformListener listener_;
