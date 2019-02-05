@@ -224,11 +224,12 @@ bool JogROSInterface::readParameters(ros::NodeHandle& n)
   ros::param::get("~parameter_ns", parameter_ns);
   if (parameter_ns.empty())
   {
-    ROS_ERROR_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
-    ROS_ERROR_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" "
+    parameter_ns = "jog_arm_server";
+    ROS_WARN_STREAM_NAMED(NODE_NAME, "A namespace must be specified in the launch file, like:");
+    ROS_WARN_STREAM_NAMED(NODE_NAME, "<param name=\"parameter_ns\" "
                                       "type=\"string\" "
                                       "value=\"left_jog_arm_server\" />");
-    return false;
+    ROS_WARN_STREAM_NAMED(NODE_NAME, "Defaulting to " << parameter_ns);
   }
 
   error += !rosparam_shortcuts::get("", n, parameter_ns + "/publish_period", ros_parameters_.publish_period);
