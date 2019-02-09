@@ -1045,8 +1045,10 @@ void JogROSInterface::deltaCartesianCmdCB(const geometry_msgs::TwistStampedConst
 {
   pthread_mutex_lock(&shared_variables_.command_deltas_mutex);
 
+  // Copy everything but the frame name. The frame name is set by yaml file at startup.
+  // (so it isn't copied over and over)
   shared_variables_.command_deltas.twist = msg->twist;
-  shared_variables_.command_deltas.header = msg->header;
+  shared_variables_.command_deltas.header.stamp = msg->header.stamp;
 
   // Check if input is all zeros. Flag it if so to skip calculations/publication
   pthread_mutex_lock(&shared_variables_.zero_cartesian_cmd_flag_mutex);
@@ -1071,9 +1073,6 @@ void JogROSInterface::deltaJointCmdCB(const jog_msgs::JogJointConstPtr& msg)
 {
   pthread_mutex_lock(&shared_variables_.joint_command_deltas_mutex);
   shared_variables_.joint_command_deltas = *msg;
-
-  // Input frame determined by YAML file
-  shared_variables_.joint_command_deltas.header.frame_id = ros_parameters_.command_frame;
 
   // Check if joint inputs is all zeros. Flag it if so to skip
   // calculations/publication
