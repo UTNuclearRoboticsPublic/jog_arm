@@ -111,7 +111,7 @@ JogROSInterface::JogROSInterface() :
     }
     else if (shared_variables_.command_is_stale)
     {
-      ROS_WARN_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale command. "
+      ROS_DEBUG_STREAM_THROTTLE_NAMED(2, NODE_NAME, "Stale command. "
                                                    "Try a larger 'incoming_command_timeout' parameter?");
     }
     else {
