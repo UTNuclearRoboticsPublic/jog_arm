@@ -1,3 +1,3 @@
-# jog_arm metapackage
+# This package is now part of MoveIt. This repo is deprecated.
 
-http://wiki.ros.org/jog_arm
+See https://github.com/ros-planning/moveit/tree/master/moveit_experimental/jog_arm
